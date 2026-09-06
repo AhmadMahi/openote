@@ -622,6 +622,38 @@ class _AppShellState extends State<AppShell> {
       if (k == LogicalKeyboardKey.keyP) return _tool(Tool.pen);
       if (k == LogicalKeyboardKey.keyH) return _tool(Tool.highlighter);
       if (k == LogicalKeyboardKey.keyE) return _tool(Tool.eraser);
+      // Ink colour, the Notability way: the number keys arm a well and
+      // `[`/`]` step through them, so switching colour mid-sentence never
+      // costs a trip to the toolbar. Guarded on a drawing tool being up —
+      // the digits mean nothing else here, but claiming them while the
+      // select tool is armed would take them from anything added later.
+      if (_inkArmed) {
+        const digits = [
+          LogicalKeyboardKey.digit1,
+          LogicalKeyboardKey.digit2,
+          LogicalKeyboardKey.digit3,
+          LogicalKeyboardKey.digit4,
+          LogicalKeyboardKey.digit5,
+          LogicalKeyboardKey.digit6,
+          LogicalKeyboardKey.digit7,
+          LogicalKeyboardKey.digit8,
+          LogicalKeyboardKey.digit9,
+        ];
+        final d = digits.indexOf(k);
+        if (d >= 0 && d < app.inkPalette.length) {
+          app.setPenColor(d);
+          if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[d]);
+          return true;
+        }
+        if (k == LogicalKeyboardKey.bracketRight) {
+          app.cycleInkColor(1);
+          return true;
+        }
+        if (k == LogicalKeyboardKey.bracketLeft) {
+          app.cycleInkColor(-1);
+          return true;
+        }
+      }
     }
     if (k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) {
       if (app.editingBlockId == null && app.selectedIds.isNotEmpty) {
@@ -960,6 +992,15 @@ class _AppShellState extends State<AppShell> {
     if (best != null) app.select(best.id);
     return true;
   }
+
+  /// A drawing tool is up (or ink is lassoed), which is the only context in
+  /// which the ink-colour keys mean anything. The lasso case is deliberate:
+  /// the swatch row appears with ink selected so a diagram can be recoloured
+  /// without re-picking the pen, and the keys have to follow the row.
+  bool get _inkArmed =>
+      app.tool == Tool.pen ||
+      app.tool == Tool.highlighter ||
+      app.hasInkSelection;
 
   /// A single selected block that accepts typing — the condition under
   /// which a bare letter means "write" rather than "switch tool".

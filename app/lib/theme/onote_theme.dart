@@ -111,6 +111,27 @@ abstract final class OnoteColors {
   ];
 }
 
+/// The app's one hex convention, decoded: `RRGGBB` (opaque) or `RRGGBBAA`.
+///
+/// It lives HERE, beside the palette, rather than in the colour picker, so
+/// the state layer can read a stored colour without importing a dialog. The
+/// picker still exports it, so every existing caller is unchanged — the point
+/// of the original comment ("a second parser is a second convention") holds
+/// either way; this just puts the one parser where every layer can reach it.
+Color? onoteColorFromHex(String? hex) {
+  if (hex == null) return null;
+  final h = hex.replaceFirst('#', '');
+  final v = int.tryParse(h, radix: 16);
+  if (v == null) return null;
+  if (h.length == 6) return Color(0xFF000000 | v);
+  if (h.length == 8) return Color(((v & 0xFF) << 24) | (v >> 8));
+  return null;
+}
+
+/// `Color` → the same `#RRGGBB` convention, which is what a stroke stores.
+String onoteHexOf(Color c) =>
+    '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
 /// Desktop apps do not ripple.
 ///
 /// Material's ink splash is a touch affordance — it exists to show a finger

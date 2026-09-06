@@ -44,6 +44,7 @@ import '../update/app_update.dart';
 import '../sync/github_api.dart';
 import '../store/repository.dart';
 import '../math/math_editor.dart';
+import '../theme/onote_theme.dart';
 import '../theme/tokens.dart';
 import 'page_protection.dart';
 import '../model/tags.dart';
@@ -3865,6 +3866,70 @@ class AppState extends ChangeNotifier
   int penColor = 0;
   double penSize = 2.5;
 
+  // ── The ink palette (INK-9) ──────────────────────────────────────────
+  //
+  // The swatch row used to read `OnoteColors.penColors` directly, in three
+  // separate places, which made the six built-in colours the only colours ink
+  // could ever be: picking anything else meant drawing the stroke and then
+  // recolouring it. These lists make the wells *contents*, not constants —
+  // the Notability model, where a well is a slot you can put your own colour
+  // in and it stays there.
+  //
+  // Stored as hex strings, not `Color`, because that is what a stroke stores
+  // and what `setSetting` can round-trip; one convention, no second parser.
+  static List<String> _hexes(List<Color> cs) => [for (final c in cs) onoteHexOf(c)];
+
+  List<String> penPalette = _hexes(OnoteColors.penColors);
+  List<String> highlighterPalette = _hexes(OnoteColors.highlighterColors);
+
+  /// The wells for whichever drawing tool is armed. The highlighter keeps its
+  /// own row on purpose: a highlighter loaded with graphite is a black bar
+  /// through the sentence, and sharing one palette would let that happen.
+  List<String> get inkPalette =>
+      tool == Tool.highlighter ? highlighterPalette : penPalette;
+
+  /// The armed colour, resolved. `%` because the index outlives a palette
+  /// that shrank, and an out-of-range well must not throw mid-stroke.
+  Color get inkColor =>
+      onoteColorFromHex(inkPalette[penColor % inkPalette.length]) ??
+      OnoteColors.graphite900;
+
+  /// Arm well [i]. Wraps, so the keyboard can walk off either end of the row
+  /// and come back on — a cycle key that stops at the end is a key you have
+  /// to look at the screen to use.
+  void setPenColor(int i) {
+    penColor = i % inkPalette.length;
+    notifyListeners();
+  }
+
+  /// Step the armed well by [delta] (+1 next, -1 previous).
+  void cycleInkColor(int delta) => setPenColor(penColor + delta);
+
+  /// Put [hex] in well [i] of the current tool's row and arm it. This is what
+  /// makes a well a slot rather than a constant; it persists, so a colour you
+  /// mixed once is still there tomorrow.
+  void setInkPaletteColor(int i, String hex) {
+    final list = tool == Tool.highlighter ? highlighterPalette : penPalette;
+    if (i < 0 || i >= list.length) return;
+    list[i] = hex;
+    penColor = i;
+    _repo.setSetting(
+        tool == Tool.highlighter ? 'highlighterPalette' : 'penPalette', list);
+    notifyListeners();
+  }
+
+  /// Put the built-in colours back in the current tool's row.
+  void resetInkPalette() {
+    if (tool == Tool.highlighter) {
+      highlighterPalette = _hexes(OnoteColors.highlighterColors);
+      _repo.setSetting('highlighterPalette', highlighterPalette);
+    } else {
+      penPalette = _hexes(OnoteColors.penColors);
+      _repo.setSetting('penPalette', penPalette);
+    }
+    notifyListeners();
+  }
+
   // ── Tags (TEXT-5) ────────────────────────────────────────────────────
 
   /// Apply or remove [kind] on the line the caret is in, for the block being
@@ -5744,6 +5809,16 @@ class AppState extends ChangeNotifier
     unawaited(checkForAppUpdate());
     final cc = _repo.getSetting('customColors');
     if (cc is List) customColors.addAll(cc.cast<String>());
+    // Palettes: length-checked, not just cast. A shorter list from a build
+    // with fewer wells would silently shrink the row and strand `penColor`.
+    final pal = _repo.getSetting('penPalette');
+    if (pal is List && pal.length == penPalette.length) {
+      penPalette = pal.cast<String>().toList();
+    }
+    final hpal = _repo.getSetting('highlighterPalette');
+    if (hpal is List && hpal.length == highlighterPalette.length) {
+      highlighterPalette = hpal.cast<String>().toList();
+    }
     final vm = _repo.getSetting('viewMemory');
     if (vm is Map) {
       vm.forEach((k, v) {
@@ -8202,6 +8277,21 @@ class AppState extends ChangeNotifier
   void setBackground(String bg) {
     pushUndo();
     pageProps.background = bg;
+    markDirty();
+    notifyListeners();
+  }
+
+  /// How far apart the background pattern is drawn on THIS page — dot gap,
+  /// ruled line height, grid square. Clamped rather than asserted: the value
+  /// arrives from a slider and a text field, and 0 would be a paint loop.
+  ///
+  /// Undoable, because it is a visible change to the page and every other
+  /// visible change to the page is.
+  void setBackgroundSpacing(double v) {
+    final next = v.clamp(PageProps.minBgSpacing, PageProps.maxBgSpacing);
+    if (next == pageProps.bgSpacing) return;
+    pushUndo();
+    pageProps.bgSpacing = next;
     markDirty();
     notifyListeners();
   }

@@ -18,7 +18,6 @@ import '../model/models.dart';
 import '../model/tags.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
-import '../ui/color_picker.dart';
 import 'ink_painter.dart';
 
 /// Live page embeds (transclusion) — EMBED-2…7, Data Model Spec §7.

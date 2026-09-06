@@ -203,6 +203,10 @@ class PageFace extends StatelessWidget {
       bg('grid', Icons.grid_4x4, 'grid'),
       bg('dotted', Icons.apps, 'dotted'),
       bg('ruled', Icons.notes, 'ruled'),
+      // How far apart that pattern is drawn. Only with a pattern up: on a
+      // blank page it would be a control for nothing, and a disabled button
+      // that is *usually* disabled is worse than one that isn't there.
+      if (app.pageProps.background != 'blank') _BgSpacing(app: app),
       const _Sep(),
       // Canvas or paper. Per page, not per notebook: one notebook holds the
       // lecture you scribble on and the essay you hand in, and making you
@@ -431,4 +435,110 @@ class _RowScroll extends MaterialScrollBehavior {
         PointerDeviceKind.trackpad,
         PointerDeviceKind.stylus,
       };
+}
+
+/// The background pattern's spacing: dot gap, ruled line height, grid square.
+///
+/// Openote could always choose a pattern but never its size, so ruled lines
+/// came at one height whether you write large or small, and the dot grid came
+/// at one density whatever you were sketching. This is the missing half of
+/// that control.
+///
+/// A popover rather than an always-visible slider because the page row is
+/// already the widest thing in the toolbar, and this is a set-once-per-page
+/// decision, not a per-stroke one. It offers named presets first — the sizes
+/// real paper actually comes in — with a slider under them for anything else,
+/// because "8 mm ruled" is a thing people can pick and "31.6" is not.
+class _BgSpacing extends StatelessWidget {
+  const _BgSpacing({required this.app});
+
+  final AppState app;
+
+  /// Presets in page units, named for what they are on paper. The numbers are
+  /// the familiar rulings: narrow ~7 mm, wide ~8.7 mm, and so on at Openote's
+  /// ~3.8 units/mm page scale.
+  static const _presets = <(String, double)>[
+    ('Tight', 14),
+    ('Narrow', 20),
+    ('Standard', PageProps.defaultBgSpacing),
+    ('Wide', 32),
+    ('Extra wide', 44),
+  ];
+
+  String _label(double v) {
+    for (final (name, size) in _presets) {
+      if ((v - size).abs() < 0.5) return name;
+    }
+    return v.toStringAsFixed(0);
+  }
+
+  /// What the number MEANS depends on the pattern, so the menu says so
+  /// rather than making the user infer it from the page.
+  String get _what => switch (app.pageProps.background) {
+        'ruled' => 'Line height',
+        'dotted' => 'Dot spacing',
+        _ => 'Grid size',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final v = app.pageProps.bgSpacing;
+    return MenuAnchor(
+      builder: (context, controller, _) => IconButton(
+        icon: const Icon(Icons.format_line_spacing, size: OnoteIcon.md),
+        tooltip: '$_what: ${_label(v)}',
+        visualDensity: VisualDensity.compact,
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+          child: Text(_what,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: context.surfaces.textSecondary)),
+        ),
+        for (final (name, size) in _presets)
+          MenuItemButton(
+            leadingIcon: Icon(
+              (v - size).abs() < 0.5 ? Icons.check : null,
+              size: 16,
+            ),
+            onPressed: () => app.setBackgroundSpacing(size),
+            child: Text('$name  ·  ${size.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 13)),
+          ),
+        const Divider(height: 9),
+        // The slider is live: the page redraws as it is dragged, so the
+        // choice is made by looking at the paper rather than at a number.
+        // (This is what needed the missing `spacing` comparison in
+        // _PagePainter.shouldRepaint — without it the drag did nothing.)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+          child: SizedBox(
+            width: 210,
+            child: Row(children: [
+              Expanded(
+                child: Slider(
+                  value: v.clamp(PageProps.minBgSpacing, PageProps.maxBgSpacing),
+                  min: PageProps.minBgSpacing,
+                  max: PageProps.maxBgSpacing,
+                  onChanged: (x) => app.setBackgroundSpacing(x.roundToDouble()),
+                ),
+              ),
+              SizedBox(
+                width: 26,
+                child: Text(v.toStringAsFixed(0),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        fontSize: 12, color: context.surfaces.textSecondary)),
+              ),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -43,6 +43,16 @@ class _PageCanvasState extends State<PageCanvas> {
   /// listens via `repaint:`). A setState per pointer move rebuilt every
   /// visible block at stylus rate — the "inking feels sluggish" report.
   final ValueNotifier<int> _wetTick = ValueNotifier(0);
+
+  /// Where the mouse is, in screen space, while a drawing tool is armed —
+  /// null whenever the real cursor should be showing instead (pointer off the
+  /// canvas, or a non-mouse pointer, which brings its own physical tip).
+  ///
+  /// A notifier rather than `setState` for exactly the reason [_wetTick] is
+  /// one: hover fires at pointer rate, and rebuilding every visible block to
+  /// move a 20-pixel glyph is the same sluggishness bug in a different coat.
+  /// Only [_PenCursorPainter] listens.
+  final ValueNotifier<Offset?> _penCursor = ValueNotifier(null);
   bool _eraseUndoPushed = false;
   bool _moveUndoPushed = false;
 
@@ -79,6 +89,19 @@ class _PageCanvasState extends State<PageCanvas> {
 
   bool get _inkTool =>
       app.tool == Tool.pen || app.tool == Tool.highlighter || app.tool == Tool.eraser;
+
+  /// What the drawn cursor is filled with: the armed ink, so the nib shows
+  /// the colour you are about to draw in and the swatch row is not the only
+  /// place that answer lives. The eraser has no ink, so it gets the page's
+  /// own outline instead.
+  Color _penCursorColor(bool dark) {
+    if (app.tool == Tool.eraser) {
+      return dark ? OnoteColors.moon300 : OnoteColors.graphite900;
+    }
+    final c = app.inkColor;
+    // Same substitution the stroke makes: graphite on a dark page is invisible.
+    return dark && c == OnoteColors.graphite900 ? OnoteColors.moon0 : c;
+  }
 
   /// When a stylus was last seen, so palm rejection can be *conditional*
   /// (INK-4) instead of absolute.
@@ -184,6 +207,7 @@ class _PageCanvasState extends State<PageCanvas> {
   @override
   void dispose() {
     _wetTick.dispose();
+    _penCursor.dispose();
     super.dispose();
   }
 
@@ -224,16 +248,14 @@ class _PageCanvasState extends State<PageCanvas> {
       return;
     }
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final colors = app.tool == Tool.highlighter
-        ? OnoteColors.highlighterColors
-        : OnoteColors.penColors;
-    var color = colors[app.penColor % colors.length];
+    // One palette, read from state — the swatch row, this stroke and the
+    // drawn cursor must agree, and they only do if they read the same list.
+    var color = app.inkColor;
     if (dark && color == OnoteColors.graphite900) color = OnoteColors.moon0;
     setState(() {
       _wet = Stroke(
         tool: app.tool == Tool.highlighter ? 'highlighter' : 'pen',
-        colorHex:
-            '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
+        colorHex: onoteHexOf(color),
         size: app.penSize,
         opacity: app.tool == Tool.highlighter ? 0.4 : 1.0,
       );
@@ -876,7 +898,10 @@ class _PageCanvasState extends State<PageCanvas> {
                       controller: controller,
                       pageSize: pageSize,
                       background: app.pageProps.background,
-                      gridSize: app.gridSize,
+                      // The PATTERN's spacing, not the SNAP grid's — see
+                      // PageProps.bgSpacing for why those stopped being one
+                      // number.
+                      spacing: app.pageProps.bgSpacing,
                       dark: dark,
                       sheet: app.pageProps.isPaged
                           ? Size(app.pageProps.paper.width,
@@ -1019,6 +1044,26 @@ class _PageCanvasState extends State<PageCanvas> {
                     ),
                   ),
                 ),
+                // The drawn pen/highlighter/eraser cursor, above everything
+                // so it is never buried under a block — a cursor that can go
+                // behind the thing you are pointing at is not a cursor.
+                if (_inkTool)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: _PenCursorPainter(
+                            at: _penCursor,
+                            tool: app.tool,
+                            color: _penCursorColor(dark),
+                            penSize: app.penSize,
+                            scale: controller.scale,
+                            dark: dark,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // A real scroll bar for the page — "there is also no scroll
                 // bar for the page". Wheel and drag still pan; this is the
                 // instrument for POSITION: see where you are in a long page,
@@ -1226,13 +1271,30 @@ class _PageCanvasState extends State<PageCanvas> {
         if (_panZoomClaimedBy == e.pointer) _panZoomClaimedBy = null;
       },
       child: MouseRegion(
+        // The drawing tools hide the system cursor and draw their own
+        // (see [_PenCursorPainter]). `precise` — the plus/crosshair — is a
+        // *targeting* cursor: it says "this point", which is what a picker
+        // does, not what a pen does. A pen has a nib, and you hold it at an
+        // angle; every app people already know (Zoom's annotator, Notability,
+        // OneNote) shows one, and the tip is what tells you where the mark
+        // will land. Flutter desktop has no custom-image cursor API, so the
+        // glyph is painted on the canvas and the real pointer is switched off
+        // underneath it.
         cursor: switch (app.tool) {
           Tool.text => SystemMouseCursors.text,
-          Tool.pen || Tool.highlighter => SystemMouseCursors.precise,
-          Tool.eraser => SystemMouseCursors.cell,
+          Tool.pen || Tool.highlighter || Tool.eraser =>
+            SystemMouseCursors.none,
           Tool.lasso => SystemMouseCursors.precise,
           _ => MouseCursor.defer,
         },
+        // Only a MOUSE gets a drawn cursor. A stylus and a finger are already
+        // physically at the point, and painting a nib under a real pen tip is
+        // a second pen chasing the first one.
+        onHover: (e) => _penCursor.value = _inkTool &&
+                e.kind == PointerDeviceKind.mouse
+            ? e.localPosition
+            : null,
+        onExit: (_) => _penCursor.value = null,
         child: canvas,
       ),
     );
@@ -1248,7 +1310,7 @@ class _PagePainter extends CustomPainter {
     required this.controller,
     required this.pageSize,
     required this.background,
-    required this.gridSize,
+    required this.spacing,
     required this.dark,
     this.sheet,
     this.sheets = 1,
@@ -1256,7 +1318,9 @@ class _PagePainter extends CustomPainter {
   final CanvasController controller;
   final Size pageSize;
   final String background;
-  final double gridSize;
+
+  /// Gap between dots / height of a ruled line / side of a grid square.
+  final double spacing;
   final bool dark;
 
   /// The paper, when this page is in paged mode. Null on open canvas.
@@ -1314,7 +1378,7 @@ class _PagePainter extends CustomPainter {
     // starting below the title band and aligned to the content top, so the
     // lines don't run over the title and match the writing spacing.
     if (background == 'blank') return;
-    final step = gridSize * controller.scale;
+    final step = spacing * controller.scale;
     if (step < 6) return;
     final originY = controller.pageToScreen(
         const Offset(0, AppState.contentTop)).dy;
@@ -1337,10 +1401,14 @@ class _PagePainter extends CustomPainter {
         }
       case 'dotted':
         final dot = Paint()..color = paint.color;
+        // The dot grows with the gap, gently. Fixed at 1.2 it read as grit on
+        // a wide grid and as a solid tone on a tight one — a dot has to stay
+        // in proportion to the space around it to keep reading as a dot.
+        final r = (step / 20).clamp(1.0, 2.6);
         final ox = controller.offset.dx % step;
         for (var x = ox; x <= right; x += step) {
           for (var y = originY; y <= bottom; y += step) {
-            canvas.drawCircle(Offset(x, y), 1.2, dot);
+            canvas.drawCircle(Offset(x, y), r, dot);
           }
         }
     }
@@ -1349,6 +1417,10 @@ class _PagePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PagePainter old) =>
       old.background != background ||
+      // Was missing, and had to be added for the spacing control to do
+      // anything at all: with `gridSize` absent from this list, changing it
+      // repainted only if some *other* property happened to change too.
+      old.spacing != spacing ||
       old.dark != dark ||
       old.sheet != sheet ||
       old.sheets != sheets ||
@@ -1514,4 +1586,146 @@ class _AlignGuidePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _AlignGuidePainter old) =>
       old.guides != guides || old.color != color;
+}
+
+/// The drawn pen / highlighter / eraser cursor.
+///
+/// Flutter desktop has no custom-image cursor API — `SystemMouseCursors` is a
+/// closed set, and the nearest thing in it to a pen is `precise`, the plus.
+/// A plus is a *targeting* reticle: it means "this exact point", which is what
+/// an eyedropper does. A pen is held at an angle and marks from a nib, and
+/// every annotator people arrive here already knowing (Zoom, Notability,
+/// OneNote) draws one. So the real pointer is switched off in [MouseRegion]
+/// and the glyph is painted here instead.
+///
+/// Two parts, and both earn their place:
+///  * the **tip** sits exactly on the pointer, so the hot spot is honest —
+///    a cursor that marks somewhere other than where it points is worse than
+///    the plus it replaced;
+///  * the **nib ring** is drawn at the true stroke width, so the pen shows
+///    how fat the line will be *before* you commit to it. That is why it
+///    scales with zoom: at 300% a 2pt pen really does lay down a wide mark.
+class _PenCursorPainter extends CustomPainter {
+  _PenCursorPainter({
+    required this.at,
+    required this.tool,
+    required this.color,
+    required this.penSize,
+    required this.scale,
+    required this.dark,
+  }) : super(repaint: at);
+
+  /// Listened to, not read as a field — this is what keeps a mouse move from
+  /// rebuilding the widget tree (see [_PageCanvasState._penCursor]).
+  final ValueNotifier<Offset?> at;
+  final Tool tool;
+  final Color color;
+  final double penSize;
+  final double scale;
+  final bool dark;
+
+  /// The stroke width the pen will actually lay down, on screen, clamped so
+  /// the ring stays a readable cursor at both zoom extremes.
+  double get _nib => (penSize * scale).clamp(3.0, 44.0);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = at.value;
+    if (p == null) return;
+
+    if (tool == Tool.eraser) {
+      _paintEraser(canvas, p);
+      return;
+    }
+
+    // The nib ring: where ink will land, at its real width.
+    final r = _nib / 2;
+    canvas.drawCircle(
+        p, r, Paint()..color = color.withValues(alpha: dark ? .30 : .22));
+    canvas.drawCircle(
+        p,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = color.withValues(alpha: .85));
+
+    // The body, drawn up and to the right of the tip at the angle a right
+    // hand holds a pen. Offsets are in logical pixels and deliberately NOT
+    // scaled by zoom: the pen is a cursor, and a cursor that grows when you
+    // zoom in is a bug in every app that has ever shipped one.
+    final body = Path();
+    const double a = 0.87; // ≈50°, the angle a pen is actually held at
+    final dx = math.cos(a), dy = math.sin(a);
+    Offset along(double d, double side) => Offset(
+        p.dx + dx * d - dy * side, p.dy - dy * d - dx * side);
+
+    // Nib triangle: a point at the pointer opening into the barrel.
+    body.moveTo(p.dx, p.dy);
+    body.lineTo(along(7, 2.6).dx, along(7, 2.6).dy);
+    body.lineTo(along(7, -2.6).dx, along(7, -2.6).dy);
+    body.close();
+
+    final barrel = Path()
+      ..moveTo(along(7, 2.6).dx, along(7, 2.6).dy)
+      ..lineTo(along(19, 2.6).dx, along(19, 2.6).dy)
+      ..lineTo(along(19, -2.6).dx, along(19, -2.6).dy)
+      ..lineTo(along(7, -2.6).dx, along(7, -2.6).dy)
+      ..close();
+
+    // A halo under the whole glyph, so the pen stays visible over ink of its
+    // own colour and over a photo — the reason a plain black outline is not
+    // enough on a canvas that can contain anything.
+    final halo = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeJoin = StrokeJoin.round
+      ..color = (dark ? Colors.black : Colors.white).withValues(alpha: .75);
+    canvas.drawPath(body, halo);
+    canvas.drawPath(barrel, halo);
+
+    // The highlighter is a chisel, not a point: same body, blunt end, and
+    // translucent like the ink it lays down.
+    final isHi = tool == Tool.highlighter;
+    canvas.drawPath(
+        body, Paint()..color = color.withValues(alpha: isHi ? .55 : 1));
+    canvas.drawPath(
+        barrel,
+        Paint()
+          ..color = (dark ? OnoteColors.moon100 : OnoteColors.graphite900)
+              .withValues(alpha: isHi ? .55 : .82));
+    canvas.drawPath(
+        barrel,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = (dark ? Colors.black : Colors.white).withValues(alpha: .6));
+  }
+
+  /// The eraser shows its own size and nothing else. It is a *region* tool —
+  /// what matters is how much of the page it will take, so the cursor is that
+  /// region, and no glyph competes with it for attention.
+  void _paintEraser(Canvas canvas, Offset p) {
+    final r = (14.0 * scale).clamp(6.0, 60.0);
+    canvas.drawCircle(
+        p,
+        r,
+        Paint()
+          ..color = (dark ? Colors.white : Colors.black).withValues(alpha: .06));
+    canvas.drawCircle(
+        p,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = color.withValues(alpha: .8));
+  }
+
+  @override
+  bool shouldRepaint(covariant _PenCursorPainter old) =>
+      old.tool != tool ||
+      old.color != color ||
+      old.penSize != penSize ||
+      old.scale != scale ||
+      old.dark != dark;
 }

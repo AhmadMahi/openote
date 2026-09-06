@@ -74,9 +74,10 @@ void main() {
       // the fold is never built and `find.text` reports it missing. At 3000
       // the marker-chord rows pushed the very last binding ("Close it") off
       // the bottom and this test failed for a row that renders perfectly
-      // well. Grow this number when the map grows, or the test starts
+      // well; at 4200 the two ink-colour rows (1…6 and [ / ]) did it again.
+      // Grow this number when the map grows, or the test starts
       // measuring the viewport instead of the overlay.
-      tester.view.physicalSize = const Size(1000, 4200);
+      tester.view.physicalSize = const Size(1000, 4600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(MaterialApp(

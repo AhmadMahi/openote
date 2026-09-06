@@ -85,6 +85,10 @@ const List<KeySection> keyboardMap = [
         'Move the selected box (one grid step; add Shift for 1 px)'),
     KeyBinding('V / T / P / H / E',
         'Tool: Select, Text, Pen, Highlighter, Eraser'),
+    KeyBinding('1…6',
+        'Ink colour, with the pen or highlighter up — or with ink lassoed, '
+        'recolours it'),
+    KeyBinding('[ / ]', 'Previous / next ink colour (wraps)'),
     KeyBinding('Ctrl+C / Ctrl+X / Ctrl+V', 'Copy / cut / paste blocks'),
     KeyBinding('Ctrl+D', 'Duplicate the selected block'),
     KeyBinding('Del', 'Delete the selection'),

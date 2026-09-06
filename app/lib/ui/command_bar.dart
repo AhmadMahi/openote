@@ -774,9 +774,13 @@ class _CommandBarState extends State<CommandBar> {
     final inkActive = app.tool == Tool.pen ||
         app.tool == Tool.highlighter ||
         app.hasInkSelection;
-    final colors = app.tool == Tool.highlighter
-        ? OnoteColors.highlighterColors
-        : OnoteColors.penColors;
+    // One palette, from state. These wells are CONTENTS, not constants: the
+    // selected one reopens as an editor (below), which is what makes the row
+    // a Notability-style switcher rather than six fixed buttons.
+    final colors = [
+      for (final h in app.inkPalette)
+        onoteColorFromHex(h) ?? OnoteColors.graphite900
+    ];
     return Row(children: [
       toolButton(Tool.select, Icons.near_me_outlined, 'Select / move  (V)'),
       toolButton(Tool.text, Icons.text_fields, 'Text  (T)'),
@@ -788,37 +792,11 @@ class _CommandBarState extends State<CommandBar> {
       const _Div(),
       if (inkActive) ...[
         for (final (i, c) in colors.indexed)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(99),
-              onTap: () {
-                app.penColor = i;
-                // With ink selected (typically just lassoed), a colour click
-                // recolours it rather than only arming the next stroke —
-                // recolouring after the fact is most of why you lasso a
-                // diagram (INK-7).
-                if (app.hasInkSelection) {
-                  app.recolorSelectedInk('#'
-                      '${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}');
-                } else {
-                  app.refresh();
-                }
-              },
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: c,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    width: 2,
-                    color:
-                        app.penColor == i ? scheme.primary : Colors.transparent,
-                  ),
-                ),
-              ),
-            ),
+          _ColorWell(
+            color: c,
+            index: i,
+            selected: app.penColor == i,
+            app: app,
           ),
         const SizedBox(width: 6),
         SizedBox(
@@ -1563,3 +1541,99 @@ class _SubjectBadge extends StatelessWidget {
   }
 }
 
+
+/// One colour well in the Draw row — the Notability switching model.
+///
+/// The rule that makes it feel different from six radio buttons: **tapping
+/// the well that is already armed opens it for editing.** So the row is both
+/// the switcher and the way in to any colour at all, and neither costs a
+/// separate button. Before this, the six built-ins were the only colours ink
+/// could be without drawing a stroke and recolouring it afterwards.
+///
+/// The rest of the model, for the same reason — reaching a colour should not
+/// need the mouse at all:
+///  * **1…6** arms a well while a drawing tool is up (`app_shell`).
+///  * **`[` / `]`** step to the previous / next well, wrapping.
+///  * **long-press / right-click** opens the editor without arming first.
+class _ColorWell extends StatelessWidget {
+  const _ColorWell({
+    required this.color,
+    required this.index,
+    required this.selected,
+    required this.app,
+  });
+
+  final Color color;
+  final int index;
+  final bool selected;
+  final AppState app;
+
+  Future<void> _edit(BuildContext context) async {
+    final picked = await showOnoteColorPicker(
+      context,
+      app,
+      initial: app.inkPalette[index],
+      title: app.tool == Tool.highlighter ? 'Highlighter colour' : 'Pen colour',
+    );
+    if (picked == null) return;
+    app.setInkPaletteColor(index, picked.startsWith('#') ? picked : '#$picked');
+    // A well edited while ink is lassoed recolours it too, for the same
+    // reason arming one does: recolouring after the fact is most of why you
+    // lasso a diagram (INK-7).
+    if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[index]);
+  }
+
+  void _arm() {
+    app.setPenColor(index);
+    // With ink selected (typically just lassoed), a colour click recolours it
+    // rather than only arming the next stroke — recolouring after the fact is
+    // most of why you lasso a diagram (INK-7).
+    if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[index]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Tooltip(
+        message: selected
+            ? 'Click again to change this colour  (${index + 1})'
+            : 'Ink colour ${index + 1}',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(99),
+          onTap: () => selected ? _edit(context) : _arm(),
+          onLongPress: () => _edit(context),
+          onSecondaryTap: () => _edit(context),
+          child: Padding(
+            // The ring sits OUTSIDE the colour rather than on it, so a well
+            // reads as the same colour armed or not. A border drawn over the
+            // swatch shrinks it, and the selected colour then looks like a
+            // slightly different colour from the one you picked.
+            padding: const EdgeInsets.all(3),
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  width: 1,
+                  color: Colors.black.withValues(alpha: .22),
+                ),
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: scheme.primary,
+                          spreadRadius: 2.5,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

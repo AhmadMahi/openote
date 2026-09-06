@@ -173,9 +173,21 @@ class PaperSize {
 }
 
 class PageProps {
+  /// The default spacing of the page's background pattern, in page units.
+  /// Also the value [bgSpacing] falls back to, which is what keeps a page
+  /// written by any earlier build rendering byte-identically.
+  static const double defaultBgSpacing = 24;
+
+  /// The usable range. The floor is where a pattern stops being a pattern and
+  /// becomes a grey wash (and where the painter's own `step < 6` cull would
+  /// hide it anyway at 100%); the ceiling is roughly a third of a page.
+  static const double minBgSpacing = 8;
+  static const double maxBgSpacing = 120;
+
   PageProps({
     this.background = 'blank',
     this.gridSize = 24,
+    this.bgSpacing = defaultBgSpacing,
     this.pageWidth = 1100,
     this.layout = 'canvas',
     this.paperSize = 'A4',
@@ -184,6 +196,18 @@ class PageProps {
   }) : unknownFields = unknownFields ?? {};
   String background; // blank | grid | dotted | ruled
   double gridSize;
+
+  /// How far apart the background pattern is drawn: the gap between dots, the
+  /// height of a ruled line, the side of a grid square.
+  ///
+  /// **Deliberately not [gridSize].** One value used to do both jobs, which
+  /// meant the only way to widen the ruling was to widen the SNAP grid too —
+  /// so changing how the paper looked silently moved every box on it the next
+  /// time it was dragged. They are different questions: [gridSize] is where
+  /// things land, this is what the paper looks like. Per page, like every
+  /// other page property, because the lecture you scribble on and the essay
+  /// you hand in do not want the same paper.
+  double bgSpacing;
   double pageWidth; // presented page-surface width (CANVAS-1 v0.3)
 
   /// `canvas` (the default, and what Openote has always been) or `paged`.
@@ -219,6 +243,7 @@ class PageProps {
   static const _known = {
     'background',
     'gridSize',
+    'bgSpacing',
     'pageWidth',
     'layout',
     'paperSize',
@@ -229,6 +254,11 @@ class PageProps {
         'background': background,
         'gridSize': gridSize,
         'pageWidth': pageWidth,
+        // Written only when it says something, for the same reason the paged
+        // keys are: emitting a new key unconditionally would rewrite every
+        // page in every notebook on the next save, and hand the sync log a
+        // diff for all of them.
+        if (bgSpacing != defaultBgSpacing) 'bgSpacing': bgSpacing,
         // Written only when they say something. A canvas page is the
         // overwhelming majority and its JSON is byte-identical to what every
         // previous build wrote — which matters beyond tidiness: emitting three
@@ -242,6 +272,10 @@ class PageProps {
   factory PageProps.fromJson(Map<String, dynamic>? j) => PageProps(
         background: j?['background'] as String? ?? 'blank',
         gridSize: (j?['gridSize'] as num?)?.toDouble() ?? 24,
+        // Clamped on the way IN as well as in the UI: a hand-edited or
+        // newer-build value of 0 would be an infinite paint loop below.
+        bgSpacing: ((j?['bgSpacing'] as num?)?.toDouble() ?? defaultBgSpacing)
+            .clamp(minBgSpacing, maxBgSpacing),
         pageWidth: (j?['pageWidth'] as num?)?.toDouble() ?? 1100,
         // Additive, and defaulted: a page written by any earlier build has no
         // `layout` key and must open exactly as it always did.

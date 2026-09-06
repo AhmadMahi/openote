@@ -95,6 +95,42 @@ void main() {
           reason: 'portrait is the default and says nothing');
     });
 
+    test('background spacing is a default until it is a decision', () {
+      // Same contract as the paged keys, and for the same reason: a page
+      // nobody changed the spacing on must serialise byte-identically to what
+      // every previous build wrote, or the next save diffs every page in the
+      // notebook.
+      expect(PageProps().bgSpacing, PageProps.defaultBgSpacing);
+      expect(PageProps().toJson().containsKey('bgSpacing'), isFalse,
+          reason: 'the default says nothing');
+      expect(
+          PageProps.fromJson({'background': 'ruled'}).bgSpacing,
+          PageProps.defaultBgSpacing,
+          reason: 'a page from any older build rules exactly as it always did');
+
+      final wide = PageProps(background: 'ruled', bgSpacing: 40);
+      expect(wide.toJson()['bgSpacing'], 40);
+      expect(PageProps.fromJson(wide.toJson()).bgSpacing, 40);
+    });
+
+    test('an out-of-range spacing is clamped, not trusted', () {
+      // 0 would be an infinite loop in the painter's `for (y += step)`, and
+      // the value can arrive from a hand-edited file or a newer build.
+      expect(PageProps.fromJson({'bgSpacing': 0}).bgSpacing,
+          PageProps.minBgSpacing);
+      expect(PageProps.fromJson({'bgSpacing': 9999}).bgSpacing,
+          PageProps.maxBgSpacing);
+      expect(PageProps.fromJson({'bgSpacing': -5}).bgSpacing,
+          PageProps.minBgSpacing);
+    });
+
+    test('the pattern spacing is NOT the snap grid', () {
+      // The whole point of the separate field: widening the ruling must not
+      // move anything on the page.
+      final p = PageProps(background: 'ruled', bgSpacing: 44);
+      expect(p.gridSize, 24, reason: 'placement is unchanged by appearance');
+    });
+
     test('properties a NEWER build wrote survive the trip', () {
       final p = PageProps.fromJson({'layout': 'paged', 'marginPreset': 'wide'});
       expect(p.toJson()['marginPreset'], 'wide');

@@ -15,7 +15,6 @@ import '../editor/text_block_view.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
-import '../ui/color_picker.dart';
 import '../ui/context_menus.dart';
 import 'canvas_controller.dart';
 import 'portal_view.dart';
