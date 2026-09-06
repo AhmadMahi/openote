@@ -188,26 +188,14 @@ class PageFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Widget bg(String v, IconData icon, String tip) => IconButton(
-          icon: Icon(icon, size: OnoteIcon.md),
-          tooltip: 'Background: $tip',
-          isSelected: app.pageProps.background == v,
-          visualDensity: VisualDensity.compact,
-          color: app.pageProps.background == v ? scheme.primary : null,
-          onPressed: () => app.setBackground(v),
-        );
     final paged = app.pageProps.isPaged;
+    // NO background buttons here any more. They are on the View tab, which is
+    // always reachable, and this row is not: it shows only while nothing at
+    // all is selected, so the same five controls appeared and vanished under
+    // the Home, Insert and Draw rows as you worked. One home for them, and it
+    // is the one you can always get to.
     return Row(mainAxisSize: MainAxisSize.min, children: [
       const SizedBox(width: 2),
-      bg('blank', Icons.crop_din, 'blank'),
-      bg('grid', Icons.grid_4x4, 'grid'),
-      bg('dotted', Icons.apps, 'dotted'),
-      bg('ruled', Icons.notes, 'ruled'),
-      // How far apart that pattern is drawn. Only with a pattern up: on a
-      // blank page it would be a control for nothing, and a disabled button
-      // that is *usually* disabled is worse than one that isn't there.
-      if (app.pageProps.background != 'blank') BackgroundSpacingButton(app: app),
-      const _Sep(),
       // Canvas or paper. Per page, not per notebook: one notebook holds the
       // lecture you scribble on and the essay you hand in, and making you
       // choose once for both is why people keep two apps.

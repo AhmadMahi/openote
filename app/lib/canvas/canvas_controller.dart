@@ -104,6 +104,17 @@ class CanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Put page-space Y at the top of the viewport, leaving X alone.
+  ///
+  /// Distinct from [centerOn]: jumping to a sheet is a *scroll*, and centring
+  /// a sheet's top would hang half a viewport of the sheet before it above
+  /// the fold — you would land looking at the end of the previous page.
+  void scrollToPageY(double pageY) {
+    offset = Offset(offset.dx, -pageY * scale);
+    clampToPage();
+    notifyListeners();
+  }
+
   /// Center a page-space point in the viewport (find, navigation).
   void centerOn(Offset pagePoint) {
     offset = Offset(viewport.width / 2, viewport.height / 2) - pagePoint * scale;

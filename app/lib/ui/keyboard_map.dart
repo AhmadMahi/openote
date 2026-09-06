@@ -89,6 +89,8 @@ const List<KeySection> keyboardMap = [
         'Ink colour, with the pen or highlighter up — or with ink lassoed, '
         'recolours it'),
     KeyBinding('[ / ]', 'Previous / next ink colour (wraps)'),
+    KeyBinding('Your own key',
+        'Any key you bind to a colour (double-click a swatch to set it)'),
     KeyBinding('Ctrl+C / Ctrl+X / Ctrl+V', 'Copy / cut / paste blocks'),
     KeyBinding('Ctrl+D', 'Duplicate the selected block'),
     KeyBinding('Del', 'Delete the selection'),

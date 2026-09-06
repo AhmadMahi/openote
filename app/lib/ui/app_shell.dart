@@ -653,6 +653,17 @@ class _AppShellState extends State<AppShell> {
           app.cycleInkColor(-1);
           return true;
         }
+        // The user's own keys, checked AFTER the fixed ones so a binding can
+        // never take 1…6 or [ ] away from someone who is relying on them.
+        final ch = e.character;
+        if (ch != null && ch.length == 1) {
+          final well = app.inkWellForKey(ch);
+          if (well >= 0) {
+            app.setPenColor(well);
+            if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[well]);
+            return true;
+          }
+        }
       }
     }
     if (k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) {

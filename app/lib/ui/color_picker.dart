@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
@@ -20,11 +21,19 @@ export '../theme/onote_theme.dart' show onoteColorFromHex, onoteHexOf;
 /// box put up a window headed "Text colour" — one of the two callers was
 /// always contradicting the menu item that opened it.
 Future<String?> showOnoteColorPicker(BuildContext context, AppState app,
-    {String? initial, String title = 'Text colour'}) {
+    {String? initial,
+    String title = 'Text colour',
+    String? shortcut,
+    ValueChanged<String>? onShortcut}) {
   return showOnoteDialog<String>(
     context: context,
-    builder: (ctx) =>
-        _ColorPickerDialog(app: app, initial: initial, title: title),
+    builder: (ctx) => _ColorPickerDialog(
+      app: app,
+      initial: initial,
+      title: title,
+      shortcut: shortcut,
+      onShortcut: onShortcut,
+    ),
   );
 }
 
@@ -33,9 +42,19 @@ const _baseHues = <double>[0, 25, 48, 90, 140, 175, 210, 240, 275, 320];
 
 class _ColorPickerDialog extends StatefulWidget {
   const _ColorPickerDialog(
-      {required this.app, this.initial, required this.title});
+      {required this.app,
+      this.initial,
+      required this.title,
+      this.shortcut,
+      this.onShortcut});
   final AppState app;
   final String? initial;
+
+  /// The key currently bound to whatever this picker is editing, or null when
+  /// the caller has no shortcut to offer (text colour, block background —
+  /// things there is only one of, so there is nothing to switch BETWEEN).
+  final String? shortcut;
+  final ValueChanged<String>? onShortcut;
 
   /// What the colour is FOR, so the heading agrees with the menu item that
   /// opened it.
@@ -226,6 +245,13 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
         ),
       ),
       actions: [
+        if (widget.onShortcut != null) ...[
+          _ShortcutField(
+            value: widget.shortcut ?? '',
+            onChanged: widget.onShortcut!,
+          ),
+          const Spacer(),
+        ],
         TextButton(
             onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(onPressed: _done, child: const Text('Apply')),
@@ -305,4 +331,90 @@ class _SVPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SVPainter old) => old.hsv != hsv;
+}
+
+/// "Shortcut: [ k ]" — bind one key to the thing this dialog is editing.
+///
+/// A single printable character, captured by TYPING it rather than chosen
+/// from a list: the question "which key do you want" is answered fastest by
+/// pressing that key, and a dropdown of every key on the board is a menu
+/// nobody reads.
+///
+/// Deliberately no modifiers. A drawing shortcut is pressed mid-stroke with
+/// the off hand, and Ctrl+Alt+3 is not something a hand does while the other
+/// one is holding a line. The bare-key handler in `app_shell` already stands
+/// aside whenever a text field has focus, which is what makes a bare letter
+/// safe to claim.
+class _ShortcutField extends StatefulWidget {
+  const _ShortcutField({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ShortcutField> createState() => _ShortcutFieldState();
+}
+
+class _ShortcutFieldState extends State<_ShortcutField> {
+  late String _key = widget.value;
+  bool _listening = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('Shortcut',
+          style: TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
+      const SizedBox(width: 8),
+      Focus(
+        autofocus: false,
+        onKeyEvent: (node, event) {
+          if (!_listening || event is! KeyDownEvent) {
+            return KeyEventResult.ignored;
+          }
+          final ch = event.character;
+          // Escape clears, anything printable binds; everything else (arrows,
+          // modifiers on their own, Enter) is left to the dialog.
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            setState(() {
+              _key = '';
+              _listening = false;
+            });
+            widget.onChanged('');
+            return KeyEventResult.handled;
+          }
+          if (ch == null || ch.trim().isEmpty || ch.length != 1) {
+            return KeyEventResult.ignored;
+          }
+          setState(() {
+            _key = ch.toLowerCase();
+            _listening = false;
+          });
+          widget.onChanged(_key);
+          return KeyEventResult.handled;
+        },
+        child: Builder(
+          builder: (context) => OutlinedButton(
+            onPressed: () {
+              setState(() => _listening = !_listening);
+              if (_listening) Focus.of(context).requestFocus();
+            },
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(64, 32),
+              side: BorderSide(
+                  color: _listening ? scheme.primary : scheme.outlineVariant),
+            ),
+            child: Text(
+              _listening
+                  ? 'Press a key'
+                  : (_key.isEmpty ? 'None' : _key.toUpperCase()),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: _listening ? scheme.primary : null),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
 }

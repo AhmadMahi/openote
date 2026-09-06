@@ -61,7 +61,18 @@ import '../sync/cloud_folders.dart';
 import '../sync/mirrors.dart';
 import '../sync/sync_recorder.dart';
 
-enum Tool { select, text, pen, highlighter, eraser, lasso }
+enum Tool {
+  select,
+  text,
+  pen,
+  highlighter,
+  eraser,
+  lasso,
+
+  /// OneNote's "Insert Space": drag down to push everything below the line
+  /// you started on further down, making room in a page you already filled.
+  space
+}
 
 /// How the eraser removes ink (INK-6).
 enum EraserMode {
@@ -3866,6 +3877,20 @@ class AppState extends ChangeNotifier
   int penColor = 0;
   double penSize = 2.5;
 
+  /// Auto shapes: a drawn circle becomes a circle, a box a box (INK-10).
+  ///
+  /// OFF by default and persisted. Off, because it changes what a stroke IS
+  /// after you have finished drawing it, and a tool that rewrites your work
+  /// without being asked is the kind of help people turn off once and never
+  /// forgive. Persisted, because someone drawing a diagram wants it on for
+  /// the whole diagram, not one stroke.
+  bool autoShape = false;
+  void setAutoShape(bool v) {
+    autoShape = v;
+    _repo.setSetting('autoShape', v);
+    notifyListeners();
+  }
+
   // ── The ink palette (INK-9) ──────────────────────────────────────────
   //
   // The swatch row used to read `OnoteColors.penColors` directly, in three
@@ -3916,6 +3941,48 @@ class AppState extends ChangeNotifier
     _repo.setSetting(
         tool == Tool.highlighter ? 'highlighterPalette' : 'penPalette', list);
     notifyListeners();
+  }
+
+  /// A user-chosen key for each ink well, as a printable character — 'q',
+  /// '5', '/' — or the empty string for "no shortcut on this well".
+  ///
+  /// The fixed 1…6 keys stay, and are not stored here: they are the ones you
+  /// can rely on in someone else's copy of Openote. These are additions, for
+  /// people whose hand does not want to leave the letters to reach the number
+  /// row, and they are per tool for the same reason the palettes are — the
+  /// key that means yellow highlighter should not mean yellow pen.
+  List<String> penShortcuts = List.filled(6, '');
+  List<String> highlighterShortcuts = List.filled(4, '');
+
+  List<String> get inkShortcuts =>
+      tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
+
+  /// Bind [key] to well [i] of the current tool, or clear it with ''.
+  ///
+  /// A key can only mean one well, so binding a key that is already taken
+  /// takes it: a shortcut list where the same key appears twice has a winner
+  /// decided by iteration order, which is not something a user can see.
+  void setInkShortcut(int i, String key) {
+    final list = tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
+    if (i < 0 || i >= list.length) return;
+    final k = key.trim().toLowerCase();
+    if (k.isNotEmpty) {
+      for (var j = 0; j < list.length; j++) {
+        if (list[j] == k) list[j] = '';
+      }
+    }
+    list[i] = k;
+    _repo.setSetting(
+        tool == Tool.highlighter ? 'highlighterShortcuts' : 'penShortcuts',
+        list);
+    notifyListeners();
+  }
+
+  /// The well [key] is bound to for the armed tool, or -1.
+  int inkWellForKey(String key) {
+    final k = key.toLowerCase();
+    if (k.isEmpty) return -1;
+    return inkShortcuts.indexOf(k);
   }
 
   /// Put the built-in colours back in the current tool's row.
@@ -5804,6 +5871,8 @@ class AppState extends ChangeNotifier
     }
     final pp = _repo.getSetting('penProximity');
     if (pp is bool) penProximitySwitch = pp;
+    final as_ = _repo.getSetting('autoShape');
+    if (as_ is bool) autoShape = as_;
     // Detached: binding a port must never gate the app opening.
     unawaited(_restoreMcp());
     unawaited(checkForAppUpdate());
@@ -5818,6 +5887,14 @@ class AppState extends ChangeNotifier
     final hpal = _repo.getSetting('highlighterPalette');
     if (hpal is List && hpal.length == highlighterPalette.length) {
       highlighterPalette = hpal.cast<String>().toList();
+    }
+    final psc = _repo.getSetting('penShortcuts');
+    if (psc is List && psc.length == penShortcuts.length) {
+      penShortcuts = psc.cast<String>().toList();
+    }
+    final hsc = _repo.getSetting('highlighterShortcuts');
+    if (hsc is List && hsc.length == highlighterShortcuts.length) {
+      highlighterShortcuts = hsc.cast<String>().toList();
     }
     final vm = _repo.getSetting('viewMemory');
     if (vm is Map) {
@@ -7035,9 +7112,116 @@ class AppState extends ChangeNotifier
       for (final b in blocks) {
         clampBlockToPage(b);
       }
+      // And the sheet is put on screen WHOLE. Choosing A4 used to leave you
+      // at whatever zoom you happened to be on, looking at a corner of a
+      // sheet you had just asked for, with no way to see it but to zoom by
+      // hand. Picking a paper size is a statement about the page you want to
+      // see, so show it.
+      fitSheetToScreen();
     }
     docRevision++;
     markDirty();
+    notifyListeners();
+  }
+
+  /// Insert vertical space at [atY], pushing everything below it down by
+  /// [dy] — OneNote's "Insert Space".
+  ///
+  /// The point of it is to make room in a page you have already filled: you
+  /// wrote three paragraphs and now need a diagram between the first and the
+  /// second, and dragging thirty boxes down by hand is the alternative.
+  ///
+  /// Ink is moved by shifting the POINTS, not the block. An ink block's x/y
+  /// is a derived bounding box (see `_refitInkBounds`) and the stroke
+  /// coordinates are absolute page space, so moving the block alone would
+  /// move the box and leave the ink where it was.
+  ///
+  /// A negative [dy] closes space back up, but never past [atY] — pulling
+  /// content above the line it was supposed to stay below is how this would
+  /// silently overlap two paragraphs.
+  void insertSpace(double atY, double dy) {
+    if (dy == 0) return;
+    pushUndo();
+    for (final b in blocks) {
+      if (b.type == BlockType.ink) {
+        final strokes = b.content['strokes'];
+        if (strokes is! List) continue;
+        var touched = false;
+        for (final raw in strokes) {
+          if (raw is! Map) continue;
+          final ys = raw['y'];
+          if (ys is! List) continue;
+          for (var i = 0; i < ys.length; i++) {
+            final v = (ys[i] as num).toDouble();
+            if (v < atY) continue;
+            ys[i] = math.max(atY, v + dy);
+            touched = true;
+          }
+        }
+        if (touched) {
+          b.updatedAt = nowMs();
+          _refitInkBoundsOf(b);
+        }
+        continue;
+      }
+      if (b.y < atY) continue;
+      b.y = math.max(atY, b.y + dy);
+      b.updatedAt = nowMs();
+    }
+    docRevision++;
+    markDirty();
+    notifyListeners();
+  }
+
+  /// The bounding box of an ink block, recomputed after its points moved.
+  void _refitInkBoundsOf(Block b) {
+    var mnx = double.infinity, mny = double.infinity, mxx = -1e18, mxy = -1e18;
+    for (final sj in b.content['strokes'] as List) {
+      final st = Stroke.fromJson((sj as Map).cast<String, dynamic>());
+      final bb = st.bounds();
+      mnx = math.min(mnx, bb.minX);
+      mny = math.min(mny, bb.minY);
+      mxx = math.max(mxx, bb.maxX);
+      mxy = math.max(mxy, bb.maxY);
+    }
+    if (!mnx.isFinite) return;
+    b
+      ..x = mnx
+      ..y = mny
+      ..w = math.max(1, mxx - mnx)
+      ..h = math.max(1, mxy - mny);
+  }
+
+  /// Put the whole sheet on screen, centred — the "fit page" of every
+  /// document editor. Canvas mode has no sheet to fit, so it fits the
+  /// CONTENT instead, which is the same promise applied to a boundless page.
+  void fitSheetToScreen() {
+    if (!pageProps.isPaged) {
+      final b = contentBounds();
+      canvas.fitTo(b.isEmpty ? Rect.fromLTWH(0, 0, pageProps.pageWidth, 600) : b.inflate(24));
+      return;
+    }
+    final paper = pageProps.paper;
+    canvas.fitTo(Rect.fromLTWH(0, 0, paper.width, paper.height));
+  }
+
+  /// Scroll sheet [i] (0-based) to the top of the viewport.
+  void goToSheet(int i) {
+    if (!pageProps.isPaged) return;
+    final h = pageProps.paper.height;
+    canvas.scrollToPageY(h * i);
+    notifyListeners();
+  }
+
+  /// Whether the sheet rail down the right-hand edge is showing.
+  ///
+  /// Session-scoped like the tool: it is a way of looking at the page right
+  /// now, not a property of the page, and a notebook that reopened with a
+  /// panel somebody dismissed last week would be answering a question nobody
+  /// asked twice.
+  bool sheetRailOpen = false;
+  void toggleSheetRail() {
+    sheetRailOpen = !sheetRailOpen;
     notifyListeners();
   }
 

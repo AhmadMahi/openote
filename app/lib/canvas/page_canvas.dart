@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ink/shape_snap.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
@@ -80,6 +81,13 @@ class _PageCanvasState extends State<PageCanvas> {
   /// for the gesture's whole lifetime; see the comment on
   /// `onPointerPanZoomStart` for why this is not re-checked per update.
   int? _panZoomClaimedBy;
+
+  // Insert Space: where the drag began in page space, and how far it has
+  // moved. Null when the tool is idle.
+  double? _spaceAtY;
+  double _spaceDy = 0;
+
+  bool get _spaceTool => app.tool == Tool.space;
 
   // Lasso-select (INK-7): the freeform loop being drawn, in page space.
   List<Offset>? _lasso;
@@ -308,6 +316,13 @@ class _PageCanvasState extends State<PageCanvas> {
       return;
     }
     app.pushUndo();
+    // Auto shapes (INK-10). Applied at commit, never mid-stroke: snapping
+    // while the line is still being drawn makes the ink jump under the hand,
+    // and the recogniser cannot tell a half-drawn circle from an arc anyway.
+    // `snap` returns null whenever it is not confident, and null means keep
+    // exactly what was drawn.
+    final snapped = app.autoShape ? ShapeSnap.snap(w) : null;
+    final stroke = snapped ?? w;
     Block? target;
     for (final b in app.blocks.reversed) {
       if (b.type == BlockType.ink &&
@@ -320,7 +335,7 @@ class _PageCanvasState extends State<PageCanvas> {
     target ??= app.addBlock(
         Block(type: BlockType.ink, x: 0, y: 0, content: {'strokes': []}),
         recordUndo: false);
-    (target.content['strokes'] as List).add(w.toJson());
+    (target.content['strokes'] as List).add(stroke.toJson());
     _refitInkBounds(target);
     app.updateBlock(target);
     setState(() => _wet = null);
@@ -1055,6 +1070,31 @@ class _PageCanvasState extends State<PageCanvas> {
                     ),
                   ),
                 ),
+                // Insert Space, while the drag is happening: the line you
+                // started on, and the band that is about to open under it.
+                if (_spaceAtY != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _InsertSpacePainter(
+                          controller: controller,
+                          atY: _spaceAtY!,
+                          dy: _spaceDy,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                // The sheet rail: which page of a paged document you are on,
+                // and one click to any other. Only in page mode, because on a
+                // boundless canvas there are no pages to list.
+                if (app.pageProps.isPaged && app.sheetRailOpen)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _SheetRail(app: app, dark: dark),
+                  ),
                 // The drawn pen/highlighter/eraser cursor, above everything
                 // so it is never buried under a block — a cursor that can go
                 // behind the thing you are pointing at is not a cursor.
@@ -1088,7 +1128,39 @@ class _PageCanvasState extends State<PageCanvas> {
       );
     });
 
-    if (_lassoTool) {
+    if (_spaceTool) {
+      // Insert Space. A drag, not a click: the distance IS the amount of
+      // space, so there is nothing to type and nothing to guess. The page is
+      // only rewritten on release — dragging re-lays-out the whole document
+      // on every pointer move, and undo would then hold one entry per pixel.
+      canvas = Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          if (app.claimedPointers.remove(e.pointer)) return;
+          setState(() {
+            _spaceAtY = controller.screenToPage(e.localPosition).dy;
+            _spaceDy = 0;
+          });
+        },
+        onPointerMove: (e) {
+          if (_spaceAtY == null) return;
+          setState(() => _spaceDy =
+              controller.screenToPage(e.localPosition).dy - _spaceAtY!);
+        },
+        onPointerUp: (e) {
+          final at = _spaceAtY, dy = _spaceDy;
+          setState(() {
+            _spaceAtY = null;
+            _spaceDy = 0;
+          });
+          // A tap is not a drag. Below a few page-units it is somebody
+          // clicking to see what the tool does, and moving their document by
+          // two pixels is a worse answer than doing nothing.
+          if (at != null && dy.abs() >= 4) app.insertSpace(at, dy);
+        },
+        child: canvas,
+      );
+    } else if (_lassoTool) {
       // Lasso: draw a freeform loop; on release, the enclosed strokes are
       // gathered into one selection.
       canvas = Listener(
@@ -1312,6 +1384,7 @@ class _PageCanvasState extends State<PageCanvas> {
           Tool.pen || Tool.highlighter || Tool.eraser =>
             SystemMouseCursors.none,
           Tool.lasso => SystemMouseCursors.precise,
+          Tool.space => SystemMouseCursors.resizeUpDown,
           _ => MouseCursor.defer,
         },
         // Leaving the canvas is the one thing the Listener above cannot see,
@@ -1765,4 +1838,132 @@ class _PenCursorPainter extends CustomPainter {
       old.penSize != penSize ||
       old.scale != scale ||
       old.dark != dark;
+}
+
+/// The sheet rail down the right-hand edge of a paged page.
+///
+/// A paged document can run to many sheets, and until now the only way to
+/// know how many — or to reach sheet 7 — was to scroll and count. This lists
+/// them, marks the one you are looking at, and jumps on a click.
+///
+/// Deliberately a strip of numbers rather than thumbnails: a thumbnail of a
+/// page of handwriting at 40px wide is a grey smudge that takes a render of
+/// the whole document to produce, and it would have to be kept up to date
+/// with every stroke. The number is the part that is actually legible.
+class _SheetRail extends StatelessWidget {
+  const _SheetRail({required this.app, required this.dark});
+
+  final AppState app;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final n = app.sheetCount;
+    final h = app.pageProps.paper.height;
+    // Which sheet the top of the viewport is sitting in.
+    final current =
+        ((-app.canvas.offset.dy / app.canvas.scale) / h).floor().clamp(0, n - 1);
+    return Container(
+      width: 44,
+      decoration: BoxDecoration(
+        color: (dark ? OnoteColors.night0 : OnoteColors.paper0)
+            .withValues(alpha: .92),
+        border: Border(
+            left: BorderSide(
+                color: dark ? OnoteColors.night300 : OnoteColors.paper300)),
+      ),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: n,
+        itemBuilder: (context, i) {
+          final on = i == current;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: Tooltip(
+              message: 'Go to page ${i + 1}',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => app.goToSheet(i),
+                child: Container(
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    color: on
+                        ? scheme.primary.withValues(alpha: .16)
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: on
+                          ? scheme.primary
+                          : (dark
+                              ? OnoteColors.night300
+                              : OnoteColors.paper300),
+                    ),
+                  ),
+                  child: Text('${i + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: on ? FontWeight.w700 : FontWeight.w400,
+                        color: on ? scheme.primary : null,
+                      )),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The Insert Space preview: where the cut is, and how much is opening.
+///
+/// Shown only while the drag is live. It has to answer two questions at a
+/// glance — *what moves* (everything below the line) and *by how much* — so
+/// it draws the line solid and fills the band being created, rather than
+/// showing a number nobody can convert into page distance.
+class _InsertSpacePainter extends CustomPainter {
+  _InsertSpacePainter({
+    required this.controller,
+    required this.atY,
+    required this.dy,
+    required this.color,
+  });
+
+  final CanvasController controller;
+  final double atY;
+  final double dy;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y0 = controller.pageToScreen(Offset(0, atY)).dy;
+    final y1 = controller.pageToScreen(Offset(0, atY + dy)).dy;
+    final band = Rect.fromLTRB(0, math.min(y0, y1), size.width, math.max(y0, y1));
+    canvas.drawRect(band, Paint()..color = color.withValues(alpha: .12));
+    final line = Paint()
+      ..color = color
+      ..strokeWidth = 2;
+    canvas.drawLine(Offset(0, y0), Offset(size.width, y0), line);
+    // The leading edge dashed, so which line is the anchor and which is the
+    // one following the hand is never in doubt.
+    if ((y1 - y0).abs() > 1) {
+      const dash = 8.0;
+      for (var x = 0.0; x < size.width; x += dash * 2) {
+        canvas.drawLine(Offset(x, y1), Offset(x + dash, y1),
+            Paint()
+              ..color = color.withValues(alpha: .7)
+              ..strokeWidth = 1.5);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _InsertSpacePainter old) =>
+      old.atY != atY ||
+      old.dy != dy ||
+      old.color != color ||
+      old.controller.scale != controller.scale ||
+      old.controller.offset != controller.offset;
 }

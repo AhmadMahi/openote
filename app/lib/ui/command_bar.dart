@@ -872,6 +872,29 @@ class _CommandBarState extends State<CommandBar> {
         visualDensity: VisualDensity.compact,
         onPressed: () => app.canvas.fitTo(app.contentBounds().inflate(24)),
       ),
+      // Fit the SHEET, which is a different question from fitting the
+      // content: on a page you have only started, the content is one
+      // paragraph and fitting it magnifies that paragraph to fill the window.
+      // This shows the paper.
+      IconButton(
+        icon: const Icon(Icons.crop_free, size: 18),
+        tooltip: paged
+            ? 'Fit the whole ${app.pageProps.paper.name} sheet on screen'
+            : 'Fit the page on screen',
+        visualDensity: VisualDensity.compact,
+        onPressed: app.fitSheetToScreen,
+      ),
+      if (paged)
+        IconButton(
+          icon: const Icon(Icons.vertical_split_outlined, size: 18),
+          tooltip: app.sheetRailOpen
+              ? 'Hide the page list'
+              : 'Show the page list down the right-hand edge',
+          isSelected: app.sheetRailOpen,
+          visualDensity: VisualDensity.compact,
+          color: app.sheetRailOpen ? scheme.primary : null,
+          onPressed: app.toggleSheetRail,
+        ),
       const _Div(),
       // Light / dark. The reason this tab is back: it is the first thing
       // anyone looks for and it had no visible home at all.
@@ -939,6 +962,27 @@ class _CommandBarState extends State<CommandBar> {
           Tool.highlighter, Icons.border_color_outlined, 'Highlighter  (H)'),
       toolButton(Tool.eraser, Icons.cleaning_services_outlined, 'Eraser  (E)'),
       toolButton(Tool.lasso, Icons.gesture_outlined, 'Lasso-select ink'),
+      toolButton(Tool.space, Icons.unfold_more, 'Insert space — drag to push '
+          'everything below down'),
+      const _Div(),
+      // Auto shapes (INK-10). A toggle rather than a mode: you keep drawing
+      // with the pen you already have, and a circle comes out round.
+      Tooltip(
+        message: 'Auto shapes: a drawn circle, box, triangle or line is '
+            'tidied into a real one.\nAnything it cannot read confidently is '
+            'left exactly as you drew it.',
+        child: IconButton(
+          icon: const Icon(Icons.category_outlined, size: 18),
+          isSelected: app.autoShape,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor:
+                app.autoShape ? scheme.primary.withValues(alpha: .14) : null,
+            foregroundColor: app.autoShape ? scheme.primary : null,
+          ),
+          onPressed: () => app.setAutoShape(!app.autoShape),
+        ),
+      ),
       const _Div(),
       if (inkActive) ...[
         for (final (i, c) in colors.indexed)
@@ -1744,6 +1788,12 @@ class _ColorWellState extends State<_ColorWell> {
       app,
       initial: app.inkPalette[index],
       title: app.tool == Tool.highlighter ? 'Highlighter colour' : 'Pen colour',
+      // The well's own key, set right where the colour is set. Applied on the
+      // spot rather than on Apply: a shortcut is not part of the colour, and
+      // cancelling out of a colour you decided against should not also throw
+      // away the key you just chose.
+      shortcut: app.inkShortcuts[index],
+      onShortcut: (k) => app.setInkShortcut(index, k),
     );
     if (picked == null) return;
     app.setInkPaletteColor(index, picked.startsWith('#') ? picked : '#$picked');
@@ -1779,8 +1829,12 @@ class _ColorWellState extends State<_ColorWell> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Tooltip(
-        message: 'Ink colour ${index + 1}'
-            '\nDouble-click to change what colour it is',
+        message: () {
+          final k = app.inkShortcuts[index];
+          return 'Ink colour ${index + 1}'
+              '${k.isEmpty ? '' : '  ·  ${k.toUpperCase()}'}'
+              '\nDouble-click to change its colour and key';
+        }(),
         child: InkWell(
           borderRadius: BorderRadius.circular(99),
           onTap: () => _tap(context),
