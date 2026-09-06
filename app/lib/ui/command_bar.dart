@@ -13,6 +13,7 @@ import '../export/pdf_vector_export.dart';
 import '../export/print_page.dart';
 import '../editor/list_editing.dart';
 import '../markdown/md_syntax.dart';
+import '../model/models.dart' show PaperSize;
 import '../model/tags.dart';
 import '../planner/agenda.dart';
 import '../state/app_state.dart';
@@ -28,6 +29,7 @@ import 'settings_dialog.dart';
 import 'update_dialog.dart';
 import '../theme/tokens.dart';
 import 'onote_dialog.dart';
+import 'object_row.dart' show BackgroundSpacingButton;
 
 /// The tabbed command bar (style guide §7 revised): Home · Insert · Draw ·
 /// View. OneNote's few-clicks accessibility in Openote's calm language — a
@@ -44,16 +46,23 @@ class _CommandBarState extends State<CommandBar> {
   /// The tab the user last chose among the permanent ones.
   int _tab = 0;
 
-  /// **Three, forever.** Home is write and format, Insert is add, Draw is
-  /// ink; nothing is ever appended, and nothing but a tap on one of them ever
-  /// changes which is showing.
+  /// Home is write and format, Insert is add, Draw is ink, View is how the
+  /// page and the app look. Nothing but a tap on one of them ever changes
+  /// which is showing.
   ///
-  /// There used to be a fourth, View, and a fifth that appeared while an
-  /// equation was open and dragged the student onto it. The equation's
-  /// palette is on the object row now, where it arrives without moving
-  /// anybody; View's page controls are on the same row, and the four
-  /// preferences it also held were already in Settings.
-  static const _tabs = ['Home', 'Insert', 'Draw'];
+  /// There was briefly a fifth that appeared while an equation was open and
+  /// dragged the student onto it; the equation's palette is on the object row
+  /// now, where it arrives without moving anybody.
+  ///
+  /// View was removed upstream on the argument that its page controls had
+  /// moved to the object row and "the four preferences it also held were
+  /// already in Settings". That is true of where the settings LIVE and false
+  /// of whether anyone can find them: light/dark, spell check, snap and AI
+  /// access went from one visible click to a dialog nobody opens, and the
+  /// object row only shows its half when nothing at all is selected. It is
+  /// back, deliberately, at the owner's request. The duplication with the
+  /// object row is intentional — the row is contextual, this is always here.
+  static const _tabs = ['Home', 'Insert', 'Draw', 'View'];
 
   AppState get app => widget.app;
 
@@ -367,8 +376,11 @@ class _CommandBarState extends State<CommandBar> {
                       child: SingleChildScrollView(
                         key: ValueKey(_tab),
                         scrollDirection: Axis.horizontal,
-                        child:
-                            _tab == 2 ? _drawRow(context) : _homeRow(context),
+                        child: switch (_tab) {
+                          2 => _drawRow(context),
+                          3 => _viewRow(context),
+                          _ => _homeRow(context),
+                        },
                       ),
                     ),
             ),
@@ -755,6 +767,144 @@ class _CommandBarState extends State<CommandBar> {
             ),
         ],
       );
+  /// The View tab: how the page looks, and how the app looks.
+  ///
+  /// Restored from the pre-`f36408c` bar. Two changes from what it was: the
+  /// background buttons gained the spacing control beside them, and the
+  /// contents are otherwise the same set of things a student actually reaches
+  /// for — including the light/dark switch, which is the one people hunt for
+  /// first and the one burying it in Settings hid hardest.
+  Widget _viewRow(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget bg(String v, IconData icon, String tip) => IconButton(
+          icon: Icon(icon, size: 18),
+          tooltip: 'Background: $tip',
+          isSelected: app.pageProps.background == v,
+          visualDensity: VisualDensity.compact,
+          color: app.pageProps.background == v ? scheme.primary : null,
+          onPressed: () => app.setBackground(v),
+        );
+    final paged = app.pageProps.isPaged;
+    return Row(children: [
+      bg('blank', Icons.crop_din, 'blank'),
+      bg('grid', Icons.grid_4x4, 'grid'),
+      bg('dotted', Icons.apps, 'dotted'),
+      bg('ruled', Icons.notes, 'ruled'),
+      // How far apart that pattern is drawn — dot gap, ruled line height,
+      // grid square. Only with a pattern up; on a blank page it controls
+      // nothing.
+      if (app.pageProps.background != 'blank') BackgroundSpacingButton(app: app),
+      const _Div(),
+      // Canvas or paper. Per page, not per notebook: one notebook holds the
+      // lecture you scribble on and the essay you hand in, and making you
+      // choose once for both is why people keep two apps.
+      IconButton(
+        icon: Icon(paged ? Icons.description : Icons.dashboard_customize,
+            size: 18),
+        tooltip: paged
+            ? 'Page mode: ${app.pageProps.paper.name}'
+                '${app.pageProps.landscape ? ' landscape' : ''} '
+                '— click for canvas'
+            : 'Canvas mode: boundless — click for pages',
+        isSelected: paged,
+        visualDensity: VisualDensity.compact,
+        color: paged ? scheme.primary : null,
+        onPressed: () => app.setPageLayout(paged ? 'canvas' : 'paged'),
+      ),
+      if (paged)
+        PopupMenuButton<String>(
+          tooltip: 'Paper size',
+          icon: const Icon(Icons.aspect_ratio, size: 18),
+          onSelected: (v) => v == '_rotate'
+              ? app.setPageLayout('paged', landscape: !app.pageProps.landscape)
+              : app.setPageLayout('paged', paper: v),
+          itemBuilder: (_) => [
+            for (final p in PaperSize.all)
+              CheckedPopupMenuItem(
+                value: p.name,
+                checked: app.pageProps.paperSize == p.name,
+                child: Text(p.name),
+              ),
+            const PopupMenuDivider(),
+            CheckedPopupMenuItem(
+              value: '_rotate',
+              checked: app.pageProps.landscape,
+              child: const Text('Landscape'),
+            ),
+          ],
+        ),
+      const _Div(),
+      IconButton(
+        icon: Icon(app.snapToGrid ? Icons.grid_goldenratio : Icons.grid_off,
+            size: 18),
+        tooltip: app.snapToGrid
+            ? 'Snap to grid: ON (grid shows while dragging)'
+            : 'Snap to grid: OFF — free placement',
+        isSelected: app.snapToGrid,
+        visualDensity: VisualDensity.compact,
+        color: app.snapToGrid ? scheme.primary : null,
+        onPressed: app.toggleSnap,
+      ),
+      const _Div(),
+      IconButton(
+        icon: const Icon(Icons.remove, size: 18),
+        tooltip: 'Zoom out  (Ctrl+-)',
+        visualDensity: VisualDensity.compact,
+        onPressed: () => app.canvas.setZoom(app.canvas.scale / 1.2),
+      ),
+      AnimatedBuilder(
+        animation: app.canvas,
+        builder: (context, _) => TextButton(
+          onPressed: app.canvas.reset,
+          child: Text('${(app.canvas.scale * 100).round()}%',
+              style: const TextStyle(fontSize: 12)),
+        ),
+      ),
+      IconButton(
+        icon: const Icon(Icons.add, size: 18),
+        tooltip: 'Zoom in  (Ctrl+=)',
+        visualDensity: VisualDensity.compact,
+        onPressed: () => app.canvas.setZoom(app.canvas.scale * 1.2),
+      ),
+      IconButton(
+        icon: const Icon(Icons.fit_screen_outlined, size: 18),
+        tooltip: 'Zoom to fit content',
+        visualDensity: VisualDensity.compact,
+        onPressed: () => app.canvas.fitTo(app.contentBounds().inflate(24)),
+      ),
+      const _Div(),
+      // Light / dark. The reason this tab is back: it is the first thing
+      // anyone looks for and it had no visible home at all.
+      SegmentedButton<ThemeMode>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11))),
+        segments: const [
+          ButtonSegment(value: ThemeMode.system, label: Text('Auto')),
+          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+        ],
+        selected: {app.themeMode},
+        onSelectionChanged: (s) => app.setThemeMode(s.first),
+      ),
+      const _Div(),
+      // Spell check (TEXT-11). English-only in this release; the toggle exists
+      // because a wordlist checker WILL flag jargon and proper nouns, and the
+      // answer to that has to be one click away.
+      Tooltip(
+        message: 'Underline misspelled words while editing (English)',
+        child: IconButton(
+          icon: const Icon(Icons.spellcheck, size: 18),
+          isSelected: app.spellCheckEnabled,
+          visualDensity: VisualDensity.compact,
+          color: app.spellCheckEnabled ? scheme.primary : null,
+          onPressed: () => app.setSpellCheck(!app.spellCheckEnabled),
+        ),
+      ),
+    ]);
+  }
+
   Widget _drawRow(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget toolButton(Tool t, IconData icon, String tip) => IconButton(
@@ -1544,18 +1694,18 @@ class _SubjectBadge extends StatelessWidget {
 
 /// One colour well in the Draw row — the Notability switching model.
 ///
-/// The rule that makes it feel different from six radio buttons: **tapping
-/// the well that is already armed opens it for editing.** So the row is both
-/// the switcher and the way in to any colour at all, and neither costs a
-/// separate button. Before this, the six built-ins were the only colours ink
-/// could be without drawing a stroke and recolouring it afterwards.
+/// The rule that makes it feel different from six radio buttons: **double-
+/// clicking a well opens it for editing.** So the row is both the switcher
+/// and the way in to any colour at all, and neither costs a separate button.
+/// Before this, the six built-ins were the only colours ink could be without
+/// drawing a stroke and recolouring it afterwards.
 ///
 /// The rest of the model, for the same reason — reaching a colour should not
 /// need the mouse at all:
 ///  * **1…6** arms a well while a drawing tool is up (`app_shell`).
 ///  * **`[` / `]`** step to the previous / next well, wrapping.
 ///  * **long-press / right-click** opens the editor without arming first.
-class _ColorWell extends StatelessWidget {
+class _ColorWell extends StatefulWidget {
   const _ColorWell({
     required this.color,
     required this.index,
@@ -1567,6 +1717,26 @@ class _ColorWell extends StatelessWidget {
   final int index;
   final bool selected;
   final AppState app;
+
+  @override
+  State<_ColorWell> createState() => _ColorWellState();
+}
+
+class _ColorWellState extends State<_ColorWell> {
+  /// When this well was last clicked, for the hand-rolled double-click.
+  ///
+  /// NOT `InkWell.onDoubleTap`: adding a double-tap recogniser makes the
+  /// single tap wait out the double-tap window before it fires, so every
+  /// colour change would arrive ~300 ms late. That is precisely the lag this
+  /// row exists to remove. Detecting it by timestamp keeps the first click
+  /// instant and still catches the second.
+  DateTime? _lastTap;
+  static const _doubleTapWindow = Duration(milliseconds: 350);
+
+  Color get color => widget.color;
+  int get index => widget.index;
+  bool get selected => widget.selected;
+  AppState get app => widget.app;
 
   Future<void> _edit(BuildContext context) async {
     final picked = await showOnoteColorPicker(
@@ -1591,18 +1761,29 @@ class _ColorWell extends StatelessWidget {
     if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[index]);
   }
 
+  void _tap(BuildContext context) {
+    final now = DateTime.now();
+    final prev = _lastTap;
+    if (prev != null && now.difference(prev) < _doubleTapWindow) {
+      _lastTap = null;
+      _edit(context);
+      return;
+    }
+    _lastTap = now;
+    _arm();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Tooltip(
-        message: selected
-            ? 'Click again to change this colour  (${index + 1})'
-            : 'Ink colour ${index + 1}',
+        message: 'Ink colour ${index + 1}'
+            '\nDouble-click to change what colour it is',
         child: InkWell(
           borderRadius: BorderRadius.circular(99),
-          onTap: () => selected ? _edit(context) : _arm(),
+          onTap: () => _tap(context),
           onLongPress: () => _edit(context),
           onSecondaryTap: () => _edit(context),
           child: Padding(

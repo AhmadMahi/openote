@@ -111,13 +111,21 @@ void main() {
   testWidgets('there is no Maths tab, and there never is', (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     await pump(tester);
+    // THIS is the claim the test is named for, and it is unchanged: no tab
+    // ever appears because of what the user is editing. A Maths tab would
+    // move the student onto it mid-equation, which is the whole reason the
+    // palette lives on the object row.
     expect(find.text('Maths'), findsNothing);
-    for (final t in ['Home', 'Insert', 'Draw']) {
+    // View is back, at the owner's request. It had asserted `findsNothing`
+    // on the argument that its page controls were on the object row and its
+    // "four preferences were already in Settings" — true of where they live,
+    // false of whether anyone can find them: light/dark in particular went
+    // from one visible click to a dialog nobody opens, and the object row
+    // shows its half only when nothing at all is selected. A PERMANENT tab
+    // is not the thing this test guards against; an ARRIVING one is.
+    for (final t in ['Home', 'Insert', 'Draw', 'View']) {
       expect(find.text(t), findsOneWidget, reason: '$t should be there');
     }
-    expect(find.text('View'), findsNothing,
-        reason: "the page's own controls are on the object row, and the four "
-            'preferences View also held were already in Settings');
   });
 
   testWidgets('the palette arrives WITHOUT the student being moved',

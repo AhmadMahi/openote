@@ -206,7 +206,7 @@ class PageFace extends StatelessWidget {
       // How far apart that pattern is drawn. Only with a pattern up: on a
       // blank page it would be a control for nothing, and a disabled button
       // that is *usually* disabled is worse than one that isn't there.
-      if (app.pageProps.background != 'blank') _BgSpacing(app: app),
+      if (app.pageProps.background != 'blank') BackgroundSpacingButton(app: app),
       const _Sep(),
       // Canvas or paper. Per page, not per notebook: one notebook holds the
       // lecture you scribble on and the essay you hand in, and making you
@@ -439,6 +439,9 @@ class _RowScroll extends MaterialScrollBehavior {
 
 /// The background pattern's spacing: dot gap, ruled line height, grid square.
 ///
+/// Public because the View tab shows it too: the object row is contextual
+/// (it appears only when nothing is selected) and the tab is always there.
+///
 /// Openote could always choose a pattern but never its size, so ruled lines
 /// came at one height whether you write large or small, and the dot grid came
 /// at one density whatever you were sketching. This is the missing half of
@@ -449,8 +452,8 @@ class _RowScroll extends MaterialScrollBehavior {
 /// decision, not a per-stroke one. It offers named presets first — the sizes
 /// real paper actually comes in — with a slider under them for anything else,
 /// because "8 mm ruled" is a thing people can pick and "31.6" is not.
-class _BgSpacing extends StatelessWidget {
-  const _BgSpacing({required this.app});
+class BackgroundSpacingButton extends StatelessWidget {
+  const BackgroundSpacingButton({super.key, required this.app});
 
   final AppState app;
 

@@ -90,6 +90,17 @@ class _PageCanvasState extends State<PageCanvas> {
   bool get _inkTool =>
       app.tool == Tool.pen || app.tool == Tool.highlighter || app.tool == Tool.eraser;
 
+  /// Follow the pointer with the drawn cursor, through hover AND drag.
+  ///
+  /// Only a MOUSE gets one. A stylus and a finger are already physically at
+  /// the point, and painting a nib under a real pen tip is a second pen
+  /// chasing the first one.
+  void _trackPenCursor(PointerEvent e) {
+    _penCursor.value = _inkTool && e.kind == PointerDeviceKind.mouse
+        ? e.localPosition
+        : null;
+  }
+
   /// What the drawn cursor is filled with: the armed ink, so the nib shows
   /// the colour you are about to draw in and the swatch row is not the only
   /// place that answer lives. The eraser has no ink, so it gets the page's
@@ -1270,7 +1281,23 @@ class _PageCanvasState extends State<PageCanvas> {
       onPointerPanZoomEnd: (e) {
         if (_panZoomClaimedBy == e.pointer) _panZoomClaimedBy = null;
       },
-      child: MouseRegion(
+      child: Listener(
+        // THE DRAWN CURSOR HAS TO KEEP UP WITH A BUTTON-DOWN DRAG.
+        //
+        // `MouseRegion.onHover` fires only while NO button is pressed — that
+        // is what "hover" means — so tracking the nib on hover alone froze it
+        // at the point the stroke started and left it sitting there until the
+        // button came up. You drew a line and the pen stayed behind, which is
+        // the one thing a pen cursor must never do.
+        //
+        // A `Listener` sees the whole gesture: down, every move, and up. It is
+        // wrapped OUTSIDE the MouseRegion and only ever writes a notifier, so
+        // it consumes nothing and cannot change how any tool behaves.
+        onPointerDown: _trackPenCursor,
+        onPointerMove: _trackPenCursor,
+        onPointerHover: _trackPenCursor,
+        onPointerUp: _trackPenCursor,
+        child: MouseRegion(
         // The drawing tools hide the system cursor and draw their own
         // (see [_PenCursorPainter]). `precise` — the plus/crosshair — is a
         // *targeting* cursor: it says "this point", which is what a picker
@@ -1287,15 +1314,11 @@ class _PageCanvasState extends State<PageCanvas> {
           Tool.lasso => SystemMouseCursors.precise,
           _ => MouseCursor.defer,
         },
-        // Only a MOUSE gets a drawn cursor. A stylus and a finger are already
-        // physically at the point, and painting a nib under a real pen tip is
-        // a second pen chasing the first one.
-        onHover: (e) => _penCursor.value = _inkTool &&
-                e.kind == PointerDeviceKind.mouse
-            ? e.localPosition
-            : null,
+        // Leaving the canvas is the one thing the Listener above cannot see,
+        // because a pointer that has gone gives no more events.
         onExit: (_) => _penCursor.value = null,
         child: canvas,
+      ),
       ),
     );
   }
@@ -1650,27 +1673,41 @@ class _PenCursorPainter extends CustomPainter {
           ..strokeWidth = 1
           ..color = color.withValues(alpha: .85));
 
-    // The body, drawn up and to the right of the tip at the angle a right
-    // hand holds a pen. Offsets are in logical pixels and deliberately NOT
-    // scaled by zoom: the pen is a cursor, and a cursor that grows when you
-    // zoom in is a bug in every app that has ever shipped one.
+    // The body hangs DOWN and to the right of the tip.
+    //
+    // It used to go UP-right, which is how a hand really holds a pen — and it
+    // was wrong for a cursor. Writing runs left to right, so a barrel above
+    // the nib sits squarely on the words you have just written and you cannot
+    // read back the line you are on. Below the nib it covers blank paper you
+    // have not reached yet. The tip stays exactly on the hot spot either way;
+    // only the body moved.
+    //
+    // Offsets are in logical pixels and deliberately NOT scaled by zoom: the
+    // pen is a cursor, and a cursor that grows when you zoom in is a bug in
+    // every app that has ever shipped one.
     final body = Path();
-    const double a = 0.87; // ≈50°, the angle a pen is actually held at
+    const double a = 0.87; // ≈50° from horizontal
     final dx = math.cos(a), dy = math.sin(a);
+    // u = (dx, dy) runs down-right from the tip; v = (dy, -dx) is its
+    // perpendicular, so `side` fattens the barrel symmetrically.
     Offset along(double d, double side) => Offset(
-        p.dx + dx * d - dy * side, p.dy - dy * d - dx * side);
+        p.dx + dx * d + dy * side, p.dy + dy * d - dx * side);
+
+    // Longer than it was (28px against 19): a stubby pen reads as a smudge at
+    // a glance, and the length is what makes the direction legible.
+    const double nibEnd = 8, tail = 28, halfWidth = 3;
 
     // Nib triangle: a point at the pointer opening into the barrel.
     body.moveTo(p.dx, p.dy);
-    body.lineTo(along(7, 2.6).dx, along(7, 2.6).dy);
-    body.lineTo(along(7, -2.6).dx, along(7, -2.6).dy);
+    body.lineTo(along(nibEnd, halfWidth).dx, along(nibEnd, halfWidth).dy);
+    body.lineTo(along(nibEnd, -halfWidth).dx, along(nibEnd, -halfWidth).dy);
     body.close();
 
     final barrel = Path()
-      ..moveTo(along(7, 2.6).dx, along(7, 2.6).dy)
-      ..lineTo(along(19, 2.6).dx, along(19, 2.6).dy)
-      ..lineTo(along(19, -2.6).dx, along(19, -2.6).dy)
-      ..lineTo(along(7, -2.6).dx, along(7, -2.6).dy)
+      ..moveTo(along(nibEnd, halfWidth).dx, along(nibEnd, halfWidth).dy)
+      ..lineTo(along(tail, halfWidth).dx, along(tail, halfWidth).dy)
+      ..lineTo(along(tail, -halfWidth).dx, along(tail, -halfWidth).dy)
+      ..lineTo(along(nibEnd, -halfWidth).dx, along(nibEnd, -halfWidth).dy)
       ..close();
 
     // A halo under the whole glyph, so the pen stays visible over ink of its
