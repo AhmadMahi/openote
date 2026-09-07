@@ -370,6 +370,14 @@ class _ShortcutFieldState extends State<_ShortcutField> {
   late String _key = widget.value;
   bool _listening = false;
 
+  /// Something you can see on a keycap. Control characters (< 0x20) and
+  /// Delete are single characters too, which is exactly why the length check
+  /// alone was not enough.
+  static bool _isPrintable(String ch) {
+    final c = ch.codeUnitAt(0);
+    return c > 0x20 && c != 0x7F;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -394,7 +402,20 @@ class _ShortcutFieldState extends State<_ShortcutField> {
             widget.onChanged('');
             return KeyEventResult.handled;
           }
-          if (ch == null || ch.trim().isEmpty || ch.length != 1) {
+          // A HELD MODIFIER IS NOT A SHORTCUT HERE, and refusing it is not
+          // fussiness: Ctrl+A does not report the letter A, it reports the
+          // control character \x01. That is a single character and it passed
+          // every check this had — so a stray Ctrl-chord stored an invisible
+          // byte as somebody's ink shortcut, and from then on that chord
+          // changed colour mid-stroke with nothing on screen explaining why.
+          // Caught by binding a key on a real build and reading back what
+          // landed in the settings file.
+          if (HardwareKeyboard.instance.isControlPressed ||
+              HardwareKeyboard.instance.isMetaPressed ||
+              HardwareKeyboard.instance.isAltPressed) {
+            return KeyEventResult.ignored;
+          }
+          if (ch == null || ch.length != 1 || !_isPrintable(ch)) {
             return KeyEventResult.ignored;
           }
           setState(() {

@@ -3986,6 +3986,27 @@ class AppState extends ChangeNotifier
   List<String> penShortcuts = List.filled(6, '');
   List<String> highlighterShortcuts = List.filled(4, '');
 
+  /// A shortcut is one PRINTABLE character, or nothing.
+  ///
+  /// Validated here as well as in the field that captures it, because a
+  /// settings file is not a trusted input: it can be hand-edited, and it can
+  /// carry values written by a build whose capture was laxer than this one's.
+  /// It was: a Ctrl-chord reports a control character (Ctrl+A is `\x01`),
+  /// which is a single character and passed the length check, so an invisible
+  /// byte could be stored as a shortcut and then silently change ink colour
+  /// whenever that chord was pressed.
+  static String sanitiseShortcut(String? k) {
+    if (k == null || k.length != 1) return '';
+    final c = k.codeUnitAt(0);
+    if (c <= 0x20 || c == 0x7F) return '';
+    return k.toLowerCase();
+  }
+
+  static List<String> _sanitisedList(List<dynamic> raw, int length) => [
+        for (var i = 0; i < length; i++)
+          sanitiseShortcut(i < raw.length ? raw[i] as String? : null)
+      ];
+
   List<String> get inkShortcuts =>
       tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
 
@@ -3997,7 +4018,7 @@ class AppState extends ChangeNotifier
   void setInkShortcut(int i, String key) {
     final list = tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
     if (i < 0 || i >= list.length) return;
-    final k = key.trim().toLowerCase();
+    final k = sanitiseShortcut(key.trim());
     if (k.isNotEmpty) {
       for (var j = 0; j < list.length; j++) {
         if (list[j] == k) list[j] = '';
@@ -4020,7 +4041,7 @@ class AppState extends ChangeNotifier
   Map<String, String> toolShortcuts = {};
 
   void setToolShortcut(Tool t, String key) {
-    final k = key.trim().toLowerCase();
+    final k = sanitiseShortcut(key.trim());
     toolShortcuts.removeWhere((_, v) => v == k && k.isNotEmpty);
     if (k.isEmpty) {
       toolShortcuts.remove(t.name);
@@ -4035,7 +4056,7 @@ class AppState extends ChangeNotifier
 
   /// The tool [key] is bound to, or null.
   Tool? toolForKey(String key) {
-    final k = key.toLowerCase();
+    final k = sanitiseShortcut(key);
     if (k.isEmpty) return null;
     for (final e in toolShortcuts.entries) {
       if (e.value != k) continue;
@@ -4048,7 +4069,7 @@ class AppState extends ChangeNotifier
 
   /// The well [key] is bound to for the armed tool, or -1.
   int inkWellForKey(String key) {
-    final k = key.toLowerCase();
+    final k = sanitiseShortcut(key);
     if (k.isEmpty) return -1;
     return inkShortcuts.indexOf(k);
   }
@@ -5946,18 +5967,18 @@ class AppState extends ChangeNotifier
       highlighterPalette = hpal.cast<String>().toList();
     }
     final psc = _repo.getSetting('penShortcuts');
-    if (psc is List && psc.length == penShortcuts.length) {
-      penShortcuts = psc.cast<String>().toList();
-    }
+    if (psc is List) penShortcuts = _sanitisedList(psc, penShortcuts.length);
     final hsc = _repo.getSetting('highlighterShortcuts');
-    if (hsc is List && hsc.length == highlighterShortcuts.length) {
-      highlighterShortcuts = hsc.cast<String>().toList();
+    if (hsc is List) {
+      highlighterShortcuts =
+          _sanitisedList(hsc, highlighterShortcuts.length);
     }
     final tsc = _repo.getSetting('toolShortcuts');
     if (tsc is Map) {
       toolShortcuts = {
         for (final e in tsc.entries)
-          if (e.value is String) '${e.key}': e.value as String,
+          if (e.value is String && sanitiseShortcut(e.value as String).isNotEmpty)
+            '${e.key}': sanitiseShortcut(e.value as String),
       };
     }
     final vm = _repo.getSetting('viewMemory');
