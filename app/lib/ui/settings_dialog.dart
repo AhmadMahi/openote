@@ -63,6 +63,24 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 color: Theme.of(context).colorScheme.primary)),
       );
 
+  /// A preference whose control is too wide to sit beside its label.
+  ///
+  /// The cursor picker has four segments and overflowed the row by 32px — a
+  /// real layout assertion, not a cosmetic squeeze. Stacking keeps the
+  /// dialog's one visual language (a highlighted segment says what is set)
+  /// instead of dropping to a second one for the sake of width.
+  Widget _rowStacked(String label, Widget control) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 6),
+            SizedBox(width: double.infinity, child: control),
+          ],
+        ),
+      );
+
   Widget _row(String label, Widget control) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(children: [
@@ -144,7 +162,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               // works: a nib shows what you are holding, a crosshair is what
               // people arriving from image editors expect, and a dot gets out
               // of the way on a busy diagram.
-              _row(
+              _rowStacked(
                 'Drawing cursor',
                 SegmentedButton<PenCursorStyle>(
                   showSelectedIcon: false,

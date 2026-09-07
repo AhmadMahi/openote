@@ -1168,8 +1168,7 @@ class _PageCanvasState extends State<PageCanvas>
                 // The drawn pen/highlighter/eraser cursor, above everything
                 // so it is never buried under a block — a cursor that can go
                 // behind the thing you are pointing at is not a cursor.
-                if (_inkTool &&
-                    app.penCursorStyle != PenCursorStyle.crosshair)
+                if (_inkTool && !app.penCursorStyle.isSystem)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: RepaintBoundary(
@@ -1468,12 +1467,15 @@ class _PageCanvasState extends State<PageCanvas>
         // underneath it.
         cursor: switch (app.tool) {
           Tool.text => SystemMouseCursors.text,
-          // Crosshair is the one style we do NOT paint: the system already
-          // has it, and the real pointer beats a drawn copy that lags a frame.
-          Tool.pen || Tool.highlighter || Tool.eraser =>
-            app.penCursorStyle == PenCursorStyle.crosshair
-                ? SystemMouseCursors.precise
-                : SystemMouseCursors.none,
+          // Crosshair and Mouse are the styles we do NOT paint: the system
+          // already has them, and the real pointer beats a drawn copy that
+          // lags a frame behind it.
+          Tool.pen || Tool.highlighter || Tool.eraser => switch (
+                app.penCursorStyle) {
+              PenCursorStyle.crosshair => SystemMouseCursors.precise,
+              PenCursorStyle.mouse => SystemMouseCursors.basic,
+              _ => SystemMouseCursors.none,
+            },
           Tool.lasso => SystemMouseCursors.precise,
           Tool.space => SystemMouseCursors.resizeUpDown,
           _ => MouseCursor.defer,

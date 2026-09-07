@@ -206,9 +206,13 @@ class CanvasController extends ChangeNotifier {
       centerPage();
       return;
     }
-    const pad = 16.0;
-    scale = ((viewport.width - pad * 2) / contentWidth).clamp(minScale, maxScale);
-    offset = Offset(0, 0); // clampToPage centres the pad evenly
+    // EXACTLY the window width, with no breathing room.
+    //
+    // A 16px pad each side was "tidier" and it is what left a sliver to
+    // scroll to: the page then ends 32px short of the window, `clampToPage`
+    // centres it, and dragging one way finds slack the other. Fit means fit.
+    scale = (viewport.width / contentWidth).clamp(minScale, maxScale);
+    offset = Offset.zero; // clampToPage puts it flush
     clampToPage();
     notifyListeners();
   }

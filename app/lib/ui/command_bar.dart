@@ -896,21 +896,21 @@ class _CommandBarState extends State<CommandBar> {
         visualDensity: VisualDensity.compact,
         onPressed: () => app.canvas.setZoom(app.canvas.scale * 1.2),
       ),
+      // ONE fit button, and it fits the WIDTH.
+      //
+      // There were two — "fit content" and "fit the sheet to the width" — and
+      // the pair was the problem rather than either one. They looked alike,
+      // sat next to each other, and only one did the thing people want from a
+      // fit: make the page the width of the window. Fit-to-content also
+      // magnified a single paragraph to fill the screen on a page you had
+      // only started, and left slack to scroll sideways because it framed a
+      // rectangle rather than matching an edge.
       IconButton(
         icon: const Icon(Icons.fit_screen_outlined, size: 18),
-        tooltip: 'Zoom to fit content',
-        visualDensity: VisualDensity.compact,
-        onPressed: () => app.canvas.fitTo(app.contentBounds().inflate(24)),
-      ),
-      // Fit the SHEET, which is a different question from fitting the
-      // content: on a page you have only started, the content is one
-      // paragraph and fitting it magnifies that paragraph to fill the window.
-      // This shows the paper.
-      IconButton(
-        icon: const Icon(Icons.crop_free, size: 18),
         tooltip: paged
-            ? 'Fit the ${app.pageProps.paper.name} sheet to the window width'
-            : 'Fit the page to the window width',
+            ? 'Zoom to fit — the ${app.pageProps.paper.name} sheet, exactly '
+                'the window width'
+            : 'Zoom to fit — the page, exactly the window width',
         visualDensity: VisualDensity.compact,
         onPressed: app.fitPageToWidth,
       ),
@@ -1058,13 +1058,25 @@ class _CommandBarState extends State<CommandBar> {
         SizedBox(
           width: 110,
           child: Slider(
-            value: app.penSize,
-            min: 1,
-            max: 10,
-            onChanged: (v) {
-              app.penSize = v;
-              app.refresh();
-            },
+            value: app.penSize.clamp(AppState.minPenSize, AppState.maxPenSize),
+            min: AppState.minPenSize,
+            max: AppState.maxPenSize,
+            // 36 steps of 0.25 — fine enough that the slider still feels
+            // continuous, coarse enough that the number beside it is one you
+            // could deliberately return to.
+            divisions: 36,
+            onChanged: app.setPenSize,
+          ),
+        ),
+        // The number, because a width you cannot read is a width you cannot
+        // get back to. Fixed width so the row does not shuffle as it changes.
+        SizedBox(
+          width: 26,
+          child: Text(
+            app.penSize.toStringAsFixed(app.penSize % 1 == 0 ? 0 : 2),
+            textAlign: TextAlign.right,
+            style:
+                TextStyle(fontSize: 11, color: context.surfaces.textSecondary),
           ),
         ),
       ] else if (app.tool == Tool.eraser) ...[

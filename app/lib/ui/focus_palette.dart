@@ -137,13 +137,24 @@ class _FocusPaletteState extends State<FocusPalette> {
                   SizedBox(
                     width: 110,
                     child: Slider(
-                      value: app.penSize.clamp(1, 10),
-                      min: 1,
-                      max: 10,
-                      onChanged: (v) {
-                        app.penSize = v;
-                        app.refresh();
-                      },
+                      value: app.penSize
+                          .clamp(AppState.minPenSize, AppState.maxPenSize),
+                      min: AppState.minPenSize,
+                      max: AppState.maxPenSize,
+                      divisions: 36,
+                      // Through the state, so a width set here survives a
+                      // restart exactly as one set on the Draw row does.
+                      onChanged: app.setPenSize,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 26,
+                    child: Text(
+                      app.penSize
+                          .toStringAsFixed(app.penSize % 1 == 0 ? 0 : 2),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                          fontSize: 11, color: s.textSecondary),
                     ),
                   ),
                 ]),

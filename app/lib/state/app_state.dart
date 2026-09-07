@@ -84,19 +84,30 @@ enum Tool {
 enum PenCursorStyle {
   pen,
   crosshair,
-  dot;
+  dot,
+
+  /// The ordinary arrow. Nothing is painted and nothing is hidden — the
+  /// pointer over the page looks exactly like the pointer everywhere else.
+  /// For people who would rather the app stopped having opinions about it.
+  mouse;
 
   String get label => switch (this) {
         PenCursorStyle.pen => 'Pen',
         PenCursorStyle.crosshair => 'Crosshair',
         PenCursorStyle.dot => 'Dot',
+        PenCursorStyle.mouse => 'Mouse',
       };
 
   String get describe => switch (this) {
         PenCursorStyle.pen => 'A nib, angled as you would hold one',
         PenCursorStyle.crosshair => 'The system precision cursor',
         PenCursorStyle.dot => 'A small dot at the tip, and nothing else',
+        PenCursorStyle.mouse => 'The ordinary arrow, unchanged',
       };
+
+  /// True when the real pointer is left alone and nothing is drawn for it.
+  bool get isSystem =>
+      this == PenCursorStyle.crosshair || this == PenCursorStyle.mouse;
 }
 
 /// How the eraser removes ink (INK-6).
@@ -3900,7 +3911,22 @@ class AppState extends ChangeNotifier
   /// Every drag-time decision reads THIS, never [snapToGrid] directly.
   bool get effectiveSnap => snapOverride ? !snapToGrid : snapToGrid;
   int penColor = 0;
+  /// Stroke width, and it OUTLIVES the session.
+  ///
+  /// It used to reset to 2.5 on every launch, which meant the first stroke of
+  /// every day was the wrong weight and you re-set it by hand. A pen width is
+  /// a preference about handwriting, not a property of a sitting.
   double penSize = 2.5;
+  void setPenSize(double v) {
+    final next = v.clamp(minPenSize, maxPenSize);
+    if (next == penSize) return;
+    penSize = next;
+    _repo.setSetting('penSize', next);
+    notifyListeners();
+  }
+
+  static const double minPenSize = 1;
+  static const double maxPenSize = 10;
 
   /// Focus mode: the chrome goes, the page fills the window edge to edge, and
   /// the drawing tools come back as a small palette you can put anywhere.
@@ -5994,6 +6020,10 @@ class AppState extends ChangeNotifier
     if (pp is bool) penProximitySwitch = pp;
     final as_ = _repo.getSetting('autoShape');
     if (as_ is bool) autoShape = as_;
+    final psz = _repo.getSetting('penSize');
+    if (psz is num) {
+      penSize = psz.toDouble().clamp(minPenSize, maxPenSize);
+    }
     final pcs = _repo.getSetting('penCursorStyle') as String?;
     if (pcs != null) {
       penCursorStyle =
