@@ -4002,6 +4002,15 @@ class AppState extends ChangeNotifier
     return k.toLowerCase();
   }
 
+  /// Whether a raw settings list already matches its cleaned form.
+  static bool _sameStrings(List<dynamic> raw, List<String> clean) {
+    if (raw.length != clean.length) return false;
+    for (var i = 0; i < clean.length; i++) {
+      if (raw[i] != clean[i]) return false;
+    }
+    return true;
+  }
+
   static List<String> _sanitisedList(List<dynamic> raw, int length) => [
         for (var i = 0; i < length; i++)
           sanitiseShortcut(i < raw.length ? raw[i] as String? : null)
@@ -5966,12 +5975,24 @@ class AppState extends ChangeNotifier
     if (hpal is List && hpal.length == highlighterPalette.length) {
       highlighterPalette = hpal.cast<String>().toList();
     }
+    // Cleaned on the way in AND WRITTEN BACK when the cleaning changed
+    // something. Sanitising only in memory leaves the bad value in the file
+    // for every future build to re-clean, and leaves a settings file that
+    // says something the app does not believe — the next tool to read it
+    // (an export, a sync, a person) would still see the invisible byte.
     final psc = _repo.getSetting('penShortcuts');
-    if (psc is List) penShortcuts = _sanitisedList(psc, penShortcuts.length);
+    if (psc is List) {
+      penShortcuts = _sanitisedList(psc, penShortcuts.length);
+      if (!_sameStrings(psc, penShortcuts)) {
+        _repo.setSetting('penShortcuts', penShortcuts);
+      }
+    }
     final hsc = _repo.getSetting('highlighterShortcuts');
     if (hsc is List) {
-      highlighterShortcuts =
-          _sanitisedList(hsc, highlighterShortcuts.length);
+      highlighterShortcuts = _sanitisedList(hsc, highlighterShortcuts.length);
+      if (!_sameStrings(hsc, highlighterShortcuts)) {
+        _repo.setSetting('highlighterShortcuts', highlighterShortcuts);
+      }
     }
     final tsc = _repo.getSetting('toolShortcuts');
     if (tsc is Map) {
@@ -5980,6 +6001,9 @@ class AppState extends ChangeNotifier
           if (e.value is String && sanitiseShortcut(e.value as String).isNotEmpty)
             '${e.key}': sanitiseShortcut(e.value as String),
       };
+      if (toolShortcuts.length != tsc.length) {
+        _repo.setSetting('toolShortcuts', toolShortcuts);
+      }
     }
     final vm = _repo.getSetting('viewMemory');
     if (vm is Map) {
