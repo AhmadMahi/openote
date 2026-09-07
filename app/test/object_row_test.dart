@@ -249,7 +249,7 @@ void main() {
   });
 
   group('the page face', () {
-    testWidgets('carries the page controls, but not the backgrounds',
+    testWidgets('is empty, because the View tab carries all of it',
         (tester) async {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       tester.view.physicalSize = const Size(2600, 900);
@@ -264,27 +264,26 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
-      expect(find.byType(PageFace), findsOneWidget);
+      // Nothing at all, by design.
+      //
+      // This row shows only while nothing is selected, so its whole contents
+      // appeared and vanished under the Home, Insert and Draw rows as you
+      // worked — duplicating the View tab, which is always one click away.
+      // Everything it held is there now, including the word count.
+      expect(find.byType(PageFace), findsNothing);
       for (final tip in [
+        'Background: blank',
+        'Background: grid',
         'Zoom in  (Ctrl+=)',
         'Zoom out  (Ctrl+-)',
         'Zoom to fit content',
       ]) {
-        expect(find.byTooltip(tip), findsOneWidget, reason: tip);
-      }
-      // The backgrounds are NOT here any more; they are on the View tab.
-      //
-      // This row shows only while nothing at all is selected, so the same
-      // five controls appeared and vanished under the Home, Insert and Draw
-      // rows as you worked — the owner's report. The View tab is always
-      // reachable, so that is where they live and this asserts they left.
-      for (final tip in ['Background: blank', 'Background: grid']) {
         expect(find.byTooltip(tip), findsNothing, reason: tip);
       }
-      // What stayed still acts on the page.
-      await tester.tap(find.byTooltip('Zoom in  (Ctrl+=)'));
-      await tester.pumpAndSettle();
-      expect(app.canvas.scale, greaterThan(1.0));
+      // The ROW survives, empty: the chrome must not change height when the
+      // selection does (see the height test above).
+      expect(find.byType(ObjectRow), findsOneWidget);
+      expect(tester.getSize(find.byType(ObjectRow)).height, kObjectRowHeight);
       app.cancelPendingSave();
     });
   });

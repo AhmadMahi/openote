@@ -104,6 +104,26 @@ class CanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Scale so [contentWidth] page-px exactly spans the viewport width.
+  ///
+  /// The difference from [fitWidth] is the direction it is allowed to move:
+  /// `fitWidth` only ever zooms OUT and stops at 100%, which is right for
+  /// opening an imported page (never magnify somebody's notes at them). This
+  /// is the deliberate "make the page fill the window" action, so it zooms IN
+  /// as well — on a 1470px window an A4 sheet at 100% leaves a third of the
+  /// screen as desk, and stopping at 100% would silently do nothing.
+  void fillWidth(double contentWidth) {
+    if (viewport == Size.zero || contentWidth <= 0) {
+      centerPage();
+      return;
+    }
+    const pad = 16.0;
+    scale = ((viewport.width - pad * 2) / contentWidth).clamp(minScale, maxScale);
+    offset = Offset(pad, 0);
+    clampToPage();
+    notifyListeners();
+  }
+
   /// Put page-space Y at the top of the viewport, leaving X alone.
   ///
   /// Distinct from [centerOn]: jumping to a sheet is a *scroll*, and centring

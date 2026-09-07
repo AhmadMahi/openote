@@ -29,7 +29,7 @@ import 'settings_dialog.dart';
 import 'update_dialog.dart';
 import '../theme/tokens.dart';
 import 'onote_dialog.dart';
-import 'object_row.dart' show BackgroundSpacingButton;
+import 'object_row.dart' show BackgroundSpacingButton, WordCount;
 
 /// The tabbed command bar (style guide §7 revised): Home · Insert · Draw ·
 /// View. OneNote's few-clicks accessibility in Openote's calm language — a
@@ -767,6 +767,20 @@ class _CommandBarState extends State<CommandBar> {
             ),
         ],
       );
+  /// Ask for one key, and bind it to [t].
+  Future<void> _setToolShortcut(
+      BuildContext context, Tool t, String label) async {
+    final chosen = await showToolShortcutDialog(
+      context,
+      // The tooltip carries the shortcut and a hint; the name is the first
+      // line up to the first double space.
+      label: label.split('  ').first,
+      current: app.toolShortcut(t),
+    );
+    if (chosen == null) return;
+    app.setToolShortcut(t, chosen);
+  }
+
   /// The View tab: how the page looks, and how the app looks.
   ///
   /// Restored from the pre-`f36408c` bar. Two changes from what it was: the
@@ -879,10 +893,10 @@ class _CommandBarState extends State<CommandBar> {
       IconButton(
         icon: const Icon(Icons.crop_free, size: 18),
         tooltip: paged
-            ? 'Fit the whole ${app.pageProps.paper.name} sheet on screen'
-            : 'Fit the page on screen',
+            ? 'Fit the ${app.pageProps.paper.name} sheet to the window width'
+            : 'Fit the page to the window width',
         visualDensity: VisualDensity.compact,
-        onPressed: app.fitSheetToScreen,
+        onPressed: app.fitPageToWidth,
       ),
       if (paged)
         IconButton(
@@ -925,14 +939,30 @@ class _CommandBarState extends State<CommandBar> {
           onPressed: () => app.setSpellCheck(!app.spellCheckEnabled),
         ),
       ),
+      const _Div(),
+      // Followed the page controls here when the object row emptied out, so
+      // that emptying the row did not quietly delete a feature.
+      WordCount(app: app),
     ]);
   }
 
   Widget _drawRow(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    Widget toolButton(Tool t, IconData icon, String tip) => IconButton(
+    // Right-click any tool to give it a key of your own. The eraser is the
+    // one that prompted this — E is taken by nothing else, but a hand that
+    // lives on the left of the board does not want to reach for it — and
+    // doing it for every tool costs nothing and avoids the question "why only
+    // the eraser?".
+    Widget toolButton(Tool t, IconData icon, String tip) {
+      final key = app.toolShortcut(t);
+      return GestureDetector(
+        onSecondaryTap: () => _setToolShortcut(context, t, tip),
+        onLongPress: () => _setToolShortcut(context, t, tip),
+        child: IconButton(
           icon: Icon(icon, size: 18),
-          tooltip: tip,
+          tooltip: '$tip'
+              '${key.isEmpty ? '' : '  ·  ${key.toUpperCase()}'}'
+              '\nRight-click to set your own key',
           isSelected: app.tool == t,
           visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
@@ -941,7 +971,9 @@ class _CommandBarState extends State<CommandBar> {
             foregroundColor: app.tool == t ? scheme.primary : null,
           ),
           onPressed: () => app.setTool(t),
-        );
+        ),
+      );
+    }
     // The swatches also appear with ink selected, so a lassoed diagram can be
     // recoloured without first re-picking the pen.
     final inkActive = app.tool == Tool.pen ||

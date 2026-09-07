@@ -240,18 +240,29 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                           border: Border.all(color: OnoteColors.paper300))),
                 ]),
               ],
+              // The shortcut sits in the BODY, not the action bar.
+              //
+              // It was in `actions:` with a `Spacer` to push it left. That is
+              // an `Expanded` inside an `OverflowBar`, which is not a flex —
+              // "Incorrect use of ParentDataWidget", thrown while applying
+              // parent data. The dialog then failed to lay out (a tall grey
+              // slab where the palette should be) AND, because the route was
+              // still pushed, its invisible modal barrier stayed over the page
+              // swallowing every pointer event: the pen stopped drawing and
+              // nothing on the canvas responded. One illegal widget, two
+              // symptoms that looked unrelated.
+              if (widget.onShortcut != null) ...[
+                const Divider(height: 18),
+                _ShortcutField(
+                  value: widget.shortcut ?? '',
+                  onChanged: widget.onShortcut!,
+                ),
+              ],
             ],
           ),
         ),
       ),
       actions: [
-        if (widget.onShortcut != null) ...[
-          _ShortcutField(
-            value: widget.shortcut ?? '',
-            onChanged: widget.onShortcut!,
-          ),
-          const Spacer(),
-        ],
         TextButton(
             onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(onPressed: _done, child: const Text('Apply')),
@@ -416,5 +427,64 @@ class _ShortcutFieldState extends State<_ShortcutField> {
         ),
       ),
     ]);
+  }
+}
+
+/// "Give <tool> a key" — the tool half of the shortcut story.
+///
+/// Lives beside the colour picker's [_ShortcutField] because it is the same
+/// interaction and must not drift from it: press the key you want, Escape
+/// clears, no modifiers. Returns the chosen key, '' to clear, or null if the
+/// user backed out — which is not the same as clearing, and treating them the
+/// same would make Cancel delete the binding you already had.
+Future<String?> showToolShortcutDialog(BuildContext context,
+    {required String label, required String current}) {
+  return showOnoteDialog<String>(
+    context: context,
+    builder: (ctx) => _ToolShortcutDialog(label: label, current: current),
+  );
+}
+
+class _ToolShortcutDialog extends StatefulWidget {
+  const _ToolShortcutDialog({required this.label, required this.current});
+  final String label;
+  final String current;
+
+  @override
+  State<_ToolShortcutDialog> createState() => _ToolShortcutDialogState();
+}
+
+class _ToolShortcutDialogState extends State<_ToolShortcutDialog> {
+  late String _key = widget.current;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('${widget.label}: your own key'),
+      content: SizedBox(
+        width: 320,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+            'Press the key you want. It works whenever you are not typing in '
+            'a box. Escape clears it.',
+            style: TextStyle(
+                fontSize: 12, color: context.surfaces.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          _ShortcutField(
+            value: _key,
+            onChanged: (k) => setState(() => _key = k),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.pop(context, _key),
+            child: const Text('Save')),
+      ],
+    );
   }
 }

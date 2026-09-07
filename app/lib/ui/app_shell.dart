@@ -622,6 +622,16 @@ class _AppShellState extends State<AppShell> {
       if (k == LogicalKeyboardKey.keyP) return _tool(Tool.pen);
       if (k == LogicalKeyboardKey.keyH) return _tool(Tool.highlighter);
       if (k == LogicalKeyboardKey.keyE) return _tool(Tool.eraser);
+      // A tool key the user chose. Checked BEFORE the ink-colour keys, and
+      // after the fixed V/T/P/H/E above, so the built-ins can never be taken
+      // away from someone relying on them.
+      {
+        final ch = e.character;
+        if (ch != null && ch.length == 1) {
+          final t = app.toolForKey(ch);
+          if (t != null) return _tool(t);
+        }
+      }
       // Ink colour, the Notability way: the number keys arm a well and
       // `[`/`]` step through them, so switching colour mid-sentence never
       // costs a trip to the toolbar. Guarded on a drawing tool being up —

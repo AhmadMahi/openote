@@ -183,8 +183,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MathBar), findsNothing,
         reason: 'buttons that act on nothing are worse than no buttons');
-    expect(find.byType(PageFace), findsOneWidget,
-        reason: 'the row is the page\'s again, not blank');
+    // The row is now deliberately EMPTY when nothing is selected. Its page
+    // controls moved to the View tab, which is always one click away; this
+    // row is not, so the same strip used to appear and vanish under Home,
+    // Insert and Draw as you worked, duplicating a tab already on screen.
+    // What this test is really about is unchanged: the palette goes when the
+    // equation goes, and the chrome does not move while it happens.
+    expect(find.byType(PageFace), findsNothing);
+    expect(find.byType(ObjectRow), findsOneWidget,
+        reason: 'the row itself stays, holding its height');
     settle();
   });
 

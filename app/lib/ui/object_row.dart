@@ -120,7 +120,14 @@ class ObjectRow extends StatelessWidget {
           recentIds: app.recentMathIds,
         );
       case ObjectFace.page:
-        return PageFace(app: app);
+        // NOTHING. Every control this row used to carry — backgrounds, page
+        // mode, zoom, the word count — is on the View tab, which is always
+        // one click away; this row is not, because it shows only while
+        // nothing at all is selected. So the same strip appeared and vanished
+        // under Home, Insert and Draw as you worked, duplicating a tab that
+        // was already there. The row keeps its height so the chrome still
+        // does not move (see kObjectRowHeight and the test that pins it).
+        return const SizedBox.shrink();
     }
   }
 }
@@ -284,7 +291,7 @@ class PageFace extends StatelessWidget {
         onPressed: () => app.canvas.fitTo(app.contentBounds().inflate(24)),
       ),
       const _Sep(),
-      _WordCount(app: app),
+      WordCount(app: app),
       const SizedBox(width: 4),
     ]);
   }
@@ -300,16 +307,16 @@ class PageFace extends StatelessWidget {
 /// and a word limit is a thing about the page. The other two are one click
 /// behind it: a bare number is what a student checks twenty times an hour,
 /// and characters and reading time are not.
-class _WordCount extends StatefulWidget {
-  const _WordCount({required this.app});
+class WordCount extends StatefulWidget {
+  const WordCount({super.key, required this.app});
 
   final AppState app;
 
   @override
-  State<_WordCount> createState() => _WordCountState();
+  State<WordCount> createState() => _WordCountState();
 }
 
-class _WordCountState extends State<_WordCount> {
+class _WordCountState extends State<WordCount> {
   /// **Stateful only for this.** Counting the whole page from scratch is 68 ms
   /// on a page of eight hundred blocks — four dropped frames — and this row
   /// rebuilds on every keystroke. The cache re-counts only the block that

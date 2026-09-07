@@ -15,6 +15,17 @@ import 'package:openote/ui/command_bar.dart';
 
 import 'support/sqlite.dart';
 
+/// Find a tool button by the NAME its tooltip starts with.
+///
+/// Not `find.byTooltip`, which matches the whole message: a tool's tooltip now
+/// also carries the key the user bound to it and a line saying right-click
+/// sets one, so the exact string is no longer stable — and pinning it would
+/// mean this test fails every time that help text is reworded, which is not
+/// what it is here to catch.
+Finder tool(String name) => find.byWidgetPredicate(
+    (w) => w is Tooltip && (w.message ?? '').startsWith(name),
+    description: 'tool "$name"');
+
 void main() {
   var haveSqlite = false;
   setUpAll(() => haveSqlite = initSqliteForTests());
@@ -67,7 +78,7 @@ void main() {
       ('Eraser  (E)', Tool.eraser),
       ('Lasso-select ink', Tool.lasso),
     ]) {
-      await tester.tap(find.byTooltip(tip));
+      await tester.tap(tool(tip));
       await tester.pumpAndSettle();
       expect(app.tool, want, reason: 'tapping "$tip" must select $want');
     }
@@ -81,14 +92,14 @@ void main() {
 
     await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Pen  (P)'));
+    await tester.tap(tool('Pen  (P)'));
     await tester.pumpAndSettle();
 
     // Selecting a tool calls notifyListeners, which rebuilds the whole shell.
     // If the bar's tab index were lost in that rebuild the user would be
     // bounced back to Home and it would look exactly like "the pen won't
     // select" — so assert the Draw row is still on screen.
-    expect(find.byTooltip('Pen  (P)'), findsOneWidget,
+    expect(tool('Pen  (P)'), findsOneWidget,
         reason: 'the Draw row must still be showing after picking a tool');
     expect(app.tool, Tool.pen);
   });
@@ -107,7 +118,7 @@ void main() {
 
     await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Pen  (P)'));
+    await tester.tap(tool('Pen  (P)'));
     await tester.pumpAndSettle();
     expect(app.tool, Tool.pen);
   });

@@ -3978,6 +3978,42 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// A user-chosen key for a TOOL, as a printable character. Keyed by
+  /// [Tool.name] so a new tool cannot silently inherit somebody's binding.
+  ///
+  /// Separate from the colour keys because they answer different questions —
+  /// "which pen" against "which colour in it" — and because a tool key has to
+  /// work whichever tool is currently armed, while a colour key only means
+  /// anything once you are drawing.
+  Map<String, String> toolShortcuts = {};
+
+  void setToolShortcut(Tool t, String key) {
+    final k = key.trim().toLowerCase();
+    toolShortcuts.removeWhere((_, v) => v == k && k.isNotEmpty);
+    if (k.isEmpty) {
+      toolShortcuts.remove(t.name);
+    } else {
+      toolShortcuts[t.name] = k;
+    }
+    _repo.setSetting('toolShortcuts', toolShortcuts);
+    notifyListeners();
+  }
+
+  String toolShortcut(Tool t) => toolShortcuts[t.name] ?? '';
+
+  /// The tool [key] is bound to, or null.
+  Tool? toolForKey(String key) {
+    final k = key.toLowerCase();
+    if (k.isEmpty) return null;
+    for (final e in toolShortcuts.entries) {
+      if (e.value != k) continue;
+      for (final t in Tool.values) {
+        if (t.name == e.key) return t;
+      }
+    }
+    return null;
+  }
+
   /// The well [key] is bound to for the armed tool, or -1.
   int inkWellForKey(String key) {
     final k = key.toLowerCase();
@@ -5896,6 +5932,13 @@ class AppState extends ChangeNotifier
     if (hsc is List && hsc.length == highlighterShortcuts.length) {
       highlighterShortcuts = hsc.cast<String>().toList();
     }
+    final tsc = _repo.getSetting('toolShortcuts');
+    if (tsc is Map) {
+      toolShortcuts = {
+        for (final e in tsc.entries)
+          if (e.value is String) '${e.key}': e.value as String,
+      };
+    }
     final vm = _repo.getSetting('viewMemory');
     if (vm is Map) {
       vm.forEach((k, v) {
@@ -7117,7 +7160,7 @@ class AppState extends ChangeNotifier
       // sheet you had just asked for, with no way to see it but to zoom by
       // hand. Picking a paper size is a statement about the page you want to
       // see, so show it.
-      fitSheetToScreen();
+      fitPageToWidth();
     }
     docRevision++;
     markDirty();
@@ -7192,17 +7235,17 @@ class AppState extends ChangeNotifier
       ..h = math.max(1, mxy - mny);
   }
 
-  /// Put the whole sheet on screen, centred — the "fit page" of every
-  /// document editor. Canvas mode has no sheet to fit, so it fits the
-  /// CONTENT instead, which is the same promise applied to a boundless page.
-  void fitSheetToScreen() {
-    if (!pageProps.isPaged) {
-      final b = contentBounds();
-      canvas.fitTo(b.isEmpty ? Rect.fromLTWH(0, 0, pageProps.pageWidth, 600) : b.inflate(24));
-      return;
-    }
-    final paper = pageProps.paper;
-    canvas.fitTo(Rect.fromLTWH(0, 0, paper.width, paper.height));
+  /// Make the page fill the window's WIDTH, and stay at the top.
+  ///
+  /// Not `fitTo(whole sheet)`. Fitting the sheet's height as well is what a
+  /// print preview does, and it leaves a portrait page floating in the middle
+  /// of a landscape window with a band of desk down each side — the sheet is
+  /// on screen but the writing is small. Width is the measurement that
+  /// decides how big the text is, so width is what gets matched; the rest of
+  /// the sheet is a scroll away, which is how every document editor behaves.
+  void fitPageToWidth() {
+    final width = pageProps.isPaged ? pageProps.paper.width : pageProps.pageWidth;
+    canvas.fillWidth(width);
   }
 
   /// Scroll sheet [i] (0-based) to the top of the viewport.
