@@ -215,21 +215,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(MathBar), findsOneWidget);
+      // THE TABS still do not move, and that is what this test is for.
+      // Horizontal stability is the promise that matters: the tab you were
+      // about to click must not slide out from under the cursor because an
+      // equation opened.
       expect(tabXs(), restingTabs,
           reason: 'every tab in the same pixel it was in');
-      expect(pageTop(), restingTop,
-          reason: 'the page did not move, which is the whole design');
+      // The page top DOES move now, by exactly the row's height. With nothing
+      // selected the row has nothing to show — its page controls are on the
+      // View tab — so it takes no space at all, and the space comes back when
+      // there is something to put in it. That is the owner's call, made
+      // against the old "chrome is 112px in every state" rule: an empty band
+      // above the page was a strip spent on nothing.
+      expect(pageTop() - restingTop, kObjectRowHeight,
+          reason: 'the row opened, pushing the page down by its own height');
 
-      // …and back again.
+      // …and back again, exactly.
       app.clearActiveMath('test');
       app.editingBlockId = null;
       await tester.pumpAndSettle();
       expect(tabXs(), restingTabs);
-      expect(pageTop(), restingTop);
+      expect(pageTop(), restingTop,
+          reason: 'closing gives the space back, to the pixel');
       app.cancelPendingSave();
     });
 
-    testWidgets('the row is exactly its stated height', (tester) async {
+    testWidgets('the row is its stated height WHEN IT HAS SOMETHING TO SHOW',
+        (tester) async {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       tester.view.physicalSize = const Size(2600, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -243,8 +255,15 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
+      // Empty to start with: nothing is selected.
+      expect(tester.getSize(find.byType(ObjectRow)).height, 0);
+
+      app.insertEquation(at: const Offset(10, 10));
+      app.setActiveMath(standIn());
+      await tester.pumpAndSettle();
       expect(tester.getSize(find.byType(ObjectRow)).height, kObjectRowHeight);
       expect(kObjectRowHeight, 36);
+      app.cancelPendingSave();
     });
   });
 
@@ -264,13 +283,12 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
-      // Nothing at all, by design.
+      // Nothing at all, by design — and no height either.
       //
       // This row shows only while nothing is selected, so its whole contents
       // appeared and vanished under the Home, Insert and Draw rows as you
       // worked — duplicating the View tab, which is always one click away.
       // Everything it held is there now, including the word count.
-      expect(find.byType(PageFace), findsNothing);
       for (final tip in [
         'Background: blank',
         'Background: grid',
@@ -283,7 +301,8 @@ void main() {
       // The ROW survives, empty: the chrome must not change height when the
       // selection does (see the height test above).
       expect(find.byType(ObjectRow), findsOneWidget);
-      expect(tester.getSize(find.byType(ObjectRow)).height, kObjectRowHeight);
+      expect(tester.getSize(find.byType(ObjectRow)).height, 0,
+          reason: 'the empty band is gone, not merely emptied');
       app.cancelPendingSave();
     });
   });

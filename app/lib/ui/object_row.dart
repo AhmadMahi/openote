@@ -65,6 +65,29 @@ class ObjectRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.surfaces;
     final face = objectFaceOf(app);
+    // With nothing selected this row has nothing to show — its page controls
+    // are on the View tab now — so it COLLAPSES rather than sitting there as
+    // an empty band above the page.
+    //
+    // That is a deliberate reversal of "the chrome is 32 + 44 + 36 px in
+    // every state": the reason for a fixed height was that the row's contents
+    // used to change while staying the same size, and a band holding nothing
+    // is not contents. It is animated so selecting an equation slides the row
+    // open instead of jumping the page down under the cursor.
+    // Nothing selected means nothing to show — the page controls are on the
+    // View tab now — so the row takes NO SPACE rather than sitting above the
+    // page as an empty band.
+    //
+    // A deliberate reversal of "the chrome is 32 + 44 + 36 px in every
+    // state". The reason for the fixed height was that the row's CONTENTS
+    // changed while its size did not; a band holding nothing is not contents.
+    if (face == ObjectFace.page) {
+      return const SizedBox(width: double.infinity, height: 0);
+    }
+    return _band(context, s, face);
+  }
+
+  Widget _band(BuildContext context, OnoteSurfaces s, ObjectFace face) {
     return Container(
       height: kObjectRowHeight,
       decoration: BoxDecoration(
@@ -181,132 +204,6 @@ class EquationFace extends StatelessWidget {
       );
 }
 
-/// The page's own controls, when nothing else is being written.
-///
-/// These are the page half of what used to be the View tab. They belong here
-/// because "when nothing is selected, the thing you are touching is the page"
-/// — and once they live here, the View tab holds nothing but four preferences
-/// that Settings already carries, so the tab goes.
-class PageFace extends StatelessWidget {
-  const PageFace({super.key, required this.app});
-
-  final AppState app;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final paged = app.pageProps.isPaged;
-    // NO background buttons here any more. They are on the View tab, which is
-    // always reachable, and this row is not: it shows only while nothing at
-    // all is selected, so the same five controls appeared and vanished under
-    // the Home, Insert and Draw rows as you worked. One home for them, and it
-    // is the one you can always get to.
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      const SizedBox(width: 2),
-      // Canvas or paper. Per page, not per notebook: one notebook holds the
-      // lecture you scribble on and the essay you hand in, and making you
-      // choose once for both is why people keep two apps.
-      IconButton(
-        icon: Icon(paged ? Icons.description : Icons.dashboard_customize,
-            size: OnoteIcon.md),
-        tooltip: paged
-            ? 'Page mode: ${app.pageProps.paper.name}'
-                '${app.pageProps.landscape ? ' landscape' : ''} '
-                '— click for canvas'
-            : 'Canvas mode: boundless — click for pages',
-        isSelected: paged,
-        visualDensity: VisualDensity.compact,
-        color: paged ? scheme.primary : null,
-        onPressed: () => app.setPageLayout(paged ? 'canvas' : 'paged'),
-      ),
-      // At the END of its group, so its arrival displaces nothing.
-      if (paged)
-        PopupMenuButton<String>(
-          tooltip: 'Paper size',
-          icon: const Icon(Icons.aspect_ratio, size: OnoteIcon.md),
-          onSelected: (v) => v == '_rotate'
-              ? app.setPageLayout('paged',
-                  landscape: !app.pageProps.landscape)
-              : app.setPageLayout('paged', paper: v),
-          itemBuilder: (_) => [
-            for (final p in PaperSize.all)
-              CheckedPopupMenuItem(
-                value: p.name,
-                checked: app.pageProps.paperSize == p.name,
-                child: Text(p.name),
-              ),
-            const PopupMenuDivider(),
-            CheckedPopupMenuItem(
-              value: '_rotate',
-              checked: app.pageProps.landscape,
-              child: const Text('Landscape'),
-            ),
-          ],
-        ),
-      const _Sep(),
-      IconButton(
-        icon: Icon(app.snapToGrid ? Icons.grid_goldenratio : Icons.grid_off,
-            size: OnoteIcon.md),
-        tooltip: app.snapToGrid
-            ? 'Snap to grid: ON (grid shows while dragging)'
-            : 'Snap to grid: OFF — free placement',
-        isSelected: app.snapToGrid,
-        visualDensity: VisualDensity.compact,
-        color: app.snapToGrid ? scheme.primary : null,
-        onPressed: app.toggleSnap,
-      ),
-      const _Sep(),
-      IconButton(
-        icon: const Icon(Icons.remove, size: OnoteIcon.md),
-        tooltip: 'Zoom out  (Ctrl+-)',
-        visualDensity: VisualDensity.compact,
-        onPressed: () => app.canvas.setZoom(app.canvas.scale / 1.2),
-      ),
-      // **A button, and it says so before you press it.** It was the only
-      // control on this row with no tooltip, sitting between a minus and a
-      // plus, reading as the number those two were changing — and pressing
-      // it resets the OFFSET as well as the scale, so somebody at the bottom
-      // of a long page was thrown back to the top with no warning.
-      Tooltip(
-        message: 'Back to 100% and the top of the page  (Ctrl+0)',
-        child: AnimatedBuilder(
-          animation: app.canvas,
-          builder: (context, _) => TextButton(
-            onPressed: app.canvas.reset,
-            child: Text('${(app.canvas.scale * 100).round()}%',
-                style: OnoteType.small),
-          ),
-        ),
-      ),
-      IconButton(
-        icon: const Icon(Icons.add, size: OnoteIcon.md),
-        tooltip: 'Zoom in  (Ctrl+=)',
-        visualDensity: VisualDensity.compact,
-        onPressed: () => app.canvas.setZoom(app.canvas.scale * 1.2),
-      ),
-      IconButton(
-        icon: const Icon(Icons.fit_screen_outlined, size: OnoteIcon.md),
-        tooltip: 'Zoom to fit content',
-        visualDensity: VisualDensity.compact,
-        onPressed: () => app.canvas.fitTo(app.contentBounds().inflate(24)),
-      ),
-      const _Sep(),
-      WordCount(app: app),
-      const SizedBox(width: 4),
-    ]);
-  }
-}
-
-/// **How much have I written?**
-///
-/// PLANNING: *"Word counter, char count, estimated reading time."* Every
-/// essay has a word limit on it, and until now the only way to find out was
-/// to export the page and paste it somewhere else.
-///
-/// The count is on the row, because that is where things about the PAGE live
-/// and a word limit is a thing about the page. The other two are one click
-/// behind it: a bare number is what a student checks twenty times an hour,
-/// and characters and reading time are not.
 class WordCount extends StatefulWidget {
   const WordCount({super.key, required this.app});
 

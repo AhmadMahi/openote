@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart' show Ticker, TickerProvider;
 import 'package:flutter/widgets.dart';
 
 /// First-party pan/zoom (Tech Eval §7.3: own transform, no InteractiveViewer).
@@ -19,7 +20,11 @@ class CanvasController extends ChangeNotifier {
   Offset pageToScreen(Offset page) => page * scale + offset;
 
   void panBy(Offset delta) {
-    offset += delta;
+    // Horizontal movement is dropped outright when the page already fits,
+    // rather than applied and then clamped away: a trackpad's sideways
+    // component is never exactly zero, so "apply then clamp" spent every
+    // vertical scroll fighting a horizontal one.
+    offset += canPanHorizontally ? delta : Offset(0, delta.dy);
     clampToPage();
     notifyListeners();
   }
@@ -43,7 +48,7 @@ class CanvasController extends ChangeNotifier {
 
   void reset() {
     scale = 1.0;
-    offset = Offset.zero; // page anchored top-left (OneNote-like)
+    offset = Offset.zero; // clampToPage centres it if it fits
     clampToPage();
     notifyListeners();
   }
@@ -55,22 +60,106 @@ class CanvasController extends ChangeNotifier {
   /// used to clamp panning so the page can't be lost (CANVAS-1 v0.3).
   Size? pageSize;
 
-  /// Pin the page's origin to the top-left: in normal zoom (page ≥ viewport)
-  /// you can't reveal backdrop above/left of the page; when zoomed out
-  /// (page < viewport) the page sits top-left and the backdrop shows to the
-  /// right/below — so its bounds are visible, "page that can be a canvas".
+  /// Keep the page in view, and CENTRE it horizontally when it is narrower
+  /// than the window.
+  ///
+  /// It used to pin top-left on both axes, so a page narrower than the window
+  /// sat hard against the left edge with a band of desk down the right — and
+  /// because zoom re-clamps, zooming out walked the page leftwards instead of
+  /// shrinking it in place. Horizontally that is wrong for a document: a
+  /// sheet you are writing on belongs in the middle of the window, and
+  /// zooming should happen around the middle of what you are looking at.
+  ///
+  /// VERTICALLY it still pins to the top. A page grows downwards and you read
+  /// it from the top; centring a short page would float it in the middle of
+  /// the window and move the first line every time the content got longer.
   void clampToPage() {
     final ps = pageSize;
     if (ps == null || viewport == Size.zero) return;
-    double axis(double o, double vp, double contentPx) {
-      if (contentPx <= vp) return 0; // smaller than viewport → pin top-left
-      return o.clamp(vp - contentPx, 0.0); // fills → stay within the page
-    }
-
+    final wPx = ps.width * scale;
     offset = Offset(
-      axis(offset.dx, viewport.width, ps.width * scale),
-      axis(offset.dy, viewport.height, ps.height * scale),
+      // Fits: centred, and there is nowhere to scroll to. Overflows: free to
+      // pan, but never past an edge.
+      wPx <= viewport.width
+          ? (viewport.width - wPx) / 2
+          : offset.dx.clamp(viewport.width - wPx, 0.0),
+      () {
+        final hPx = ps.height * scale;
+        return hPx <= viewport.height ? 0.0 : offset.dy.clamp(viewport.height - hPx, 0.0);
+      }(),
     );
+  }
+
+  // ── Momentum (CANVAS-12) ─────────────────────────────────────────────
+  //
+  // A flick used to stop the instant the fingers left the trackpad, which
+  // reads as the page being stuck to the glass. Every other scrolling surface
+  // on the machine carries on and eases out, and the eye notices the absence
+  // long before anyone can name it.
+  //
+  // Deliberately hand-rolled rather than borrowed from `Scrollable`: this
+  // canvas is a transform, not a viewport of a list, and adopting Flutter's
+  // physics would mean adopting its scroll model for two axes it does not own.
+  // The decay is the standard exponential one — velocity × friction per frame
+  // — stopped at a pixel a frame, which is below the point anything is
+  // visibly still moving.
+
+  /// Pixels per frame, decaying. Null when nothing is gliding.
+  Offset? _glide;
+  Ticker? _ticker;
+
+  /// How much of the velocity survives each frame. 0.92 at 60fps is ~0.3s of
+  /// visible travel: long enough to feel like release, short enough that a
+  /// deliberate scroll still lands where it was aimed.
+  static const _friction = 0.92;
+  static const _stopBelow = 0.4;
+
+  /// Hand [velocity] (pixels per frame) to the glide. Called on the last
+  /// pointer movement of a scroll or a drag-pan.
+  void fling(Offset velocity, TickerProvider vsync) {
+    if (velocity.distance < 1) return;
+    _glide = velocity;
+    _ticker ??= vsync.createTicker((_) => _step());
+    if (!_ticker!.isActive) _ticker!.start();
+  }
+
+  /// Kill any glide in progress. Anything that TOUCHES the page must call
+  /// this first — a stroke that begins while the page is still moving would
+  /// be drawn across a page sliding underneath it.
+  void stopGlide() {
+    _glide = null;
+    if (_ticker?.isActive ?? false) _ticker!.stop();
+  }
+
+  void _step() {
+    final v = _glide;
+    if (v == null) {
+      _ticker?.stop();
+      return;
+    }
+    panBy(v);
+    final next = v * _friction;
+    if (next.distance < _stopBelow) {
+      stopGlide();
+      return;
+    }
+    _glide = next;
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  /// Whether the page is wider than the window, which is the only state in
+  /// which horizontal panning means anything. Everything that pans reads this
+  /// so a sideways trackpad flick cannot nudge a page that already fits — it
+  /// would move a page that has nowhere to go and then snap it back.
+  bool get canPanHorizontally {
+    final ps = pageSize;
+    if (ps == null || viewport == Size.zero) return false;
+    return ps.width * scale > viewport.width + 0.5;
   }
 
   /// Initial view: page anchored top-left, filling the window (the page is at
@@ -119,7 +208,7 @@ class CanvasController extends ChangeNotifier {
     }
     const pad = 16.0;
     scale = ((viewport.width - pad * 2) / contentWidth).clamp(minScale, maxScale);
-    offset = Offset(pad, 0);
+    offset = Offset(0, 0); // clampToPage centres the pad evenly
     clampToPage();
     notifyListeners();
   }
@@ -142,6 +231,11 @@ class CanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Zoom around the middle of the window.
+  ///
+  /// The vertical focal point is the centre so the line you are looking at
+  /// stays put; the horizontal one only matters once the page is wider than
+  /// the window, since [clampToPage] centres it otherwise.
   void setZoom(double newScale) {
     zoomAt(Offset(viewport.width / 2, viewport.height / 2), newScale / scale);
   }

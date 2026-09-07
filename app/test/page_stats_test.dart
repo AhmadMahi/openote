@@ -221,7 +221,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: Align(
-                alignment: Alignment.topLeft, child: PageFace(app: app))),
+                alignment: Alignment.topLeft, child: WordCount(app: app))),
       ));
       await tester.pump();
     }

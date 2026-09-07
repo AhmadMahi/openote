@@ -189,9 +189,13 @@ void main() {
     // Insert and Draw as you worked, duplicating a tab already on screen.
     // What this test is really about is unchanged: the palette goes when the
     // equation goes, and the chrome does not move while it happens.
-    expect(find.byType(PageFace), findsNothing);
-    expect(find.byType(ObjectRow), findsOneWidget,
-        reason: 'the row itself stays, holding its height');
+    // `PageFace` is gone entirely — the row renders nothing when nothing is
+    // selected, and collapses to no height at all rather than sitting there
+    // as an empty band. The row WIDGET stays mounted; it is what slides back
+    // open when the next equation arrives.
+    expect(find.byType(ObjectRow), findsOneWidget);
+    expect(tester.getSize(find.byType(ObjectRow)).height, 0,
+        reason: 'nothing to show means no space taken');
     settle();
   });
 

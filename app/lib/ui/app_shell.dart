@@ -24,6 +24,7 @@ import 'side_panel.dart';
 import 'protect_dialog.dart';
 import 'save_problem_dialog.dart';
 import 'shortcut_overlay.dart';
+import 'focus_palette.dart';
 import 'sidebar.dart';
 import '../export/print_page.dart';
 import 'study_panel.dart';
@@ -48,7 +49,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   AppState get app => widget.app;
 
   /// Whether the Ctrl+/ shortcut reference is up. Tracked here because the
@@ -61,6 +62,7 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    WidgetsBinding.instance.addObserver(this);
     // The OneNote-style pending caret's arrow keys (live_markdown_engine.dart)
     // reuse this same block-nudge rather than reimplementing it.
     app.navigateNudge = _nudge;
@@ -118,6 +120,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    WidgetsBinding.instance.removeObserver(this);
     app.navigateNudge = null;
     app.removeListener(_openNoticeChanged);
     for (final n in [
@@ -315,6 +318,13 @@ class _AppShellState extends State<AppShell> {
     // Escape: close find / exit our editors / clear selection. Gated on our
     // own state so a dialog's own Escape-to-cancel still works.
     if (k == LogicalKeyboardKey.escape) {
+      // Focus mode first, and above the route guard below: it hides the way
+      // OUT of itself, so its Escape has to work even if something else on
+      // the ladder would have claimed the key.
+      if (app.focusMode && !_routeOnTop) {
+        app.setFocusMode(false);
+        return true;
+      }
       if (_shortcutsOpen) {
         Navigator.of(context, rootNavigator: true).pop();
         return true;
@@ -604,6 +614,21 @@ class _AppShellState extends State<AppShell> {
       }
       return false;
     }
+
+    // NOTHING BELOW MAY RUN WHILE A DIALOG OWNS THE SCREEN.
+    //
+    // This handler fires regardless of what is on top, and "no text field is
+    // focused" is not the same question as "the canvas is what you are
+    // typing at". A dialog whose focus sits on a button is not editable, so
+    // every bare key below was being consumed on the canvas's behalf while
+    // the dialog was open — which is why the shortcut picker could never
+    // capture a key: pressing Q switched to no tool at all and swallowed the
+    // event before the dialog's own handler ran. Delete was worse; it was
+    // removing the selected block behind the dialog.
+    //
+    // Traversal and the Escape ladder already asked this question. The bare
+    // keys never did.
+    if (_routeOnTop) return false;
 
     // Bare keys — only reached when no text field is focused. Tool letters
     // additionally step aside when the selection is a box you can TYPE
@@ -942,6 +967,56 @@ class _AppShellState extends State<AppShell> {
         null => null,
       };
 
+  // ── Full screen → focus mode ─────────────────────────────────────────
+  //
+  // Going full screen with a pen in your hand is a request for the page and
+  // nothing else, so focus mode follows it. Two rules keep that from becoming
+  // an app that argues with you:
+  //
+  //   * it acts on the TRANSITION, not the state. Turning focus mode off by
+  //     hand while still full screen has to stick, and a rule written against
+  //     the state would switch it straight back on at the next frame.
+  //   * it only undoes what it did. Leaving full screen restores the chrome
+  //     only when full screen was what hid it; focus mode you asked for
+  //     yourself survives. `AppState.focusModeWasAutomatic` carries that,
+  //     rather than a flag here, so it cannot go stale when focus mode is
+  //     turned off somewhere else — Esc, or the palette's own button.
+  bool _wasFullscreen = false;
+
+  /// Full screen, inferred from the window filling its display. macOS gives
+  /// Flutter no direct answer, and this is the observable difference: a
+  /// maximised window still leaves the menu bar and the dock, so its logical
+  /// size stays short of the display's.
+  bool _isFullscreen() {
+    final view = View.maybeOf(context);
+    if (view == null) return false;
+    final dpr = view.devicePixelRatio;
+    if (dpr <= 0) return false;
+    final win = view.physicalSize / dpr;
+    final screen = view.display.size / dpr;
+    return (screen.height - win.height).abs() < 2 &&
+        (screen.width - win.width).abs() < 2;
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final now = _isFullscreen();
+    if (now == _wasFullscreen) return;
+    _wasFullscreen = now;
+    if (now) {
+      // Only with a drawing tool up. Full screen while writing prose is a
+      // request for a bigger page, not for the toolbar to vanish.
+      final drawing = app.tool == Tool.pen ||
+          app.tool == Tool.highlighter ||
+          app.tool == Tool.eraser ||
+          app.tool == Tool.lasso;
+      if (drawing && !app.focusMode) app.setFocusMode(true, automatic: true);
+    } else if (app.focusModeWasAutomatic) {
+      app.setFocusMode(false);
+    }
+  }
+
   /// True when any route (dialog, viewer, menu) sits above the shell. The
   /// global handler fires regardless, so every canvas-traversal key checks
   /// this — Tab must not move block selection behind an open dialog.
@@ -1267,12 +1342,19 @@ class _AppShellState extends State<AppShell> {
             child: Stack(children: [
             Row(
             children: [
-              _regionWrap(_Region.sidebar, _navigator()),
-              const VerticalDivider(width: 1),
+              // Focus mode takes the whole frame away, not just the
+              // toolbar: the point is the page edge to edge with nothing
+              // around it, and a sidebar left behind would make it a
+              // half-measure that still has a border down one side.
+              if (!app.focusMode) ...[
+                _regionWrap(_Region.sidebar, _navigator()),
+                const VerticalDivider(width: 1),
+              ],
               Expanded(
                 child: Column(
                   children: [
-                    _regionWrap(_Region.toolbar, CommandBar(app: app)),
+                    if (!app.focusMode)
+                      _regionWrap(_Region.toolbar, CommandBar(app: app)),
                     // **The object row**, permanent and always 36 px.
                     //
                     // Permanent because a band that appeared with the
@@ -1282,7 +1364,8 @@ class _AppShellState extends State<AppShell> {
                     // where a student most often starts an equation. See
                     // `object_row.dart`; the chrome is 112 px in every state
                     // of the app and the canvas box never moves.
-                    _regionWrap(_Region.object, ObjectRow(app: app)),
+                    if (!app.focusMode)
+                      _regionWrap(_Region.object, ObjectRow(app: app)),
                     if (app.findOpen) _FindBar(app: app),
                     // The breadcrumb is CONTEXT, not a second navigator
                     // (§7d). With the navigator expanded it repeats what is
@@ -1290,7 +1373,7 @@ class _AppShellState extends State<AppShell> {
                     // full-width row saying nothing. Collapsed — or on the
                     // rail — it is the only place the notebook and section are
                     // named, and it earns the row.
-                    if (page != null && app.navCollapsed)
+                    if (page != null && app.navCollapsed && !app.focusMode)
                       _PageHeader(app: app, page: page),
                     Expanded(
                       child: Row(
@@ -1322,12 +1405,17 @@ class _AppShellState extends State<AppShell> {
                         ],
                       ),
                     ),
-                    _StatusBar(app: app),
+                    if (!app.focusMode) _StatusBar(app: app),
                   ],
                 ),
               ),
             ],
           ),
+            // The tools, when the chrome that held them is gone. In the Stack
+            // so it floats OVER the page rather than taking a strip of it —
+            // an edge-to-edge page with a bar reserved along one side is not
+            // edge to edge.
+            if (app.focusMode) FocusPalette(app: app),
             AlertPopup(app: app, regionFocus: _alertRegion),
             ImportProgressCard(app: app),
           ]),

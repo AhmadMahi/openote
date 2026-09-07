@@ -3877,6 +3877,38 @@ class AppState extends ChangeNotifier
   int penColor = 0;
   double penSize = 2.5;
 
+  /// Focus mode: the chrome goes, the page fills the window edge to edge, and
+  /// the drawing tools come back as a small palette you can put anywhere.
+  ///
+  /// Session-scoped, not persisted: it is a way of working for the next ten
+  /// minutes, and an app that reopened with its entire toolbar missing —
+  /// because of something you did last week — would look broken rather than
+  /// focused.
+  bool focusMode = false;
+
+  /// Where that palette sits, in window coordinates. Null until it has been
+  /// dragged, which is what lets the first appearance be positioned by the
+  /// layout rather than by a guess made here.
+  Offset? palettePos;
+
+  /// True when full screen turned focus mode on, so leaving full screen knows
+  /// whether the chrome is its to restore. Cleared the moment focus mode goes
+  /// off by ANY route — Esc, the palette's button, or leaving full screen —
+  /// which is what stops a later exit from undoing a choice you made by hand.
+  bool focusModeWasAutomatic = false;
+
+  void setFocusMode(bool v, {bool automatic = false}) {
+    if (focusMode == v) return;
+    focusMode = v;
+    focusModeWasAutomatic = v && automatic;
+    notifyListeners();
+  }
+
+  void movePalette(Offset p) {
+    palettePos = p;
+    notifyListeners();
+  }
+
   /// Auto shapes: a drawn circle becomes a circle, a box a box (INK-10).
   ///
   /// OFF by default and persisted. Off, because it changes what a stroke IS
@@ -4021,17 +4053,6 @@ class AppState extends ChangeNotifier
     return inkShortcuts.indexOf(k);
   }
 
-  /// Put the built-in colours back in the current tool's row.
-  void resetInkPalette() {
-    if (tool == Tool.highlighter) {
-      highlighterPalette = _hexes(OnoteColors.highlighterColors);
-      _repo.setSetting('highlighterPalette', highlighterPalette);
-    } else {
-      penPalette = _hexes(OnoteColors.penColors);
-      _repo.setSetting('penPalette', penPalette);
-    }
-    notifyListeners();
-  }
 
   // ── Tags (TEXT-5) ────────────────────────────────────────────────────
 

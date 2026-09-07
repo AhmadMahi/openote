@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -37,7 +38,8 @@ class PageCanvas extends StatefulWidget {
 
 enum _DragMode { none, pending, marquee, moveSelection, pan }
 
-class _PageCanvasState extends State<PageCanvas> {
+class _PageCanvasState extends State<PageCanvas>
+    with SingleTickerProviderStateMixin {
   Stroke? _wet;
 
   /// Bumped per wet-ink point so ONLY the ink layer repaints (the painter
@@ -81,6 +83,37 @@ class _PageCanvasState extends State<PageCanvas> {
   /// for the gesture's whole lifetime; see the comment on
   /// `onPointerPanZoomStart` for why this is not re-checked per update.
   int? _panZoomClaimedBy;
+
+  // ── Scroll momentum and the auto-hiding bar ──────────────────────────
+  //
+  // A wheel or trackpad gives no "gesture ended" event, so the flick is armed
+  // by a short timer that every further notch resets: when the notches stop,
+  // the last one's size is the velocity to carry on with.
+  Offset _lastScrollDelta = Offset.zero;
+  Timer? _glideArm;
+  Timer? _scrollFade;
+
+  /// True for a moment after any scrolling, which is when the bar shows.
+  bool _scrolledRecently = false;
+
+  void _armGlide() {
+    _glideArm?.cancel();
+    _glideArm = Timer(const Duration(milliseconds: 60), () {
+      if (!mounted) return;
+      // Scale the last notch down to a per-frame velocity. A notch is one
+      // event, not one frame, and handing it over whole launches the page.
+      controller.fling(_lastScrollDelta * 0.55, this);
+    });
+  }
+
+  /// Show the scroll bar, and start the clock that hides it again.
+  void _noteScrollActivity() {
+    if (!_scrolledRecently) setState(() => _scrolledRecently = true);
+    _scrollFade?.cancel();
+    _scrollFade = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _scrolledRecently = false);
+    });
+  }
 
   // Insert Space: where the drag began in page space, and how far it has
   // moved. Null when the tool is idle.
@@ -227,6 +260,9 @@ class _PageCanvasState extends State<PageCanvas> {
   void dispose() {
     _wetTick.dispose();
     _penCursor.dispose();
+    _glideArm?.cancel();
+    _scrollFade?.cancel();
+    controller.stopGlide();
     super.dispose();
   }
 
@@ -768,7 +804,12 @@ class _PageCanvasState extends State<PageCanvas> {
     final range = trackH - thumbH;
     if (range <= 0) return const [];
     final progress = (-controller.offset.dy / scrollable).clamp(0.0, 1.0);
+    // Visible while it is being used, and for a moment after any scrolling.
+    // A bar that is always on takes a strip of the page for information you
+    // only want at the moment you are moving — which is why every platform
+    // stopped drawing them permanently.
     final live = _scrollbarDrag || _scrollbarHover;
+    final shown = live || _scrolledRecently;
 
     void jumpTo(double localY) {
       final p = ((localY - margin - thumbH / 2) / range).clamp(0.0, 1.0);
@@ -798,17 +839,26 @@ class _PageCanvasState extends State<PageCanvas> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) => jumpTo(d.localPosition.dy),
-              onVerticalDragStart: (_) =>
-                  setState(() => _scrollbarDrag = true),
-              onVerticalDragUpdate: (d) => controller.panBy(
-                  Offset(0, -d.delta.dy * scrollable / range)),
+              onVerticalDragStart: (_) {
+                controller.stopGlide();
+                setState(() => _scrollbarDrag = true);
+              },
+              onVerticalDragUpdate: (d) {
+                controller.panBy(Offset(0, -d.delta.dy * scrollable / range));
+                _noteScrollActivity();
+              },
               onVerticalDragEnd: (_) =>
                   setState(() => _scrollbarDrag = false),
               onVerticalDragCancel: () =>
                   setState(() => _scrollbarDrag = false),
-              child: Container(
-                color: (dark ? OnoteColors.night200 : OnoteColors.paper200)
-                    .withValues(alpha: live ? .55 : .35),
+              child: AnimatedOpacity(
+                opacity: shown ? 1 : 0,
+                duration: Duration(milliseconds: shown ? 90 : 320),
+                curve: Curves.easeOut,
+                child: Container(
+                  color: (dark ? OnoteColors.night200 : OnoteColors.paper200)
+                      .withValues(alpha: live ? .55 : .35),
+                ),
               ),
             ),
           ),
@@ -821,15 +871,23 @@ class _PageCanvasState extends State<PageCanvas> {
           // The track above owns the gestures; the thumb is the indicator —
           // brighter under the mouse, primary while dragging, so consuming
           // the pointer LOOKS like consuming the pointer.
-          child: Container(
-            width: 8,
-            height: thumbH,
-            decoration: BoxDecoration(
-              color: _scrollbarDrag
-                  ? Theme.of(context).colorScheme.primary
-                  : (dark ? OnoteColors.moon100 : OnoteColors.graphite500)
-                      .withValues(alpha: _scrollbarHover ? .85 : .55),
-              borderRadius: BorderRadius.circular(4),
+          //
+          // In fast, out slow: it has to be there the instant you start
+          // moving, and leaving quickly reads as a flicker.
+          child: AnimatedOpacity(
+            opacity: shown ? 1 : 0,
+            duration: Duration(milliseconds: shown ? 90 : 320),
+            curve: Curves.easeOut,
+            child: Container(
+              width: 8,
+              height: thumbH,
+              decoration: BoxDecoration(
+                color: _scrollbarDrag
+                    ? Theme.of(context).colorScheme.primary
+                    : (dark ? OnoteColors.moon100 : OnoteColors.graphite500)
+                        .withValues(alpha: _scrollbarHover ? .85 : .55),
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
           ),
         ),
@@ -851,6 +909,10 @@ class _PageCanvasState extends State<PageCanvas> {
       final ctrl = HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
       final shift = HardwareKeyboard.instance.isShiftPressed;
+      // Any new input cancels the glide. Without this a second flick fights
+      // the tail of the first, and the page ends up somewhere neither of
+      // them asked for.
+      controller.stopGlide();
       if (ctrl) {
         controller.zoomAt(
             e.localPosition, e.scrollDelta.dy > 0 ? 1 / 1.1 : 1.1);
@@ -858,8 +920,16 @@ class _PageCanvasState extends State<PageCanvas> {
         // Shift+wheel → horizontal scroll (a mouse's vertical wheel drives X).
         controller.panBy(Offset(-e.scrollDelta.dy - e.scrollDelta.dx, 0));
       } else {
-        controller.panBy(-e.scrollDelta);
+        final delta = -e.scrollDelta;
+        controller.panBy(delta);
+        // Remember the last notch and when it landed, so the moment the
+        // scrolling STOPS we know how fast it was going. A wheel gives no
+        // "end" event, so the glide is armed by a timer that the next notch
+        // keeps resetting.
+        _lastScrollDelta = delta;
+        _armGlide();
       }
+      _noteScrollActivity();
       setState(() {});
     });
   }
@@ -1337,6 +1407,7 @@ class _PageCanvasState extends State<PageCanvas> {
       // page mid-gesture the instant something unrelated cleared the set.
       onPointerPanZoomStart: (e) {
         _pzLastScale = 1.0;
+        controller.stopGlide(); // fingers on the glass stop the page dead
         _panZoomClaimedBy = app.claimedPointers.contains(e.pointer)
             ? e.pointer
             : null;
@@ -1347,11 +1418,19 @@ class _PageCanvasState extends State<PageCanvas> {
           controller.zoomAt(e.localPosition, e.scale / _pzLastScale);
           _pzLastScale = e.scale;
         }
-        if (e.panDelta != Offset.zero) controller.panBy(e.panDelta);
+        if (e.panDelta != Offset.zero) {
+          controller.panBy(e.panDelta);
+          _lastScrollDelta = e.panDelta;
+          _noteScrollActivity();
+        }
         setState(() {});
       },
       onPointerPanZoomEnd: (e) {
         if (_panZoomClaimedBy == e.pointer) _panZoomClaimedBy = null;
+        // A trackpad DOES tell us when the fingers left, so the flick can be
+        // handed over precisely instead of guessed at by a timer.
+        controller.fling(_lastScrollDelta, this);
+        _lastScrollDelta = Offset.zero;
       },
       child: Listener(
         // THE DRAWN CURSOR HAS TO KEEP UP WITH A BUTTON-DOWN DRAG.
@@ -1365,7 +1444,13 @@ class _PageCanvasState extends State<PageCanvas> {
         // A `Listener` sees the whole gesture: down, every move, and up. It is
         // wrapped OUTSIDE the MouseRegion and only ever writes a notifier, so
         // it consumes nothing and cannot change how any tool behaves.
-        onPointerDown: _trackPenCursor,
+        onPointerDown: (e) {
+          // Nothing may be drawn on, dragged on or clicked on a page that is
+          // still gliding: the mark would land somewhere the user was not
+          // pointing by the time it committed.
+          controller.stopGlide();
+          _trackPenCursor(e);
+        },
         onPointerMove: _trackPenCursor,
         onPointerHover: _trackPenCursor,
         onPointerUp: _trackPenCursor,

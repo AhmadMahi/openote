@@ -89,6 +89,10 @@ class _CommandBarState extends State<CommandBar> {
                 // part of the frame — and cost hit area at the screen edge,
                 // which is the one place a pointer can be thrown at infinitely
                 // fast (Fitts's law) and always land.
+                // Before the tabs, at the window's left edge: this is the
+                // control for the thing to its LEFT, and it is the only
+                // control here that is about the frame rather than the page.
+                _navToggle(context),
                 for (var i = 0; i < _tabs.length; i++)
                   _tabButton(scheme, i, _tabs[i]),
                 // **A badge, not a tab.** It says what the row below is
@@ -734,6 +738,22 @@ class _CommandBarState extends State<CommandBar> {
     return base + (item.extras.isEmpty ? 0 : 22) + 2;
   }
 
+  /// Inserting something is a statement that you are done drawing.
+  ///
+  /// Without this, placing a code block or a text box with the pen still
+  /// armed left every click on the new block drawing a line across it — the
+  /// insert put a thing on the page and then handed you the wrong tool for
+  /// the only two things anyone does next, which are move it and type in it.
+  /// Select does both, so Select is where you land.
+  ///
+  /// Wrapped around EVERY insert path rather than dropped into the individual
+  /// actions: the ribbon, its split-button main half and its extras all reach
+  /// `item.run`, and three copies of one rule is how one of them gets missed.
+  void Function() _insert(void Function() run) => () {
+        if (app.tool != Tool.select) app.setTool(Tool.select);
+        run();
+      };
+
   Widget _insertRow(BuildContext context) => CompactingToolbar(
         controls: [
           for (final item in kInsertRibbon)
@@ -742,8 +762,8 @@ class _CommandBarState extends State<CommandBar> {
               icon: item.icon,
               label: item.label,
               inline: _InsertButton(app: app, item: item),
-              onPressed: () =>
-                  item.run(context, app, insertAnchor(app, item)),
+              onPressed:
+                  _insert(() => item.run(context, app, insertAnchor(app, item))),
               submenu: item.extras.isEmpty
                   ? null
                   : [
@@ -753,15 +773,15 @@ class _CommandBarState extends State<CommandBar> {
                       ToolbarSubmenuItem(
                         icon: item.icon,
                         label: item.label,
-                        onPressed: () =>
-                            item.run(context, app, insertAnchor(app, item)),
+                        onPressed: _insert(
+                            () => item.run(context, app, insertAnchor(app, item))),
                       ),
                       for (final extra in item.extras)
                         ToolbarSubmenuItem(
                           icon: extra.icon,
                           label: extra.label,
-                          onPressed: () => extra.run(
-                              context, app, insertAnchor(app, extra)),
+                          onPressed: _insert(() => extra.run(
+                              context, app, insertAnchor(app, extra))),
                         ),
                     ],
             ),
@@ -788,6 +808,22 @@ class _CommandBarState extends State<CommandBar> {
   /// contents are otherwise the same set of things a student actually reaches
   /// for — including the light/dark switch, which is the one people hunt for
   /// first and the one burying it in Settings hid hardest.
+  /// Show or hide the navigator. Ctrl+\\ already did this; nothing on screen
+  /// said so, and "make the page go edge to edge" is not a thing anyone
+  /// guesses is behind a chord.
+  Widget _navToggle(BuildContext context) => IconButton(
+        icon: Icon(
+            app.navCollapsed
+                ? Icons.view_sidebar_outlined
+                : Icons.view_sidebar,
+            size: 18),
+        tooltip: app.navCollapsed
+            ? 'Show the notebook sidebar  (Ctrl+\\)'
+            : 'Hide the sidebar — the page goes edge to edge  (Ctrl+\\)',
+        visualDensity: VisualDensity.compact,
+        onPressed: app.toggleNavCollapsed,
+      );
+
   Widget _viewRow(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget bg(String v, IconData icon, String tip) => IconButton(
@@ -996,6 +1032,20 @@ class _CommandBarState extends State<CommandBar> {
       toolButton(Tool.lasso, Icons.gesture_outlined, 'Lasso-select ink'),
       toolButton(Tool.space, Icons.unfold_more, 'Insert space — drag to push '
           'everything below down'),
+      const _Div(),
+      // Focus mode. In the Draw row because that is when you want it: the
+      // chrome is worth its space while you are formatting, and in the way
+      // while you are drawing.
+      Tooltip(
+        message: 'Focus mode: hide everything but the page, and float the '
+            'drawing tools.\nEsc comes back. Full screen does this on its own '
+            'while a drawing tool is up.',
+        child: IconButton(
+          icon: const Icon(Icons.open_in_full, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => app.setFocusMode(true),
+        ),
+      ),
       const _Div(),
       // Auto shapes (INK-10). A toggle rather than a mode: you keep drawing
       // with the pen you already have, and a circle comes out round.
