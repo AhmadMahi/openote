@@ -89,10 +89,6 @@ class _CommandBarState extends State<CommandBar> {
                 // part of the frame — and cost hit area at the screen edge,
                 // which is the one place a pointer can be thrown at infinitely
                 // fast (Fitts's law) and always land.
-                // Before the tabs, at the window's left edge: this is the
-                // control for the thing to its LEFT, and it is the only
-                // control here that is about the frame rather than the page.
-                _navToggle(context),
                 for (var i = 0; i < _tabs.length; i++)
                   _tabButton(scheme, i, _tabs[i]),
                 // **A badge, not a tab.** It says what the row below is
@@ -808,22 +804,6 @@ class _CommandBarState extends State<CommandBar> {
   /// contents are otherwise the same set of things a student actually reaches
   /// for — including the light/dark switch, which is the one people hunt for
   /// first and the one burying it in Settings hid hardest.
-  /// Show or hide the navigator. Ctrl+\\ already did this; nothing on screen
-  /// said so, and "make the page go edge to edge" is not a thing anyone
-  /// guesses is behind a chord.
-  Widget _navToggle(BuildContext context) => IconButton(
-        icon: Icon(
-            app.navCollapsed
-                ? Icons.view_sidebar_outlined
-                : Icons.view_sidebar,
-            size: 18),
-        tooltip: app.navCollapsed
-            ? 'Show the notebook sidebar  (Ctrl+\\)'
-            : 'Hide the sidebar — the page goes edge to edge  (Ctrl+\\)',
-        visualDensity: VisualDensity.compact,
-        onPressed: app.toggleNavCollapsed,
-      );
-
   Widget _viewRow(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget bg(String v, IconData icon, String tip) => IconButton(

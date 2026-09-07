@@ -74,6 +74,31 @@ enum Tool {
   space
 }
 
+/// What the drawing cursor looks like (INK-11).
+///
+/// A preference because the right answer depends on how you work rather than
+/// on anything the app can detect. The pen shows what you are holding; the
+/// crosshair is what a precision tool looks like everywhere else and is what
+/// people arriving from image editors expect; the dot gets out of the way
+/// entirely on a small screen or a busy diagram.
+enum PenCursorStyle {
+  pen,
+  crosshair,
+  dot;
+
+  String get label => switch (this) {
+        PenCursorStyle.pen => 'Pen',
+        PenCursorStyle.crosshair => 'Crosshair',
+        PenCursorStyle.dot => 'Dot',
+      };
+
+  String get describe => switch (this) {
+        PenCursorStyle.pen => 'A nib, angled as you would hold one',
+        PenCursorStyle.crosshair => 'The system precision cursor',
+        PenCursorStyle.dot => 'A small dot at the tip, and nothing else',
+      };
+}
+
 /// How the eraser removes ink (INK-6).
 enum EraserMode {
   /// Rub points out; surviving runs split into new strokes. The precise mode.
@@ -3909,6 +3934,15 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// What the drawing cursor looks like (INK-11). Persisted: it is a
+  /// preference about your eyes, not about this page.
+  PenCursorStyle penCursorStyle = PenCursorStyle.pen;
+  void setPenCursorStyle(PenCursorStyle v) {
+    penCursorStyle = v;
+    _repo.setSetting('penCursorStyle', v.name);
+    notifyListeners();
+  }
+
   /// Auto shapes: a drawn circle becomes a circle, a box a box (INK-10).
   ///
   /// OFF by default and persisted. Off, because it changes what a stroke IS
@@ -5960,6 +5994,11 @@ class AppState extends ChangeNotifier
     if (pp is bool) penProximitySwitch = pp;
     final as_ = _repo.getSetting('autoShape');
     if (as_ is bool) autoShape = as_;
+    final pcs = _repo.getSetting('penCursorStyle') as String?;
+    if (pcs != null) {
+      penCursorStyle =
+          PenCursorStyle.values.asNameMap()[pcs] ?? penCursorStyle;
+    }
     // Detached: binding a port must never gate the app opening.
     unawaited(_restoreMcp());
     unawaited(checkForAppUpdate());
@@ -7310,8 +7349,16 @@ class AppState extends ChangeNotifier
   /// decides how big the text is, so width is what gets matched; the rest of
   /// the sheet is a scroll away, which is how every document editor behaves.
   void fitPageToWidth() {
-    final width = pageProps.isPaged ? pageProps.paper.width : pageProps.pageWidth;
-    canvas.fillWidth(width);
+    // THE SURFACE, not `pageProps.pageWidth`.
+    //
+    // In canvas mode the surface is `max(pageWidth, contentRight + margin)` —
+    // it grows sideways to hold whatever you put out there. Scaling the
+    // nominal page width therefore fitted the wrong rectangle whenever
+    // anything reached past it, and left the surface a little wider than the
+    // window: "I am still able to scroll horizontally a bit". Fitting what is
+    // actually drawn leaves nothing to scroll to, so the horizontal lock in
+    // `panBy` takes over on its own rather than needing a mode of its own.
+    canvas.fillWidth(pageSize().width);
   }
 
   /// Scroll sheet [i] (0-based) to the top of the viewport.

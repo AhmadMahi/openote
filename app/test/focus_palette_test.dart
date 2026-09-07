@@ -102,6 +102,30 @@ void main() {
       expect(find.byTooltip(tip), findsOneWidget, reason: tip);
     }
     expect(find.byTooltip('Leave focus mode  (Esc)'), findsOneWidget);
+    // The sidebar lives ONLY here now — it was taken off the command bar,
+    // which focus mode hides anyway, so this is the single way back to
+    // another page without leaving the mode.
+    expect(find.byTooltip('Hide the sidebar'), findsOneWidget);
+  });
+
+  testWidgets('the colours are on their own row, and big enough to hit',
+      (t) async {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.setTool(Tool.pen);
+    await pump(t);
+    // By PREFIX: the well's tooltip also carries "double-click to change it",
+    // so the exact string is help text and would pin a wording.
+    final wells = find.byWidgetPredicate(
+        (w) => w is Tooltip && (w.message ?? '').startsWith('Ink colour 1'),
+        description: 'first ink well');
+    expect(wells, findsOneWidget);
+    final well = t.getRect(wells);
+    expect(well.width, greaterThanOrEqualTo(24),
+        reason: 'colour is the thing you change most while drawing; it must '
+            'not be the smallest target on the panel');
+    // Below the tools, not beside them.
+    expect(well.top, greaterThan(t.getRect(find.byTooltip('Pen')).bottom - 2),
+        reason: 'second row');
   });
 
   testWidgets('a tool on it actually arms that tool', (t) async {

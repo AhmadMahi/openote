@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
 import '../theme/tokens.dart';
 import 'color_picker.dart';
+import 'glass.dart';
 
 /// The drawing tools, when focus mode has taken the chrome away.
 ///
@@ -72,19 +73,9 @@ class _FocusPaletteState extends State<FocusPalette> {
   Widget _body(BuildContext context, ColorScheme scheme, OnoteSurfaces s) {
     return Material(
       color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: s.chrome2,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: s.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: .22),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
+      child: GlassPanel(
+        dark: Theme.of(context).brightness == Brightness.dark,
+        radius: 20,
         child: IntrinsicWidth(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -102,23 +93,23 @@ class _FocusPaletteState extends State<FocusPalette> {
                   _tool(scheme, Tool.eraser, Icons.cleaning_services_outlined,
                       'Eraser'),
                   _tool(scheme, Tool.lasso, Icons.gesture_outlined, 'Lasso'),
+                  _tool(scheme, Tool.text, Icons.text_fields, 'Text'),
                   _divider(s),
-                  for (var i = 0; i < app.inkPalette.length; i++)
-                    _well(scheme, i),
-                  _divider(s),
-                  SizedBox(
-                    width: 96,
-                    child: Slider(
-                      value: app.penSize.clamp(1, 10),
-                      min: 1,
-                      max: 10,
-                      onChanged: (v) {
-                        app.penSize = v;
-                        app.refresh();
-                      },
-                    ),
+                  // The sidebar, from inside focus mode. It is the only way
+                  // to another page without leaving the mode, and the button
+                  // that used to do this lives nowhere else now.
+                  IconButton(
+                    icon: Icon(
+                        app.navCollapsed
+                            ? Icons.view_sidebar_outlined
+                            : Icons.view_sidebar,
+                        size: 18),
+                    tooltip: app.navCollapsed
+                        ? 'Show the notebook sidebar'
+                        : 'Hide the sidebar',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: app.toggleNavCollapsed,
                   ),
-                  _divider(s),
                   IconButton(
                     icon: const Icon(Icons.undo, size: 18),
                     tooltip: 'Undo  (Ctrl+Z)',
@@ -130,6 +121,30 @@ class _FocusPaletteState extends State<FocusPalette> {
                     tooltip: 'Leave focus mode  (Esc)',
                     visualDensity: VisualDensity.compact,
                     onPressed: () => app.setFocusMode(false),
+                  ),
+                ]),
+              ),
+              // SECOND ROW: the colours, at a size you can hit without
+              // looking. Notability's arrangement, and its reason: colour is
+              // the thing you change most often while drawing, so it must not
+              // be the smallest target on the panel.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (var i = 0; i < app.inkPalette.length; i++)
+                    _well(scheme, i),
+                  _divider(s),
+                  SizedBox(
+                    width: 110,
+                    child: Slider(
+                      value: app.penSize.clamp(1, 10),
+                      min: 1,
+                      max: 10,
+                      onChanged: (v) {
+                        app.penSize = v;
+                        app.refresh();
+                      },
+                    ),
                   ),
                 ]),
               ),
@@ -228,8 +243,8 @@ class _FocusPaletteState extends State<FocusPalette> {
           child: Padding(
             padding: const EdgeInsets.all(3),
             child: Container(
-              width: 16,
-              height: 16,
+              width: 24,
+              height: 24,
               decoration: BoxDecoration(
                 color: c,
                 shape: BoxShape.circle,

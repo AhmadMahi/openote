@@ -323,7 +323,11 @@ ThemeData onoteTheme(Brightness brightness) {
 
     // ── Dialogs ────────────────────────────────────────────────────────
     dialogTheme: DialogThemeData(
-      backgroundColor: surfaces.raised,
+      // Translucent, so the blurred page shows through — see
+      // `showOnoteDialog`, which animates a BackdropFilter in behind it.
+      // Not fully transparent: text on pure blur fails contrast the moment a
+      // dark drawing passes underneath.
+      backgroundColor: surfaces.raised.withValues(alpha: .88),
       surfaceTintColor: Colors.transparent,
       elevation: 8,
       shape: RoundedRectangleBorder(

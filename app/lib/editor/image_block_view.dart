@@ -44,6 +44,14 @@ class _BlobCache {
 
 final _blobCache = _BlobCache();
 
+/// How round a picture's corners are.
+///
+/// Named, and used for both clips below, because "rounded by default" is a
+/// property of images in this app rather than a number one widget happens to
+/// pass. 14 rather than the old 11: at 11 on a photo a few hundred pixels
+/// wide the corner is technically round and reads as square.
+const double kImageCornerRadius = 14;
+
 class ImageBlockView extends StatefulWidget {
   const ImageBlockView({super.key, required this.block, required this.app});
   final Block block;
@@ -201,7 +209,7 @@ class _ImageBlockViewState extends State<ImageBlockView> {
     final aspect = (nw != null && nh != null && nh > 0) ? nw / nh : null;
     final boxH = widget.block.h;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(11),
+      borderRadius: BorderRadius.circular(kImageCornerRadius),
       // Anchor top-left, always.
       //
       // This is why imported images sat **too high**. `BlockView` gives the block
@@ -214,7 +222,16 @@ class _ImageBlockViewState extends State<ImageBlockView> {
       // also `BoxFit.cover`, so the mismatch was cropped rather than visible.
       child: Align(
         alignment: Alignment.topLeft,
-        child: boxH != null
+        // Clipped AGAIN, around the picture itself.
+        //
+        // The outer clip is the block's rectangle, and `BoxFit.contain` means
+        // the picture only fills that rectangle when the aspect ratios happen
+        // to match. Any other time the image sits inside it, the rounded
+        // corners fall on empty space, and a pasted photo came out square —
+        // the rounding was in the code and invisible on screen.
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(kImageCornerRadius),
+          child: boxH != null
             // Imported (or explicitly sized): honour OneNote's rectangle exactly
             // and fit inside it — never crop, never shift.
             ? Image(
@@ -247,6 +264,7 @@ class _ImageBlockViewState extends State<ImageBlockView> {
                     gaplessPlayback: true, // no blank frame on rebuild
                     filterQuality: FilterQuality.medium,
                   ),
+        ),
       ),
     );
   }

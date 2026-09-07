@@ -139,6 +139,30 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 ),
               ),
               _section('Writing and drawing'),
+              // The drawing cursor. A preference rather than a decision the
+              // app makes, because the right answer depends on how somebody
+              // works: a nib shows what you are holding, a crosshair is what
+              // people arriving from image editors expect, and a dot gets out
+              // of the way on a busy diagram.
+              _row(
+                'Drawing cursor',
+                SegmentedButton<PenCursorStyle>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      textStyle:
+                          WidgetStatePropertyAll(TextStyle(fontSize: 11))),
+                  segments: [
+                    for (final v in PenCursorStyle.values)
+                      ButtonSegment(
+                          value: v,
+                          label: Text(v.label),
+                          tooltip: v.describe),
+                  ],
+                  selected: {app.penCursorStyle},
+                  onSelectionChanged: (s) => app.setPenCursorStyle(s.first),
+                ),
+              ),
               _row('Spell check', _toggle(app.spellCheckEnabled, app.setSpellCheck)),
               _row('Pen near the page switches to inking',
                   _toggle(app.penProximitySwitch, app.setPenProximitySwitch)),

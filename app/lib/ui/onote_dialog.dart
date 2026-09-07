@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 /// Every Openote dialog opens through here (PLANNING "Consistency/UX":
@@ -28,7 +30,9 @@ Future<T?> showOnoteDialog<T>({
     context: context,
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black54,
+    // Lighter than Material's default dim, because the blur below is doing
+    // most of the separating now. A heavy scrim plus a blur reads as fog.
+    barrierColor: Colors.black.withValues(alpha: .28),
     transitionDuration: const Duration(milliseconds: 150),
     pageBuilder: (ctx, _, __) => builder(ctx),
     transitionBuilder: (ctx, anim, _, child) {
@@ -37,7 +41,16 @@ Future<T?> showOnoteDialog<T>({
       // would read as the dialog resisting dismissal.
       final eased = CurvedAnimation(
           parent: anim, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn);
-      return FadeTransition(
+      // The page behind is blurred, not merely dimmed — the thing that makes
+      // a panel read as glass is having something out of focus behind it.
+      // Animated with the dialog so it arrives and leaves WITH the panel; a
+      // blur that snaps on is more distracting than no blur at all.
+      return BackdropFilter(
+        filter: ui.ImageFilter.blur(
+          sigmaX: 14 * anim.value,
+          sigmaY: 14 * anim.value,
+        ),
+        child: FadeTransition(
         opacity: CurvedAnimation(
             parent: anim, curve: Curves.easeOut, reverseCurve: Curves.easeIn),
         child: ScaleTransition(
@@ -47,6 +60,7 @@ Future<T?> showOnoteDialog<T>({
               .animate(eased),
           alignment: origin,
           child: child,
+        ),
         ),
       );
     },

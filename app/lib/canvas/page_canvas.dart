@@ -1168,7 +1168,8 @@ class _PageCanvasState extends State<PageCanvas>
                 // The drawn pen/highlighter/eraser cursor, above everything
                 // so it is never buried under a block — a cursor that can go
                 // behind the thing you are pointing at is not a cursor.
-                if (_inkTool)
+                if (_inkTool &&
+                    app.penCursorStyle != PenCursorStyle.crosshair)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: RepaintBoundary(
@@ -1176,6 +1177,7 @@ class _PageCanvasState extends State<PageCanvas>
                           painter: _PenCursorPainter(
                             at: _penCursor,
                             tool: app.tool,
+                            style: app.penCursorStyle,
                             color: _penCursorColor(dark),
                             penSize: app.penSize,
                             scale: controller.scale,
@@ -1466,8 +1468,12 @@ class _PageCanvasState extends State<PageCanvas>
         // underneath it.
         cursor: switch (app.tool) {
           Tool.text => SystemMouseCursors.text,
+          // Crosshair is the one style we do NOT paint: the system already
+          // has it, and the real pointer beats a drawn copy that lags a frame.
           Tool.pen || Tool.highlighter || Tool.eraser =>
-            SystemMouseCursors.none,
+            app.penCursorStyle == PenCursorStyle.crosshair
+                ? SystemMouseCursors.precise
+                : SystemMouseCursors.none,
           Tool.lasso => SystemMouseCursors.precise,
           Tool.space => SystemMouseCursors.resizeUpDown,
           _ => MouseCursor.defer,
@@ -1790,6 +1796,7 @@ class _PenCursorPainter extends CustomPainter {
   _PenCursorPainter({
     required this.at,
     required this.tool,
+    required this.style,
     required this.color,
     required this.penSize,
     required this.scale,
@@ -1800,6 +1807,7 @@ class _PenCursorPainter extends CustomPainter {
   /// rebuilding the widget tree (see [_PageCanvasState._penCursor]).
   final ValueNotifier<Offset?> at;
   final Tool tool;
+  final PenCursorStyle style;
   final Color color;
   final double penSize;
   final double scale;
@@ -1819,17 +1827,23 @@ class _PenCursorPainter extends CustomPainter {
       return;
     }
 
-    // The nib ring: where ink will land, at its real width.
-    final r = _nib / 2;
-    canvas.drawCircle(
-        p, r, Paint()..color = color.withValues(alpha: dark ? .30 : .22));
-    canvas.drawCircle(
-        p,
-        r,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1
-          ..color = color.withValues(alpha: .85));
+    // The dot: the tip, and nothing else. Two rings so it stays visible over
+    // ink of its own colour without needing a glyph to carry a halo.
+    if (style == PenCursorStyle.dot) {
+      canvas.drawCircle(
+          p,
+          4.5,
+          Paint()
+            ..color = (dark ? Colors.black : Colors.white)
+                .withValues(alpha: .75));
+      canvas.drawCircle(p, 3, Paint()..color = color);
+      return;
+    }
+
+    // NO RING AT THE NIB. It showed the stroke width before you committed to
+    // it, which sounded useful and in practice put a circle around the exact
+    // point you were trying to aim at — the one part of the glyph that has to
+    // stay legible. The nib alone is the cursor.
 
     // The body hangs DOWN and to the right of the tip.
     //
@@ -1919,6 +1933,7 @@ class _PenCursorPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PenCursorPainter old) =>
       old.tool != tool ||
+      old.style != style ||
       old.color != color ||
       old.penSize != penSize ||
       old.scale != scale ||
