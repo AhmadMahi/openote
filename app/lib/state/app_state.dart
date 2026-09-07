@@ -7388,7 +7388,18 @@ class AppState extends ChangeNotifier
     // window: "I am still able to scroll horizontally a bit". Fitting what is
     // actually drawn leaves nothing to scroll to, so the horizontal lock in
     // `panBy` takes over on its own rather than needing a mode of its own.
-    canvas.fillWidth(pageSize().width);
+    // FIT WHAT THE CLAMP CLAMPS TO, which is not always what `pageSize()`
+    // returns.
+    //
+    // `PageCanvas.build` sets `controller.pageSize` from the CONTENT extent —
+    // `max(pageWidth, contentRight + margin)` — in both modes, while
+    // `pageSize()` returns the fixed SHEET in page mode. Fitting the sheet
+    // therefore fitted a narrower rectangle than the one panning is bounded
+    // by, so writing that had strayed past the sheet edge stayed off screen
+    // AND there was still somewhere to scroll to. Reading the controller's
+    // own rectangle makes "it fits" and "there is nothing to scroll to" the
+    // same statement by construction.
+    canvas.fillWidth(canvas.pageSize?.width ?? pageSize().width);
   }
 
   /// Scroll sheet [i] (0-based) to the top of the viewport.

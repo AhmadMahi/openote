@@ -48,6 +48,18 @@ void main() {
       expect(c.offset.dx, before, reason: 'and neither does dragging right');
     });
 
+    test('it fits the rectangle panning is bounded by, not a narrower one', () {
+      // The bug this replaced: page mode fitted the SHEET width while
+      // `clampToPage` bounded panning by the CONTENT width, so a stray stroke
+      // past the sheet edge stayed off screen and a sliver of scroll
+      // survived. Fitting the controller's own pageSize makes "it fits" and
+      // "nothing to scroll to" the same statement.
+      c.pageSize = const Size(1800, 3000);
+      c.fillWidth(c.pageSize!.width);
+      expect(c.canPanHorizontally, isFalse);
+      expect(c.pageSize!.width * c.scale, closeTo(1400, 0.01));
+    });
+
     test('a page wider than the window still pans, which is the normal case',
         () {
       // Zoomed IN past the fit, sideways movement is exactly what you want.
