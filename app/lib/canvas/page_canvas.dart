@@ -1030,26 +1030,6 @@ class _PageCanvasState extends State<PageCanvas>
                       child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          child: IgnorePointer(
-                            child: RepaintBoundary(
-                              child: CustomPaint(
-                                size: Size.zero,
-                                painter: InkPainter(visibleStrokes,
-                                    wet: _wet,
-                                    // Per-point repaint without widget rebuild.
-                                    repaint: _wetTick,
-                                    // Theme default for "auto" strokes: dark
-                                    // ink on light pages, light ink on dark.
-                                    autoColor: dark
-                                        ? OnoteColors.moon100
-                                        : OnoteColors.graphite900),
-                              ),
-                            ),
-                          ),
-                        ),
                         // In-page title band (OneNote-style)
                         Positioned(
                           left: AppState.pageLeftMargin,
@@ -1094,6 +1074,44 @@ class _PageCanvasState extends State<PageCanvas>
                             app: app,
                             controller: controller,
                           ),
+                        // INK PAINTS OVER THE BLOCKS, and this used to be the
+                        // first child of this Stack rather than the last.
+                        //
+                        // Every stroke was drawn UNDER every block. Blocks are
+                        // opaque, so annotating a pasted photograph recorded
+                        // the ink perfectly and then hid it behind the
+                        // picture: "I can paste and drag images but I cannot
+                        // draw on them". The strokes were always there.
+                        //
+                        // One layer above everything, rather than each ink
+                        // block interleaved by z. Interleaving is the more
+                        // faithful model and it costs a separate paint layer
+                        // per ink block — this canvas opens a new one every
+                        // couple of seconds of drawing, so a lesson's worth of
+                        // annotation would be hundreds of layers. Ink on top
+                        // is also what the tools this is used beside do:
+                        // annotation is a sheet laid over the page, not
+                        // another object competing for depth with it.
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          child: IgnorePointer(
+                            child: RepaintBoundary(
+                              child: CustomPaint(
+                                size: Size.zero,
+                                painter: InkPainter(visibleStrokes,
+                                    wet: _wet,
+                                    // Per-point repaint without widget rebuild.
+                                    repaint: _wetTick,
+                                    // Theme default for "auto" strokes: dark
+                                    // ink on light pages, light ink on dark.
+                                    autoColor: dark
+                                        ? OnoteColors.moon100
+                                        : OnoteColors.graphite900),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     ),
