@@ -89,6 +89,9 @@ const List<KeySection> keyboardMap = [
         'Ink colour, with the pen or highlighter up — or with ink lassoed, '
         'recolours it'),
     KeyBinding('[ / ]', 'Previous / next ink colour (wraps)'),
+    KeyBinding('K',
+        'Next ink colour — steps round the palette and wraps. Shift goes '
+        'back, and the key itself is settable in Settings'),
     KeyBinding('Ctrl+C / Ctrl+X / Ctrl+V', 'Copy / cut / paste blocks'),
     KeyBinding('Ctrl+D', 'Duplicate the selected block'),
     KeyBinding('Del', 'Delete the selection'),
@@ -96,9 +99,7 @@ const List<KeySection> keyboardMap = [
     KeyBinding('Ctrl+Y / Ctrl+Shift+Z', 'Redo'),
     KeyBinding('Ctrl+F', 'Find on this page'),
     KeyBinding('Ctrl+P', 'Print the page'),
-    KeyBinding('Ctrl+K',
-        'Next ink colour — steps round the palette and wraps. Add Shift to '
-        'go back; the key is settable in Settings'),
+
     KeyBinding('Ctrl+= / Ctrl+-', 'Zoom in / out'),
     KeyBinding('Ctrl+0', 'Reset zoom and scroll'),
   ]),

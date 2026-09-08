@@ -589,12 +589,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         unawaited(printCurrentPage(app));
         return true;
       }
-      // The palette-cycling key, whatever the user set it to. Checked here,
-      // among the Ctrl chords, because it is one.
-      if (app.matchesCycleKey(k.keyLabel)) {
-        app.cycleInkColor(shift ? -1 : 1);
-        return true;
-      }
       if (k == LogicalKeyboardKey.keyZ && !shift) {
         app.undo();
         return true;
@@ -656,6 +650,25 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (k == LogicalKeyboardKey.keyP) return _tool(Tool.pen);
       if (k == LogicalKeyboardKey.keyH) return _tool(Tool.highlighter);
       if (k == LogicalKeyboardKey.keyE) return _tool(Tool.eraser);
+      // THE PALETTE-CYCLING KEY, and it is BARE — no Ctrl.
+      //
+      // It was Ctrl+K and it never fired on any platform, because the handler
+      // matched the typed character and a Ctrl chord does not type its
+      // letter. Made bare at the owner's request, which also removes the
+      // whole class of problem: a bare key reports itself, everywhere.
+      //
+      // Deliberately NOT gated on a drawing tool being armed, unlike 1…4 and
+      // [ ]. This is the key somebody chose for themselves and the one thing
+      // it must never do is silently nothing; changing which colour the pen
+      // is holding while the select tool happens to be up costs nothing and
+      // is visible the moment they pick the pen up again.
+      if (app.matchesCycleKey(k.keyLabel)) {
+        app.cycleInkColor(shift ? -1 : 1);
+        if (app.hasInkSelection) {
+          app.recolorSelectedInk(app.inkPalette[app.penColor]);
+        }
+        return true;
+      }
       // A tool key the user chose. Checked BEFORE the ink-colour keys, and
       // after the fixed V/T/P/H/E above, so the built-ins can never be taken
       // away from someone relying on them.

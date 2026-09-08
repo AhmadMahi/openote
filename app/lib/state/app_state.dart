@@ -4226,9 +4226,10 @@ class AppState extends ChangeNotifier
   /// per-tool list that had to be kept the same length as the palette with
   /// it.
   ///
-  /// Held with Ctrl and stored as the bare character: a naked letter is the
-  /// tool keys' territory, and this has to work while a tool is armed.
-  /// Customisable in Settings; empty means no cycling key at all.
+  /// A BARE key — no Ctrl. It was Ctrl+K, and a Ctrl chord does not type its
+  /// letter, which is what made the shortcut silently do nothing on every
+  /// platform. Bare, it reports itself everywhere, and it is what was asked
+  /// for. Customisable in Settings; empty means no cycling key at all.
   String cycleColorKey = 'k';
 
   /// Whether [keyLabel] is the cycling key — matched against the KEY, never

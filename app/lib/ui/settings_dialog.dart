@@ -186,7 +186,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               // swatch's context menu — a key you can rebind should be
               // findable in the place people look for keys.
               _rowStacked(
-                'Next ink colour  (with Ctrl)',
+                'Next ink colour',
                 Align(
                   alignment: Alignment.centerLeft,
                   child: ShortcutField(
