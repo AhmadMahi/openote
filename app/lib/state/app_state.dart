@@ -7399,7 +7399,24 @@ class AppState extends ChangeNotifier
     // AND there was still somewhere to scroll to. Reading the controller's
     // own rectangle makes "it fits" and "there is nothing to scroll to" the
     // same statement by construction.
-    canvas.fillWidth(canvas.pageSize?.width ?? pageSize().width);
+    // PAGE MODE FITS THE SHEET; canvas mode fits the whole surface.
+    //
+    // The two are different questions and the difference only shows when
+    // content has strayed outside the paper. Fitting the surface there is
+    // technically tidier — nothing is off screen and horizontal panning locks
+    // itself — and it looks wrong: the sheet shrinks to a fraction of the
+    // window with a band of desk beside it, when "fit" was asked in order to
+    // make the PAGE the width of the screen.
+    //
+    // So the sheet is what gets fitted, and when something is outside it,
+    // horizontal panning stays available because that is the only way to
+    // reach it. Both promises hold whenever they can both hold: writing
+    // inside the paper means the sheet fills the window AND there is nothing
+    // to scroll to. The canvas is deliberately NOT clamped to the sheet —
+    // that would make anything already drawn outside it unreachable.
+    canvas.fillWidth(pageProps.isPaged
+        ? pageProps.paper.width
+        : (canvas.pageSize?.width ?? pageSize().width));
   }
 
   /// Scroll sheet [i] (0-based) to the top of the viewport.

@@ -48,16 +48,26 @@ void main() {
       expect(c.offset.dx, before, reason: 'and neither does dragging right');
     });
 
-    test('it fits the rectangle panning is bounded by, not a narrower one', () {
-      // The bug this replaced: page mode fitted the SHEET width while
-      // `clampToPage` bounded panning by the CONTENT width, so a stray stroke
-      // past the sheet edge stayed off screen and a sliver of scroll
-      // survived. Fitting the controller's own pageSize makes "it fits" and
-      // "nothing to scroll to" the same statement.
+    test('fitting the surface leaves nothing to scroll to', () {
+      // Canvas mode fits the whole surface, so both promises hold together.
       c.pageSize = const Size(1800, 3000);
       c.fillWidth(c.pageSize!.width);
       expect(c.canPanHorizontally, isFalse);
       expect(c.pageSize!.width * c.scale, closeTo(1400, 0.01));
+    });
+
+    test('fitting a SHEET narrower than the surface still leaves the stray '
+        'content reachable', () {
+      // Page mode fits the paper, because "fit" is asked in order to make the
+      // PAGE the width of the screen — fitting the surface instead shrinks
+      // the sheet to a fraction of the window whenever anything has strayed
+      // outside it. The cost is that panning stays available, and that is the
+      // point: it is the only way to reach what is out there.
+      c.pageSize = const Size(1800, 3000); // surface, content-driven
+      c.fillWidth(700); // an A5 sheet
+      expect(c.scale, closeTo(2.0, 0.01), reason: '1400 / 700');
+      expect(c.canPanHorizontally, isTrue,
+          reason: 'the surface is wider than the window at this scale');
     });
 
     test('a page wider than the window still pans, which is the normal case',
