@@ -354,7 +354,7 @@ abstract final class SecretStore {
   static Future<bool> _linuxWrite(String key, String value) async {
     try {
       final p = await Process.start('secret-tool',
-          ['store', '--label=Openote ($key)', ..._linuxAttrs(key)]);
+          ['store', '--label=Slate ($key)', ..._linuxAttrs(key)]);
       p.stdout.drain<void>().ignore();
       p.stderr.drain<void>().ignore();
       p.stdin.write(value);

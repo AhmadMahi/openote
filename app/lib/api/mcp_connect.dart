@@ -94,7 +94,7 @@ ClaudeConnectResult _connect(_JsonClient client,
     } catch (_) {
       return ClaudeConnectResult(
           ClaudeConnect.failed,
-          "${client.name}'s settings file couldn't be read, so Openote "
+          "${client.name}'s settings file couldn't be read, so Slate "
           'left it alone. The connection details under Advanced still '
           'work in any MCP-capable tool.');
     }
@@ -133,7 +133,7 @@ ClaudeConnectResult _connect(_JsonClient client,
           'try "quiz me on what I wrote this week".')
       : ClaudeConnectResult(
           ClaudeConnect.wroteConfigOnly,
-          "Openote is ready, but ${client.name} doesn't look installed on "
+          "Slate is ready, but ${client.name} doesn't look installed on "
           'this computer yet. Once it is, the connection will just work.');
 }
 

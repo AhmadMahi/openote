@@ -186,7 +186,7 @@ class PlannerState extends ChangeNotifier {
   final Object? Function(String) _read;
   final void Function(String, Object?) _write;
 
-  /// Personal nudges. Openote's own store and Openote's own schedule — the OS
+  /// Personal nudges. Openote's own store and Slate's own schedule — the OS
   /// is a display channel, never the scheduler (v0.5 §1), because Linux has no
   /// scheduling API at all and Windows needs an MSIX identity Openote does not
   /// ship.

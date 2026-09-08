@@ -92,7 +92,7 @@ class _SetPasscodeDialogState extends State<_SetPasscodeDialog> {
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('This hides the page inside Openote. '
+                    Text('This hides the page inside Slate. '
                         'It does not encrypt it.',
                         style: TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
@@ -100,7 +100,7 @@ class _SetPasscodeDialogState extends State<_SetPasscodeDialog> {
                     Text(
                       'Anyone who has your notebook file can still read this '
                       'page — the passcode only applies to this copy of '
-                      'Openote on this computer. Do not use it for anything '
+                      'Slate on this computer. Do not use it for anything '
                       'you would be harmed by someone else reading.',
                       style: TextStyle(fontSize: 12.5, height: 1.45),
                     ),

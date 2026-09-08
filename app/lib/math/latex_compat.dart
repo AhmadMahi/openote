@@ -275,16 +275,16 @@ String mathDisplayProblem(Object error) {
 
   final env = RegExp(r'No such environment:\s*(\S+)').firstMatch(message);
   if (env != null) {
-    return "Openote can't lay this equation out as “${env.group(1)}” yet. "
+    return "Slate can't lay this equation out as “${env.group(1)}” yet. "
         'The maths below is saved exactly as it was written.';
   }
   final cmd =
       RegExp(r'Undefined control sequence:\s*(\\?\S+)').firstMatch(message);
   if (cmd != null) {
-    return "Openote doesn't know the command ${cmd.group(1)} yet. "
+    return "Slate doesn't know the command ${cmd.group(1)} yet. "
         'The maths below is saved exactly as it was written.';
   }
-  return "Openote can't draw this equation yet. "
+  return "Slate can't draw this equation yet. "
       'The maths below is saved exactly as it was written.';
 }
 

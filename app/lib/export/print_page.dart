@@ -27,7 +27,7 @@ Future<bool> printCurrentPage(AppState app) async {
   final page = app.nodes.where((n) => n.id == pageId).firstOrNull;
   if (page == null) return false;
   return Printing.layoutPdf(
-    name: page.title.isEmpty ? 'Openote page' : page.title,
+    name: page.title.isEmpty ? 'Slate page' : page.title,
     onLayout: (_) => buildPagePdf(app, pageId, title: page.title),
   );
 }
@@ -37,7 +37,7 @@ Future<bool> printSection(AppState app, String sectionId) async {
   final section = app.nodes.where((n) => n.id == sectionId).firstOrNull;
   if (section == null || app.pagesOf(sectionId).isEmpty) return false;
   return Printing.layoutPdf(
-    name: section.title.isEmpty ? 'Openote section' : section.title,
+    name: section.title.isEmpty ? 'Slate section' : section.title,
     onLayout: (_) => buildDeckPdf(app, sectionId, title: section.title),
   );
 }

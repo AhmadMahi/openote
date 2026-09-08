@@ -94,12 +94,12 @@ abstract final class VideoPlayback {
   /// What to tell a user whose machine cannot play video. Platform-specific,
   /// because "install libmpv" is not something anyone can act on directly.
   static String get missingLibraryAdvice =>
-      'Openote plays video through libmpv, which is not installed.\n\n'
+      'Slate plays video through libmpv, which is not installed.\n\n'
       'Fedora and RHEL:  sudo dnf install mpv-libs\n'
       'Debian and Ubuntu:  sudo apt install libmpv2\n'
       '(older Debian and Ubuntu: libmpv1)\n\n'
       'The .deb and .rpm packages ask for this automatically — this normally '
-      'only comes up when Openote was unpacked by hand.';
+      'only comes up when Slate was unpacked by hand.';
 
   /// Pretend the library is missing, for tests that need the fallback path.
   /// No effect in a release build's normal flow, which only calls [probe].

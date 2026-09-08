@@ -56,7 +56,7 @@ class _EventAlertDialogState extends State<_EventAlertDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Openote can pop up before something in your timetable starts. '
+                'Slate can pop up before something in your timetable starts. '
                 'It works out what each event is from its name, so pick the '
                 'kinds you actually want interrupting for.',
                 style:
@@ -96,7 +96,7 @@ class _EventAlertDialogState extends State<_EventAlertDialog> {
                   borderRadius: OnoteRadius.mdAll,
                 ),
                 child: Text(
-                  'Alerts appear inside Openote, so they only reach you while '
+                  'Alerts appear inside Slate, so they only reach you while '
                   'it is running. Anything you missed is waiting in this panel '
                   'next time you open it.',
                   style: OnoteType.small

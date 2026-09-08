@@ -199,7 +199,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     return PopScope(
       canPop: !_busy,
       child: AlertDialog(
-        title: Text('Openote ${info.version} is available'),
+        title: Text('Slate ${info.version} is available'),
         content: SizedBox(
           width: 440,
           child: Column(
@@ -227,13 +227,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 LinearProgressIndicator(value: _progress),
                 const SizedBox(height: 6),
                 const Text(
-                    'Your notes are saved. Openote will close, update '
+                    'Your notes are saved. Slate will close, update '
                     'itself, and reopen.',
                     style: TextStyle(
                         fontSize: 11.5, color: OnoteColors.graphite400)),
               ] else if (_canAutoUpdate)
                 const Text(
-                    'Your notes will be saved first. Openote closes while '
+                    'Your notes will be saved first. Slate closes while '
                     'the update installs, then reopens by itself.',
                     style: TextStyle(fontSize: 12, height: 1.4))
               else

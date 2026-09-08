@@ -84,7 +84,7 @@ class _OnboardingState extends State<_Onboarding> {
       // behind "Details (advanced)", and this path had no such fold.
       if (mounted) {
         setState(() {
-          _error = "Openote couldn't open that notebook.";
+          _error = "Slate couldn't open that notebook.";
           _errorDetail = '$e';
         });
       }
@@ -183,7 +183,7 @@ class _OnboardingState extends State<_Onboarding> {
       title: Row(children: [
         Icon(Icons.menu_book_outlined, size: 20, color: scheme.primary),
         const SizedBox(width: 9),
-        const Text('Welcome to Openote'),
+        const Text('Welcome to Slate'),
       ]),
       content: SizedBox(
         width: 520,
@@ -399,7 +399,7 @@ class _OnboardingState extends State<_Onboarding> {
             Text(
               'On a Mac, or with only the Store version: export one section at '
               'a time as .one, or ask a Windows machine to make the .onepkg. '
-              'Openote never signs into your Microsoft account — it only reads '
+              'Slate never signs into your Microsoft account — it only reads '
               'the file you hand it.',
               style: TextStyle(
                   fontSize: 11, height: 1.45, color: context.surfaces.textSecondary),

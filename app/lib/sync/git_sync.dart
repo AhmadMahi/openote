@@ -190,7 +190,7 @@ class GitSync {
     // success unconditionally, which buried the fresh-machine identity
     // failure (see [_env]) under a green light — the first symptom anyone
     // saw was a repository on GitHub with nothing in it.
-    final committed = await commitAll('Openote: track this notebook');
+    final committed = await commitAll('Slate: track this notebook');
     if (!committed.ok) return committed;
     return const GitResult(0, '', '');
   }

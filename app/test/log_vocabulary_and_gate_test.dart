@@ -218,7 +218,7 @@ void main() {
       ]) {
         expect(said, isNot(contains(jargon)), reason: 'jargon: "$jargon"');
       }
-      expect(problem.message, contains('newer version of Openote'));
+      expect(problem.message, contains('newer version of Slate'));
       expect(problem.details, contains('envelope version'),
           reason: 'the technical half exists — it is just folded away');
     });

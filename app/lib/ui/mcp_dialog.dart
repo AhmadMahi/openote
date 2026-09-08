@@ -95,7 +95,7 @@ class _McpDialogState extends State<_McpDialog> {
               const Text(
                 'Let an AI helper — like Claude — read your notes, search '
                 'them, quiz you, and make flashcards from them. It only '
-                'works while Openote is open, only on this computer, and '
+                'works while Slate is open, only on this computer, and '
                 'anything it adds is a normal edit: Ctrl+Z undoes it.',
                 style: TextStyle(fontSize: 12.5, height: 1.4),
               ),
@@ -168,7 +168,7 @@ class _McpDialogState extends State<_McpDialog> {
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                          'Openote speaks MCP, the standard AI tools use to '
+                          'Slate speaks MCP, the standard AI tools use to '
                           'connect to apps. Any MCP-capable tool can use '
                           'this — the key inside is a password, so paste it '
                           'only into tools you trust.',

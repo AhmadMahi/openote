@@ -94,7 +94,7 @@ class GitHubApi {
     final r = await _send('POST', '/user/repos', {
       'name': name,
       'private': private,
-      'description': description ?? 'Openote notebook',
+      'description': description ?? 'Slate notebook',
       // No README, no licence, no .gitignore: an initial commit on the remote
       // is a second root the notebook has to be merged with on its first
       // push, for a file nobody asked for.

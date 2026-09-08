@@ -38,7 +38,7 @@ const notebookFolderExtension = '.onotebook';
 ///
 /// **Windows associates EXTENSIONS, and a directory name has none.** The two
 /// mechanisms Windows does offer are a `Directory\shell\<verb>` entry, which
-/// puts "Open with Openote" on the context menu of *every folder on the
+/// puts "Open with Slate" on the context menu of *every folder on the
 /// machine* and still does not change what a double-click does, and a
 /// registered shell namespace extension, which is a COM DLL and far outside
 /// what a per-user Inno install can or should do. So the folder gets a small

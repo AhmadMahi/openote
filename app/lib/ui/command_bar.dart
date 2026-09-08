@@ -33,7 +33,7 @@ import 'onote_dialog.dart';
 import 'object_row.dart' show BackgroundSpacingButton, WordCount;
 
 /// The tabbed command bar (style guide §7 revised): Home · Insert · Draw ·
-/// View. OneNote's few-clicks accessibility in Openote's calm language — a
+/// View. OneNote's few-clicks accessibility in Slate's calm language — a
 /// slim tab row over a single command row of grouped icon buttons.
 class CommandBar extends StatefulWidget {
   const CommandBar({super.key, required this.app});

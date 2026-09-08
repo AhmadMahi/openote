@@ -54,7 +54,7 @@ enum UnlockPolicy {
 
   /// Until Openote exits. Nothing is persisted, so this is simply the absence
   /// of an expiry within a session.
-  session('session', 'Until Openote is closed', null);
+  session('session', 'Until Slate is closed', null);
 
   const UnlockPolicy(this.id, this.label, this.duration);
 

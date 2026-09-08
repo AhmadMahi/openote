@@ -439,7 +439,7 @@ class PortalBlockView extends StatelessWidget {
     final ref = PortalRef.parse(block.content);
     if (ref == null) {
       return _fallback(context, Icons.crop_free,
-          'This window was made by a newer version of Openote.');
+          'This window was made by a newer version of Slate.');
     }
     final live = portalSourceLive(app, ref.pageId);
     final src = PortalSource.of(app, ref.pageId);

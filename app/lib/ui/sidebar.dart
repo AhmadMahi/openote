@@ -2040,7 +2040,7 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('“${node.title}” is locked. It is hidden inside '
-                'Openote, not encrypted in the file.')));
+                'Slate, not encrypted in the file.')));
       }
     case 'unprotect':
       final ok = await askToUnlock(

@@ -58,7 +58,7 @@ String syncStateTooltip(AppState app, String notebookId) {
         // difference between the two mechanisms, and the moment it matters is
         // the moment someone closes a laptop mid-sentence.
         : 'Syncing to $where — pushed a minute after you stop typing, and '
-            'again when you close Openote';
+            'again when you close Slate';
     return s.hasOtherDevices
         ? '$how · ${s.devices} devices have opened it'
         : how;
@@ -84,7 +84,7 @@ String syncChipTooltip(SyncStatus s) {
     b.write(s.isFolderSynced
         ? 'Syncing through ${s.where}.\n'
         : 'Pushed to ${s.where} a minute after you stop typing, and again '
-            'when you close Openote.\n');
+            'when you close Slate.\n');
     b.write(s.hasOtherDevices
         ? 'Edited on ${s.devices} devices — changes arrive automatically.'
         : 'Open this notebook on another device to sync it.');

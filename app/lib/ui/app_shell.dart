@@ -2185,7 +2185,7 @@ class _LockedPage extends StatelessWidget {
             const SizedBox(height: 8),
             const Text(
               'Enter the passcode to read it. This hides the page inside '
-              'Openote — it is not encrypted, so anyone with the notebook '
+              'Slate — it is not encrypted, so anyone with the notebook '
               'file can still read it.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, height: 1.45),

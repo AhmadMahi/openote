@@ -504,7 +504,7 @@ class _MathBarState extends State<MathBar> {
                         ? Padding(
                             padding: const EdgeInsets.all(8),
                             child: Text(
-                              "Openote doesn't have that as a button yet. "
+                              "Slate doesn't have that as a button yet. "
                               'Anything at all can be written by hand from '
                               '⋯ ▸ Write the LaTeX by hand.',
                               style: OnoteType.small

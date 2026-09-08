@@ -215,7 +215,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   () => showShortcutOverlay(context)),
               _section('About'),
               _row(
-                'Openote $kAppVersion',
+                'Slate $kAppVersion',
                 _checking
                     ? const SizedBox(
                         width: 14,

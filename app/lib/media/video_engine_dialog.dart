@@ -83,7 +83,7 @@ class _GetVideoPlayerDialogState extends State<_GetVideoPlayerDialog> {
       icon: Icon(failed == null ? Icons.play_circle_outline : Icons.error_outline,
           color: failed == null ? null : OnoteColors.danger),
       title: Text(failed == null
-          ? 'Play videos inside Openote'
+          ? 'Play videos inside Slate'
           : 'That did not download'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -94,7 +94,7 @@ class _GetVideoPlayerDialogState extends State<_GetVideoPlayerDialog> {
             Text(failed?.message ??
                 'Your video is already saved on this computer, inside this '
                     'notebook. To show it here in the page rather than in '
-                    'another window, Openote needs its video player — a '
+                    'another window, Slate needs its video player — a '
                     'one-off download of about $_size that then works for '
                     'every video, on every notebook, for good.'),
             const SizedBox(height: 10),

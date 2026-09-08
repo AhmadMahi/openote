@@ -194,7 +194,7 @@ Database openOnote(String path, {required String notebookId, required String tit
   final freshFile = appId == 0;
   if (!freshFile && appId != onoteApplicationId) {
     db.dispose();
-    throw StateError('Not an Openote notebook: $path');
+    throw StateError('Not an Slate notebook: $path');
   }
   if (!freshFile) {
     final ver = db.select('PRAGMA user_version;').first.columnAt(0) as int;

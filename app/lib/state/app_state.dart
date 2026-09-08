@@ -327,7 +327,7 @@ class AppState extends ChangeNotifier
       debugPrint('[openote] could not store pasted/dropped bytes: $e');
       _blobWriteError = SaveProblem(
         short: "That didn't get added",
-        message: 'Openote could not save the picture or file you just added, '
+        message: 'Slate could not save the picture or file you just added, '
             'so it is not in your notebook.\n\n'
             'Check that the disk is not full and that the notebook\'s folder '
             'is not set to read-only, then paste or drop it again.',
@@ -370,7 +370,7 @@ class AppState extends ChangeNotifier
   ///
   /// **Locked pages are excluded.** Without this the passcode gate would be
   /// bypassed by typing a word from the page into the search box, which would
-  /// make even its modest promise — "Openote will not show you this page" —
+  /// make even its modest promise — "Slate will not show you this page" —
   /// untrue. The gate makes no claim about the FILE (see page_protection.dart),
   /// but it has to be coherent inside the app that offers it.
   List<({String pageId, String snippet})> searchContent(String query) {
@@ -799,8 +799,8 @@ class AppState extends ChangeNotifier
     // file is not a fallback (task #73).
     final kept = await SecretStore.write(_githubSecret, t);
     if (!kept) {
-      return 'GitHub accepted the token, but Openote could not keep it. '
-          'Openote stores the token in your computer\'s own password '
+      return 'GitHub accepted the token, but Slate could not keep it. '
+          'Slate stores the token in your computer\'s own password '
           'storage — never in a plain file — and this computer\'s password '
           'storage did not take it.'
           '${Platform.isLinux ? ' On Linux, installing the "libsecret-tools" '
@@ -904,7 +904,7 @@ class AppState extends ChangeNotifier
         try {
           Directory(into).deleteSync(recursive: true);
         } catch (_) {}
-        return 'That repository does not look like an Openote notebook — '
+        return 'That repository does not look like an Slate notebook — '
             'there is no ops folder in it.';
       }
     }
@@ -1001,7 +1001,7 @@ class AppState extends ChangeNotifier
               ? repoNameFor(name!)
               : repoNameFor(currentNotebook.title),
           private: private,
-          description: 'Openote notebook — ${currentNotebook.title}');
+          description: 'Slate notebook — ${currentNotebook.title}');
       if (!made.ok) {
         gitStatus = made.error;
         return made.error;
@@ -1021,7 +1021,7 @@ class AppState extends ChangeNotifier
       gitStatus = 'Pushing to ${made.fullName}…';
       notifyListeners();
       await flushSave();
-      final pushed = await git.syncOnce(message: 'Openote: ${currentNotebook.title}');
+      final pushed = await git.syncOnce(message: 'Slate: ${currentNotebook.title}');
       if (!pushed.ok) {
         // The repository is real and the remote is set, so this is recoverable
         // by pressing Sync now — say so rather than leaving them wondering
@@ -1057,7 +1057,7 @@ class AppState extends ChangeNotifier
     try {
       // The logs have to be on disk before they can be committed.
       await flushSave();
-      final r = await _git.syncOnce(message: 'Openote: ${currentNotebook.title}');
+      final r = await _git.syncOnce(message: 'Slate: ${currentNotebook.title}');
       // **Fold in whatever the pull brought down.** Without this the cycle was
       // only half a sync: `git pull` wrote the other device's log files into
       // `ops/` and then nothing read them, so the notes arrived on disk and
@@ -1279,14 +1279,14 @@ class AppState extends ChangeNotifier
     debugPrint('[openote/sync] $where: $e');
     _logError = SaveProblem(
       short: 'Saved, but not recorded',
-      message: 'Openote saved your notes on this computer, but it could not '
+      message: 'Slate saved your notes on this computer, but it could not '
           "add the change to this notebook's history.\n\n"
           'The history is the copy your other devices, your backups and your '
           'shared folders read from, so those may fall behind until this '
           'works again. Nothing you have written has been lost.\n\n'
           "Check that the disk is not full, that the notebook's folder is not "
           'set to read-only, and that a cloud app such as OneDrive or Google '
-          'Drive has finished with it. Openote tries again every time you '
+          'Drive has finished with it. Slate tries again every time you '
           'save.',
       details: '$where\n$e',
     );
@@ -1296,8 +1296,8 @@ class AppState extends ChangeNotifier
   /// A page save that could not be written to the notebook file at all.
   static SaveProblem _pageSaveFailed(Object e) => SaveProblem(
         short: "Couldn't save — changes kept in memory",
-        message: 'Openote could not save this page to your computer.\n\n'
-            'Your changes are still on screen and Openote will try again the '
+        message: 'Slate could not save this page to your computer.\n\n'
+            'Your changes are still on screen and Slate will try again the '
             'next time you type, so nothing is lost yet — but close the app '
             'now and they would be.\n\n'
             'Check that the disk is not full and that the notebook is not '
@@ -1629,17 +1629,17 @@ class AppState extends ChangeNotifier
       // it told someone with a genuinely lost picture not to worry about it.
       _blobHole[nb] = SaveProblem(
         short: 'Some pictures may be missing',
-        message: 'Openote keeps a second copy of every picture and drawing '
+        message: 'Slate keeps a second copy of every picture and drawing '
             "inside this notebook's own folder, so your other devices and your "
             'backups can show them too.\n\n'
-            'For ${proof.holes} of them, Openote could not find good bytes '
+            'For ${proof.holes} of them, Slate could not find good bytes '
             "anywhere on this computer — not in that second copy, and not in "
             "the notebook's own working file either. Until they turn up "
             '(from another device, a backup, or by adding the picture '
             'again), it will show blank wherever it is used, on this '
             'computer as well as any other.\n\n'
             'Check that the disk is not full and that the folder is not set to '
-            'read-only, then close the notebook and open it again. Openote '
+            'read-only, then close the notebook and open it again. Slate '
             'tries again every time you open it.',
         details: '$nb\n$proof\n'
             'missing: ${_someHashes(proof.missing)}\n'
@@ -2314,7 +2314,7 @@ class AppState extends ChangeNotifier
     }
     if (unknownKinds > 0) {
       debugPrint('[openote/sync] left $unknownKinds node(s) alone — their kind '
-          'was written by a newer version of Openote, and guessing "page" is '
+          'was written by a newer version of Slate, and guessing "page" is '
           'how six section groups per notebook became pages');
     }
 
@@ -3103,7 +3103,7 @@ class AppState extends ChangeNotifier
     await flushSave();
     if (notebookIsReadOnly(nb)) {
       return const BlobReclaim(
-          refusal: 'This notebook was written by a newer version of Openote, '
+          refusal: 'This notebook was written by a newer version of Slate, '
               'so this one is only showing it to you. Nothing will be changed.');
     }
     // The backfill is what puts the bytes in `blobs/` in the first place;
@@ -3113,7 +3113,7 @@ class AppState extends ChangeNotifier
     final r = await warmRecorder(nb);
     if (r == null) {
       return const BlobReclaim(
-          refusal: "Openote could not open this notebook's own folder, so it "
+          refusal: "Slate could not open this notebook's own folder, so it "
               'cannot check that your pictures are safely copied there. '
               'Nothing has been changed.',
           details: 'no SyncRecorder for the notebook; see the save problem '
@@ -3122,7 +3122,7 @@ class AppState extends ChangeNotifier
     final proof = await proveBlobBytes(nb);
     if (!proof.ok) {
       return BlobReclaim(
-          refusal: 'Openote will not do this yet. ${proof.holes} of this '
+          refusal: 'Slate will not do this yet. ${proof.holes} of this '
               "notebook's pictures and drawings are missing or damaged in the "
               "notebook's own folder, and that is the copy this would leave "
               'you with. Nothing has been changed.',
@@ -3172,7 +3172,7 @@ class AppState extends ChangeNotifier
     await flushSave();
     if (notebookIsReadOnly(nb)) {
       return const ContainerRebuild(
-          refusal: 'This notebook was written by a newer version of Openote, '
+          refusal: 'This notebook was written by a newer version of Slate, '
               'so this one is only showing it to you. Nothing will be changed.');
     }
     // The backfill is what puts the bytes in `blobs/`; rebuilding while it is
@@ -3181,7 +3181,7 @@ class AppState extends ChangeNotifier
     final r = await warmRecorder(nb);
     if (r == null) {
       return const ContainerRebuild(
-          refusal: "Openote could not open this notebook's own folder, so it "
+          refusal: "Slate could not open this notebook's own folder, so it "
               'has no history to rebuild from. Nothing has been changed.',
           details: 'no SyncRecorder for the notebook; see the save problem '
               'reported separately');
@@ -3189,7 +3189,7 @@ class AppState extends ChangeNotifier
     final proof = await proveBlobBytes(nb);
     if (!proof.ok) {
       return ContainerRebuild(
-          refusal: 'Openote will not do this yet. ${proof.holes} of this '
+          refusal: 'Slate will not do this yet. ${proof.holes} of this '
               "notebook's pictures and drawings are missing or damaged in the "
               "notebook's own folder, and that folder is what a rebuilt "
               'notebook reads them from. Nothing has been changed.',
@@ -3248,14 +3248,14 @@ class AppState extends ChangeNotifier
     await flushSave();
     if (notebookIsReadOnly(nb)) {
       return const ContainerDemotion(
-          refusal: 'This notebook was written by a newer version of Openote, '
+          refusal: 'This notebook was written by a newer version of Slate, '
               'so this one is only showing it to you. Nothing will be changed.');
     }
     await awaitBlobBackfill(nb);
     final r = await warmRecorder(nb);
     if (r == null) {
       return const ContainerDemotion(
-          refusal: "Openote could not open this notebook's own folder, so "
+          refusal: "Slate could not open this notebook's own folder, so "
               'there would be nothing left to rebuild it from. Nothing has '
               'been changed.',
           details: 'no SyncRecorder for the notebook; see the save problem '
@@ -3264,7 +3264,7 @@ class AppState extends ChangeNotifier
     final proof = await proveBlobBytes(nb);
     if (!proof.ok) {
       return ContainerDemotion(
-          refusal: 'Openote will not do this yet. ${proof.holes} of this '
+          refusal: 'Slate will not do this yet. ${proof.holes} of this '
               "notebook's pictures and drawings are missing or damaged in the "
               "notebook's own folder, and that folder is where they would be "
               'read from. Nothing has been changed.',
@@ -3525,7 +3525,7 @@ class AppState extends ChangeNotifier
       }
       if (history == null) {
         return const VideoSweep(
-            refusal: "Openote couldn't read this notebook's list of recent "
+            refusal: "Slate couldn't read this notebook's list of recent "
                 'deletions, so it cannot tell which videos "Put it back" '
                 'still needs. Nothing has been removed.');
       }
@@ -3653,7 +3653,7 @@ class AppState extends ChangeNotifier
   /// A read-only notebook gets [n] straight back, unwritten. Callers all
   /// re-read the tree from the container afterwards ([reloadNodes]), so the
   /// section or page they thought they added simply never appears — which is
-  /// what "Openote is showing you this notebook without changing it" means.
+  /// what "Slate is showing you this notebook without changing it" means.
   TreeNode _putNode(String nb, TreeNode n) {
     if (notebookIsReadOnly(nb)) return n;
     final saved = _repo.upsertNode(nb, n);
@@ -6285,7 +6285,7 @@ class AppState extends ChangeNotifier
       // must open exactly what a double-click into a running app would.
       // Feeding the raw path to the container sniff is how launching Openote
       // by double-clicking a notebook folder's pointer file — the association
-      // Windows actually has — was told "That file isn't an Openote notebook"
+      // Windows actually has — was told "That file isn't an Slate notebook"
       // about the user's own notebook, while a running app opened it fine.
       final resolved = await _resolveHandedPath(notebookPath);
       asked = resolved.ref?.id;
@@ -6469,7 +6469,7 @@ class AppState extends ChangeNotifier
   OpenNotebookResult _copiedInNotice(NotebookRef ref, String from) =>
       OpenNotebookResult(
           OpenNotebookOutcome.copiedIn,
-          'Openote made a copy of "${ref.title}" in your notebooks. Changes '
+          'Slate made a copy of "${ref.title}" in your notebooks. Changes '
           'you make are saved to the copy, not to the file you opened.',
           details: 'Opened: $from\nCopy: ${ref.file}');
 
@@ -6519,7 +6519,7 @@ class AppState extends ChangeNotifier
         return (
           ref: null,
           problem: OpenNotebookResult(OpenNotebookOutcome.failed,
-              "Openote couldn't open that notebook.",
+              "Slate couldn't open that notebook.",
               details: '$folder\n\n$e'),
           copied: false
         );
@@ -6535,7 +6535,7 @@ class AppState extends ChangeNotifier
         ref: null,
         problem: OpenNotebookResult(
             OpenNotebookOutcome.notANotebook,
-            "This is Openote's working copy, not your notebook. Open the "
+            "This is Slate's working copy, not your notebook. Open the "
             'notebook folder instead.',
             details: path),
         copied: false
@@ -6605,7 +6605,7 @@ class AppState extends ChangeNotifier
       return (
         ref: null,
         problem: OpenNotebookResult(OpenNotebookOutcome.failed,
-            "Openote couldn't open that notebook.",
+            "Slate couldn't open that notebook.",
             details: '$abs\n\n$e'),
         copied: false
       );
@@ -6617,7 +6617,7 @@ class AppState extends ChangeNotifier
     final (outcome, message) = switch (problem) {
       NotebookFileProblem.missing => (
           OpenNotebookOutcome.notFound,
-          "Openote couldn't find that notebook. It may have been moved, "
+          "Slate couldn't find that notebook. It may have been moved, "
               'renamed or deleted since you last opened it.'
         ),
       NotebookFileProblem.notAFile => (
@@ -6626,12 +6626,12 @@ class AppState extends ChangeNotifier
         ),
       NotebookFileProblem.unreadable => (
           OpenNotebookOutcome.failed,
-          "Openote couldn't read that file. Another program may have it open, "
+          "Slate couldn't read that file. Another program may have it open, "
               'or it may be somewhere you do not have permission to read.'
         ),
       NotebookFileProblem.notANotebook => (
           OpenNotebookOutcome.notANotebook,
-          "That file isn't an Openote notebook, so there is nothing to open."
+          "That file isn't an Slate notebook, so there is nothing to open."
         ),
     };
     return OpenNotebookResult(outcome, message, details: path);
@@ -9210,13 +9210,13 @@ class AppState extends ChangeNotifier
     }.toList()
       ..sort();
     _logAhead[nb] = SaveProblem(
-      short: 'Read-only — made by a newer Openote',
+      short: 'Read-only — made by a newer Slate',
       message: 'This notebook has changes in it that were made by a newer '
-          'version of Openote, and this version cannot read them.\n\n'
-          'So Openote is showing you this notebook without changing it. '
+          'version of Slate, and this version cannot read them.\n\n'
+          'So Slate is showing you this notebook without changing it. '
           'Everything in it is safe, and nothing you do here can damage it — '
           'but anything you type now will not be kept.\n\n'
-          'Updating Openote to the latest version lets you edit it again.',
+          'Updating Slate to the latest version lets you edit it again.',
       details: 'the log holds ${ahead.length} operation(s) this build cannot '
           'apply\n'
           'envelope version(s): ${versions.join(', ')} — this build writes and '

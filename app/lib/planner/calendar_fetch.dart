@@ -92,7 +92,7 @@ class _Attempt {
 /// notices, and because an institution that wants to talk to us should be able
 /// to find out who we are from a log line.
 const String calendarUserAgent =
-    'Openote/1.0 (+https://openote.org; calendar subscription)';
+    'Slate/1.0 (+https://openote.org; calendar subscription)';
 
 /// Fetch [url] and return its body.
 ///

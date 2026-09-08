@@ -82,7 +82,7 @@ class _PageHistoryDialogState extends State<_PageHistoryDialog> {
               // an empty history — including for the page the student had
               // just deleted and came here to put back.
               if (app.historyTroubleFor(app.notebookId) case final why?)
-                _quiet("Openote couldn't read this notebook's list of recent "
+                _quiet("Slate couldn't read this notebook's list of recent "
                     'changes, so nothing is listed here yet. It rebuilds '
                     'itself the next time you open this.'
                     ''
@@ -156,7 +156,7 @@ class _PageHistoryDialogState extends State<_PageHistoryDialog> {
               Navigator.pop(context);
             } else {
               setState(() => _note =
-                  "Openote couldn't find that one to put back. Nothing was "
+                  "Slate couldn't find that one to put back. Nothing was "
                   'changed.');
             }
           },

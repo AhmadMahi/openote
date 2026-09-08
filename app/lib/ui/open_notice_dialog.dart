@@ -43,7 +43,7 @@ class _OpenNotebookNotice extends StatelessWidget {
         OpenNotebookOutcome.notFound => "That notebook isn't there any more",
         OpenNotebookOutcome.notANotebook => "That isn't a notebook",
         OpenNotebookOutcome.copiedIn => 'Added to your notebooks',
-        _ => "Openote couldn't open that",
+        _ => "Slate couldn't open that",
       };
 
   @override
@@ -64,7 +64,7 @@ class _OpenNotebookNotice extends StatelessWidget {
             if (_isFailure) ...[
               const SizedBox(height: 10),
               const Text(
-                'Everything else in Openote is untouched — your other '
+                'Everything else in Slate is untouched — your other '
                 'notebooks are exactly as you left them.',
                 style: TextStyle(fontSize: 12, color: OnoteColors.graphite400),
               ),

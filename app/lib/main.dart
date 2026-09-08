@@ -185,7 +185,7 @@ class _StartupError extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Openote couldn't start",
+                  const Text("Slate couldn't start",
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   const Text(

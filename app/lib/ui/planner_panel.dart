@@ -563,7 +563,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
         ] else
           // Said, not hidden. A calendar row with no menu at all reads as a
           // bug; a menu that explains why it cannot be edited is the answer to
-          // "Openote never writes to anyone's calendar".
+          // "Slate never writes to anyone's calendar".
           const PopupMenuItem(
             enabled: false,
             child: Text('From your calendar — read-only',
@@ -727,7 +727,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Reminder set for ${formatClock(r.at)} '
             '${relativeWhen(DatedItem(id: '', kind: DatedKind.reminder, title: '', when: r.at, allDay: true), now)}. '
-            'Openote will nudge you if it is open — and tell you if it wasn’t.')));
+            'Slate will nudge you if it is open — and tell you if it wasn’t.')));
   }
 
   Future<void> _subscribe() async {
@@ -741,7 +741,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
     final err = planner.calendar?.lastError;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(err == null
-            ? 'Timetable added. It refreshes when Openote opens.'
+            ? 'Timetable added. It refreshes when Slate opens.'
             : 'Could not load that calendar: $err')));
   }
 
@@ -757,7 +757,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                      'Openote reads the common parts of a calendar file. '
+                      'Slate reads the common parts of a calendar file. '
                       'Anything it could not read — or could not read exactly '
                       '— is listed here rather than dropped silently. Times '
                       'are shown in your computer’s time zone.',
@@ -954,7 +954,7 @@ class _ReminderDialogState extends State<_ReminderDialog> {
             // student wrongly believes will interrupt them is worse than no
             // reminder at all (v0.5 §1).
             Text(
-              'Openote nudges you while it is open. If it was closed when the '
+              'Slate nudges you while it is open. If it was closed when the '
               'time came, the reminder is waiting when you next open it.',
               style: TextStyle(fontSize: 11, height: 1.4,
                   color: context.surfaces.textSecondary),
@@ -1011,7 +1011,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               const Text(
                 'Paste the calendar address from your university timetable, '
                 'Google Calendar, Outlook or Apple Calendar. It usually ends '
-                'in .ics, and it is the only thing Openote ever sees — there '
+                'in .ics, and it is the only thing Slate ever sees — there '
                 'is no sign-in and no access to your account.',
                 style: TextStyle(fontSize: 12, height: 1.45),
               ),
@@ -1031,7 +1031,7 @@ class _CalendarDialogState extends State<_CalendarDialog> {
               ),
               const SizedBox(height: 10),
               Text(
-                'Read-only, one direction: Openote shows your timetable beside '
+                'Read-only, one direction: Slate shows your timetable beside '
                 'your notes and never writes anything back to it.',
                 style: TextStyle(
                     fontSize: 11, height: 1.4, color: context.surfaces.textSecondary),

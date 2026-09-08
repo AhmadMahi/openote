@@ -442,8 +442,8 @@ void main() {
         expect(lock.message, isNot(contains(jargon)),
             reason: 'the plain sentence must not contain "$jargon"');
       }
-      expect(lock.message, contains('newer version of Openote'));
-      expect(lock.message, contains('Updating Openote'));
+      expect(lock.message, contains('newer version of Slate'));
+      expect(lock.message, contains('Updating Slate'));
       expect(lock.details, contains('99'),
           reason: 'the technical half still exists, folded away');
     });

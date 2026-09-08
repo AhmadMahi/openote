@@ -226,7 +226,7 @@ abstract final class VideoEngine {
     await prepare();
     if (_root == null) {
       throw const EngineInstallFailure(
-        'Openote could not find anywhere on this computer to keep the video '
+        'Slate could not find anywhere on this computer to keep the video '
         'player.',
         'application support directory unavailable',
       );
@@ -258,7 +258,7 @@ abstract final class VideoEngine {
         final entry = zip.files.where((f) => _baseName(f.name) == want.name);
         if (entry.isEmpty) {
           throw EngineInstallFailure(
-            'The video player that arrived is not the one Openote expected. '
+            'The video player that arrived is not the one Slate expected. '
             'Nothing on this computer was changed.',
             'archive is missing ${want.name}',
           );
@@ -270,7 +270,7 @@ abstract final class VideoEngine {
         final got = sha256Hex(bytes);
         if (got != want.sha256) {
           throw EngineInstallFailure(
-            'The video player that arrived did not check out, so Openote has '
+            'The video player that arrived did not check out, so Slate has '
             'not installed it. Nothing on this computer was changed.',
             'sha-256 mismatch on ${want.name}: expected ${want.sha256}, '
                 'got $got',
@@ -293,7 +293,7 @@ abstract final class VideoEngine {
     } catch (e) {
       _deleteQuietly(partial);
       throw EngineInstallFailure(
-        'Openote could not save the video player. There may not be enough '
+        'Slate could not save the video player. There may not be enough '
         'room on this computer. Nothing else was changed.',
         'install failed: $e',
       );

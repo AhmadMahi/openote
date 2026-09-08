@@ -56,7 +56,7 @@ void main() {
     });
     await fetchCalendar(url);
     // A default `Dart/3.x (dart:io)` is what several institutional WAFs drop.
-    expect(agent, contains('Openote'));
+    expect(agent, contains('Slate'));
     // `*/*` matters: a feed served as application/octet-stream — which several
     // university systems do, because the URL has no .ics extension — 406s
     // against a strict Accept.

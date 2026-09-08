@@ -185,7 +185,7 @@ class _SyncDialogState extends State<_SyncDialog> {
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         duration: const Duration(seconds: 7),
-        content: Text('Notebook moved to $path — open Openote on your other '
+        content: Text('Notebook moved to $path — open Slate on your other '
             'device and add it from the same folder.'),
       ));
     } catch (e) {
@@ -268,7 +268,7 @@ class _SyncDialogState extends State<_SyncDialog> {
               _containerInCloudCard(),
               if (!status.isFolderSynced)
                 const Text(
-                  'Openote syncs through a folder your cloud already keeps in '
+                  'Slate syncs through a folder your cloud already keeps in '
                   'step — no account, no sign-in, and no access to the rest of '
                   'your Drive. Each device only ever writes its own file, so '
                   'your devices can never produce a conflicting copy.',
@@ -505,9 +505,9 @@ class _SyncDialogState extends State<_SyncDialog> {
           ]),
           const SizedBox(height: 6),
           Text(
-            'Openote uses that file to open this notebook quickly. It is not '
+            'Slate uses that file to open this notebook quickly. It is not '
             'the notes themselves, and it should stay on this computer: while '
-            '${folder.name} is copying it, Openote may be writing to it, and '
+            '${folder.name} is copying it, Slate may be writing to it, and '
             'that can damage the notebook.\n\n'
             'Moving it out changes nothing you can see. Your notes stay in '
             '${folder.name} and keep syncing to your other devices exactly as '
@@ -607,7 +607,7 @@ class _SyncDialogState extends State<_SyncDialog> {
           Text(
             status.hasOtherDevices
                 ? '${status.devices} devices have edited this notebook.'
-                : 'No other device has picked it up yet — install Openote '
+                : 'No other device has picked it up yet — install Slate '
                     'there and open it from the same folder.',
             style:
                 const TextStyle(fontSize: 12, height: 1.35),
@@ -1130,18 +1130,18 @@ class _StorageSectionState extends State<_StorageSection> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Openote keeps two things for every notebook: your notes, in '
+                'Slate keeps two things for every notebook: your notes, in '
                 "the notebook's own folder, and a working file it uses to open "
                 'them quickly.\n\n'
                 'This tucks the working file away where it belongs — out of '
-                'sight, on this computer only — and makes it something Openote '
+                'sight, on this computer only — and makes it something Slate '
                 'can always build again from your notes. It checks first that '
                 'your notes really do describe everything in this notebook, and '
                 'stops without changing anything if they do not.\n\n'
                 'What stays the same: every page, every picture, drawing, file '
                 'and recording, your recycle bin, and sharing with your other '
                 'computers.\n\n'
-                'What you lose: the automatic copies of each page that Openote '
+                'What you lose: the automatic copies of each page that Slate '
                 'used to take every ten minutes. Undo, the recycle bin and your '
                 'backups are unaffected.\n\n'
                 'You can put this back from this same panel afterwards, except '
@@ -1181,7 +1181,7 @@ class _StorageSectionState extends State<_StorageSection> {
       builder: (ctx) => AlertDialog(
         title: const Text('Go back to the old way?'),
         content: const Text(
-          "This puts the notebook's working file back where an older Openote "
+          "This puts the notebook's working file back where an older Slate "
           'looks for it, and puts its own copy of every picture and drawing '
           'back inside it.\n\n'
           'Your notes are not changed. The automatic copies of each page that '
@@ -1297,13 +1297,13 @@ class _StorageSectionState extends State<_StorageSection> {
           'Every picture and drawing in this notebook is stored twice at the '
           "moment: once inside the notes file, and once in the notebook's own "
           'folder beside it.\n\n'
-          'Openote will remove the copy inside the notes file. The copy in the '
+          'Slate will remove the copy inside the notes file. The copy in the '
           "notebook's folder is kept — that is the one your notes point at, "
           'the one that reaches your other devices, and the one your backups '
           'copy.\n\n'
           'It checks every picture first, and stops without changing anything '
           'if even one of them is not safely in that folder. If you ever need '
-          'the second copy back, Openote can put it there again.',
+          'the second copy back, Slate can put it there again.',
           style: TextStyle(fontSize: 13, height: 1.45),
         ),
         actions: [
@@ -1728,7 +1728,7 @@ class _GitSectionState extends State<_GitSection> {
                   'available here. Installing it from git-scm.com is all that '
                   'is needed.'
               : 'Keeps this notebook in a git repository and pushes it as you '
-                  'work. Your notes go in; the working file Openote keeps on '
+                  'work. Your notes go in; the working file Slate keeps on '
                   'this computer does not.',
           style: TextStyle(
               fontSize: 12, height: 1.4, color: context.surfaces.textSecondary),
@@ -1816,11 +1816,11 @@ class _GitSectionState extends State<_GitSection> {
           const SizedBox(height: 4),
           Text(
             app.githubConnected
-                ? 'Signed in to GitHub as ${app.githubLogin}. Openote keeps '
+                ? 'Signed in to GitHub as ${app.githubLogin}. Slate keeps '
                     'the token in this computer\'s own password storage and '
                     'sends it only to GitHub — it is never written into a '
                     'plain file, the notebook, or its repository.'
-                : 'Openote never asks for your password: it runs the git '
+                : 'Slate never asks for your password: it runs the git '
                     'already on this computer and uses whatever sign-in you '
                     'have set up for it. If a push needs credentials you have '
                     'not configured, it will say so here rather than appear '
@@ -1937,7 +1937,7 @@ class _GitHubPublishState extends State<_GitHubPublish> {
           const SizedBox(height: 8),
           if (!connected && !_pasting)
             Text(
-              'Openote can create the repository and push to it for you. It '
+              'Slate can create the repository and push to it for you. It '
               'needs a token from GitHub first — one page, once.',
               style: TextStyle(
                   fontSize: 11,
@@ -1957,7 +1957,7 @@ class _GitHubPublishState extends State<_GitHubPublish> {
                 if (!opened) {
                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
                     content: Text(
-                        "Openote couldn't open your browser. Go to "
+                        "Slate couldn't open your browser. Go to "
                         '${GitHubApi.tokenPage} and make a token there.'),
                     duration: const Duration(seconds: 10),
                   ));
@@ -1972,7 +1972,7 @@ class _GitHubPublishState extends State<_GitHubPublish> {
           if (!connected && _pasting) ...[
             Text(
               'On the page that just opened, scroll to the bottom and press '
-              '“Generate token”, then copy it and paste it here. Openote asked '
+              '“Generate token”, then copy it and paste it here. Slate asked '
               'for the “repo” permission and nothing else.',
               style: TextStyle(
                   fontSize: 11,
@@ -2114,7 +2114,7 @@ class _ComputerNameFieldState extends State<_ComputerNameField> {
         widget.app.setThisComputerLabel(widget.notebookId, _c.text);
     setState(() => _problem = ok
         ? null
-        : "Openote couldn't save that name. Your notes are unaffected.");
+        : "Slate couldn't save that name. Your notes are unaffected.");
   }
 
   @override

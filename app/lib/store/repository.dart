@@ -284,7 +284,7 @@ class Repository {
         await tryCreate(getApplicationSupportDirectory);
     if (dir == null) {
       throw StateError(
-          'Openote could not create a workspace folder in Documents or app data.');
+          'Slate could not create a workspace folder in Documents or app data.');
     }
     return dir;
   }
@@ -382,10 +382,10 @@ class Repository {
       // must not do is write the list back.
       registryReadOnly = (
         message: 'This list of notebooks was last used by a newer version of '
-            'Openote, so Openote is only reading it, not changing it. '
+            'Slate, so Slate is only reading it, not changing it. '
             'Notebooks you add, rename or delete now will be forgotten when '
             'you next start up.\n\n'
-            'Updating Openote to the latest version fixes this. Nothing '
+            'Updating Slate to the latest version fixes this. Nothing '
             'already in the list can be lost in the meantime.',
         details: 'workspace.json is format $found; this build writes and '
             'understands format $workspaceFormat.',
@@ -1315,7 +1315,7 @@ class Repository {
       debugPrint('[openote/store] could not compact $notebookId: $e');
       return SpaceReclaim(
           freed: 0,
-          problem: 'Openote could not tidy up this notebook just now. It is '
+          problem: 'Slate could not tidy up this notebook just now. It is '
               'usually because the file is open somewhere else, or the disk '
               'is full. Nothing was lost — try again in a moment.',
           details: '$e');
@@ -1434,7 +1434,7 @@ class Repository {
     // ── Gate 5, first half: nothing else is doing this right now. ──────
     if (reclaimInProgress) {
       return refuse(
-          'Openote is already tidying up a notebook. Let that finish first.',
+          'Slate is already tidying up a notebook. Let that finish first.',
           'marker: ${readReclaimMarker()}');
     }
 
@@ -1486,11 +1486,11 @@ class Repository {
     }
     if (absent.isNotEmpty || wrong.isNotEmpty) {
       return refuse(
-          "Openote will not do this yet. ${absent.length + wrong.length} of "
+          "Slate will not do this yet. ${absent.length + wrong.length} of "
           "this notebook's ${all.length} pictures and drawings do not have a "
           "good copy in the notebook's own folder, and that copy is the one "
           'that would be left. Open the notebook, leave it open for a minute '
-          'so Openote can finish copying, then try again.',
+          'so Slate can finish copying, then try again.',
           'no file: ${_fewHashes(absent)}\n'
           'wrong bytes: ${_fewHashes(wrong)}\n'
           'blobs rows ${tableHashes.length}, blob_refs hashes '
@@ -1506,7 +1506,7 @@ class Repository {
     final nowhere = blobsWithNoBytes(notebookId);
     if (served.isNotEmpty || nowhere.isNotEmpty) {
       return refuse(
-          'Openote is still reading some of this notebook’s pictures out '
+          'Slate is still reading some of this notebook’s pictures out '
           'of the notes file rather than out of the folder beside it. Close '
           'the notebook and open it again, then try this once more.',
           'served from the container: ${_fewHashes(served.toList())}\n'
@@ -1522,7 +1522,7 @@ class Repository {
     final free = FreeSpace.bytesFor(ref.file);
     if (free == null) {
       return refuse(
-          'Openote could not check how much room is left on this disk, and it '
+          'Slate could not check how much room is left on this disk, and it '
           'will not delete anything without knowing. Nothing has been changed.',
           'FreeSpace.bytesFor returned null for ${p.dirname(ref.file)}; '
           'needed ${_mb(need)}');
@@ -1553,7 +1553,7 @@ class Repository {
       if ((cp['busy'] as int? ?? 0) == 1) {
         return refuse(
             'Something else is using this notebook at the moment. Close any '
-            'other Openote window and try again.',
+            'other Slate window and try again.',
             'wal_checkpoint(TRUNCATE) busy=${cp['busy']}');
       }
       // Step 6 rewrote `blob_refs` to drop `REFERENCES blobs(hash)`, and this
@@ -1566,7 +1566,7 @@ class Repository {
           "AND name='blob_refs'").first['sql'] as String;
       if (ddl.contains('REFERENCES blobs')) {
         return refuse(
-            'This notebook needs to be opened once by this version of Openote '
+            'This notebook needs to be opened once by this version of Slate '
             'before it can be tidied up. Close it and open it again.',
             'blob_refs still declares REFERENCES blobs(hash); '
             '_dropBlobRefsBlobsFk has not run');
@@ -1610,7 +1610,7 @@ class Repository {
       );
     } catch (e) {
       return refuse(
-          'Openote could not finish tidying up this notebook. Your pictures '
+          'Slate could not finish tidying up this notebook. Your pictures '
           'and drawings are safe — they are all in the folder beside the '
           'notebook, and nothing was removed from there.',
           '$e');
@@ -1797,7 +1797,7 @@ class Repository {
     }
     if (reclaimInProgress) {
       return refuse(
-          'Openote is already tidying up a notebook. Let that finish first.',
+          'Slate is already tidying up a notebook. Let that finish first.',
           'marker: ${readReclaimMarker()}');
     }
 
@@ -1805,7 +1805,7 @@ class Repository {
     final store = OpLogStore.forNotebook(ref.file, logDir: ref.logDir);
     if (!store.opsDir.existsSync()) {
       return refuse(
-          "Openote could not find this notebook's own folder, so there is no "
+          "Slate could not find this notebook's own folder, so there is no "
           'history to rebuild it from. Nothing has been changed.',
           'no ops directory at ${store.opsDir.path}');
     }
@@ -1814,7 +1814,7 @@ class Repository {
       ops = store.readAll();
     } catch (e) {
       return refuse(
-          "Openote could not read this notebook's history. Nothing has been "
+          "Slate could not read this notebook's history. Nothing has been "
           'changed.',
           '$e');
     }
@@ -1830,9 +1830,9 @@ class Repository {
     // ── Gate 2: nothing in the log is beyond this build. ───────────────
     if (state.unsupported.isNotEmpty) {
       return refuse(
-          'Part of this notebook was written by a newer version of Openote, so '
+          'Part of this notebook was written by a newer version of Slate, so '
           'this one cannot rebuild it without leaving that part out. Update '
-          'Openote and try again. Nothing has been changed.',
+          'Slate and try again. Nothing has been changed.',
           '${state.unsupported.length} op(s) with an envelope this build '
           'cannot read; first: ${state.unsupported.first.kind}');
     }
@@ -1856,7 +1856,7 @@ class Repository {
     final differences = _rebuildDifferences(db, state);
     if (differences.isNotEmpty) {
       return refuse(
-          'Openote will not do this. Rebuilding this notebook from its saved '
+          'Slate will not do this. Rebuilding this notebook from its saved '
           'history would not give back what is in it now — '
           '${differences.length} page(s) or section(s) would come back '
           'different or empty. Nothing has been changed.',
@@ -1874,7 +1874,7 @@ class Repository {
     final free = FreeSpace.bytesFor(ref.file);
     if (free == null) {
       return refuse(
-          'Openote could not check how much room is left on this disk, and it '
+          'Slate could not check how much room is left on this disk, and it '
           'will not rebuild a notebook without knowing. Nothing has been '
           'changed.',
           'FreeSpace.bytesFor returned null for ${p.dirname(ref.file)}; '
@@ -2051,11 +2051,11 @@ class Repository {
         fresh = null;
         _deleteContainerFiles(tmpPath);
         return refuse(
-            'Openote will not do this yet. ${absent.length + wrong.length} of '
+            'Slate will not do this yet. ${absent.length + wrong.length} of '
             "this notebook's ${wanted.length} pictures and drawings do not "
             "have a good copy in the notebook's own folder, and rebuilding "
             'would leave you with the folder alone. Open the notebook, leave '
-            'it open for a minute so Openote can finish copying, then try '
+            'it open for a minute so Slate can finish copying, then try '
             'again.',
             'no file: ${_fewHashes(absent)}\n'
             'wrong bytes: ${_fewHashes(wrong)}');
@@ -2071,7 +2071,7 @@ class Repository {
       if (integrity != 'ok') {
         _deleteContainerFiles(tmpPath);
         return refuse(
-            'Openote built a replacement for this notebook and then found it '
+            'Slate built a replacement for this notebook and then found it '
             'was not sound, so it has thrown it away. Nothing has been '
             'changed.',
             'integrity_check on $tmpPath said "$integrity"');
@@ -2083,7 +2083,7 @@ class Repository {
         // not reach the swap.
         _deleteContainerFiles(tmpPath);
         return refuse(
-            'Openote built a replacement for this notebook and it came out '
+            'Slate built a replacement for this notebook and it came out '
             'smaller than the one you have, so it has thrown it away. Nothing '
             'has been changed.',
             'rebuilt $builtNodes node(s) / $builtPages page(s) against '
@@ -2117,7 +2117,7 @@ class Repository {
         details: unknownKinds == 0
             ? null
             : '$unknownKinds node(s) left out — their kind was written by a '
-                'newer version of Openote',
+                'newer version of Slate',
       );
     } catch (e) {
       try {
@@ -2129,7 +2129,7 @@ class Repository {
       // point. One recovery path, exercised by every failure.
       _settleInterruptedRebuild(ref.file);
       return refuse(
-          'Openote could not rebuild this notebook. Your notes have not been '
+          'Slate could not rebuild this notebook. Your notes have not been '
           'changed — everything is still where it was.',
           '$e');
     } finally {
@@ -2287,21 +2287,21 @@ class Repository {
     }
     if (reclaimInProgress) {
       return refuse(
-          'Openote is already tidying up a notebook. Let that finish first.',
+          'Slate is already tidying up a notebook. Let that finish first.',
           'marker: ${readReclaimMarker()}');
     }
     // ── Gate 1: this build is allowed to write the list of notebooks. ──
     if (registryReadOnly != null) {
       return refuse(
-          'Your list of notebooks was last used by a newer version of Openote, '
-          'so this one is only reading it. Update Openote first — moving this '
+          'Your list of notebooks was last used by a newer version of Slate, '
+          'so this one is only reading it. Update Slate first — moving this '
           'notebook now would lose track of where it went.',
           registryReadOnly!.details);
     }
     final file = File(ref.file);
     if (!file.existsSync()) {
       return refuse(
-          'Openote cannot find this notebook at the moment, so it has not '
+          'Slate cannot find this notebook at the moment, so it has not '
           'changed anything.',
           'no file at ${ref.file}');
     }
@@ -2311,14 +2311,14 @@ class Repository {
     if (p.isWithin(cacheDirFor(notebookId).path, logs) ||
         p.equals(p.basename(logs), workingCopyFileName)) {
       return refuse(
-          "Openote cannot tell where this notebook's own folder is, so it has "
+          "Slate cannot tell where this notebook's own folder is, so it has "
           'not changed anything.',
           'refusing to record a log directory inside the cache: $logs');
     }
     final store = OpLogStore.forNotebook(ref.file, logDir: ref.logDir);
     if (!store.opsDir.existsSync()) {
       return refuse(
-          "Openote could not find this notebook's own folder, so there would be "
+          "Slate could not find this notebook's own folder, so there would be "
           'nothing left to rebuild it from. Nothing has been changed.',
           'no ops directory at ${store.opsDir.path}');
     }
@@ -2327,7 +2327,7 @@ class Repository {
       ops = store.readAll();
     } catch (e) {
       return refuse(
-          "Openote could not read this notebook's history. Nothing has been "
+          "Slate could not read this notebook's history. Nothing has been "
           'changed.',
           '$e');
     }
@@ -2341,8 +2341,8 @@ class Repository {
     final state = Materializer()..applyAll(ops);
     if (state.unsupported.isNotEmpty) {
       return refuse(
-          'Part of this notebook was written by a newer version of Openote, so '
-          'this one cannot read all of it. Update Openote and try again. '
+          'Part of this notebook was written by a newer version of Slate, so '
+          'this one cannot read all of it. Update Slate and try again. '
           'Nothing has been changed.',
           '${state.unsupported.length} op(s) with an envelope this build '
           'cannot read; first: ${state.unsupported.first.kind}');
@@ -2353,10 +2353,10 @@ class Repository {
     final differences = _rebuildDifferences(db, state);
     if (differences.isNotEmpty) {
       return refuse(
-          'Openote will not do this. This notebook has things in it that its '
+          'Slate will not do this. This notebook has things in it that its '
           'saved history does not describe — ${differences.length} page(s) or '
           'section(s) — so the notes file is still the only copy of them and '
-          'must not be treated as one Openote can throw away. Nothing has been '
+          'must not be treated as one Slate can throw away. Nothing has been '
           'changed.',
           '${differences.length} difference(s), first few:\n'
           '${differences.take(5).join('\n')}\n'
@@ -2371,7 +2371,7 @@ class Repository {
     final free = FreeSpace.bytesFor(ref.file);
     if (free == null) {
       return refuse(
-          'Openote could not check how much room is left on this disk, and it '
+          'Slate could not check how much room is left on this disk, and it '
           'will not move a notebook without knowing. Nothing has been changed.',
           'FreeSpace.bytesFor returned null for ${p.dirname(ref.file)}; '
           'needed ${_mb(need)}');
@@ -2484,7 +2484,7 @@ class Repository {
         } catch (_) {/* [_settleDemotion] drops it at the next start */}
       }
       return refuse(
-          'Openote could not change how this notebook is stored. Your notes '
+          'Slate could not change how this notebook is stored. Your notes '
           'have not been changed — everything is still where it was.',
           '$e');
     } finally {
@@ -2528,19 +2528,19 @@ class Repository {
     }
     if (reclaimInProgress) {
       return refuse(
-          'Openote is already tidying up a notebook. Let that finish first.',
+          'Slate is already tidying up a notebook. Let that finish first.',
           'marker: ${readReclaimMarker()}');
     }
     if (registryReadOnly != null) {
       return refuse(
-          'Your list of notebooks was last used by a newer version of Openote, '
+          'Your list of notebooks was last used by a newer version of Slate, '
           'so this one is only reading it. Nothing has been changed.',
           registryReadOnly!.details);
     }
     final file = File(ref.file);
     if (!file.existsSync()) {
       return refuse(
-          'Openote cannot find this notebook at the moment, so it has not '
+          'Slate cannot find this notebook at the moment, so it has not '
           'changed anything.',
           'no file at ${ref.file}');
     }
@@ -2618,7 +2618,7 @@ class Repository {
         } catch (_) {/* the leftovers scan reports it */}
       }
       return refuse(
-          'Openote could not put this notebook back the old way. Your notes '
+          'Slate could not put this notebook back the old way. Your notes '
           'have not been changed — everything is still where it was.',
           '$e');
     } finally {

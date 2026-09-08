@@ -35,7 +35,7 @@ class McpToolError implements Exception {
 final List<Map<String, Object>> mcpToolDefinitions = [
   {
     'name': 'list_notebooks',
-    'description': 'Every notebook in this Openote workspace. The one with '
+    'description': 'Every notebook in this Slate workspace. The one with '
         'open=true is on screen right now.',
     'inputSchema': {'type': 'object', 'properties': <String, Object>{}},
   },
@@ -116,7 +116,7 @@ final List<Map<String, Object>> mcpToolDefinitions = [
   },
   {
     'name': 'append_markdown',
-    'description': 'Append prose to a page as one text block. Openote text '
+    'description': 'Append prose to a page as one text block. Slate text '
         'blocks render Markdown, so headings, lists, checkboxes, bold and '
         'links all work.',
     'inputSchema': {

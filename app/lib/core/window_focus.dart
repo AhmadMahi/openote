@@ -1,6 +1,6 @@
 /// Bringing the already-running Openote to the front.
 ///
-/// Only half of "one Openote per workspace" is safety (see
+/// Only half of "one Slate per workspace" is safety (see
 /// [SingleInstance] — two processes on one WAL container is the corruption
 /// case ADR-0006 §3 designs against). The other half is that the user
 /// double-clicked a notebook and expects to *see* it. An instance that

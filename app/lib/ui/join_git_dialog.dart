@@ -87,7 +87,7 @@ class _JoinDialogState extends State<_JoinDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Paste the address of a repository holding an Openote notebook. '
+              'Paste the address of a repository holding an Slate notebook. '
               'It is copied to this computer and kept in step from then on — '
               'this machine writes its own file, so the two can never '
               'overwrite each other.',
