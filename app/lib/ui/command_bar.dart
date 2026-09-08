@@ -919,10 +919,18 @@ class _CommandBarState extends State<CommandBar> {
       // rectangle rather than matching an edge.
       IconButton(
         icon: const Icon(Icons.fit_screen_outlined, size: 18),
-        tooltip: paged
-            ? 'Zoom to fit — the ${app.pageProps.paper.name} sheet, exactly '
-                'the window width'
-            : 'Zoom to fit — the page, exactly the window width',
+        tooltip: app.canvas.fitLocked
+            ? 'Fitted to the window width — horizontal scrolling is off.\n'
+                'Zoom by hand to release it.'
+            : (paged
+                ? 'Zoom to fit — the ${app.pageProps.paper.name} sheet, '
+                    'exactly the window width, no sideways scrolling'
+                : 'Zoom to fit — the page, exactly the window width, no '
+                    'sideways scrolling'),
+        // Shown as ON while it is latched: a mode you cannot see is a mode
+        // you blame the app for.
+        isSelected: app.canvas.fitLocked,
+        color: app.canvas.fitLocked ? scheme.primary : null,
         visualDensity: VisualDensity.compact,
         onPressed: app.fitPageToWidth,
       ),
@@ -1885,13 +1893,6 @@ class _ColorWellState extends State<_ColorWell> {
       app,
       initial: app.inkPalette[index],
       title: app.tool == Tool.highlighter ? 'Highlighter colour' : 'Pen colour',
-      // The well's own key, set right where the colour is set. Applied on the
-      // spot rather than on Apply: a shortcut is not part of the colour, and
-      // cancelling out of a colour you decided against should not also throw
-      // away the key you just chose.
-      shortcut:
-          index < app.inkShortcuts.length ? app.inkShortcuts[index] : '',
-      onShortcut: (k) => app.setInkShortcut(index, k),
     );
     if (picked == null) return;
     app.setInkPaletteColor(index, picked.startsWith('#') ? picked : '#$picked');
@@ -1962,13 +1963,8 @@ class _ColorWellState extends State<_ColorWell> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Tooltip(
-        message: () {
-          final k =
-              index < app.inkShortcuts.length ? app.inkShortcuts[index] : '';
-          return 'Ink colour ${index + 1}'
-              '${k.isEmpty ? '' : '  ·  ${k.toUpperCase()}'}'
-              '\nDouble-click to change its colour and key';
-        }(),
+        message: 'Ink colour ${index + 1}'
+            '\nDouble-click to change it, right-click to remove it',
         child: InkWell(
           borderRadius: BorderRadius.circular(99),
           onTap: () => _tap(context),
@@ -2031,6 +2027,10 @@ class _PalettePicker extends StatelessWidget {
           app.applyInkPalette(v);
         } else if (v == 'save') {
           _savePalette(context);
+        } else if (v == 'reset') {
+          _reset(context);
+        } else if (v is String && v.startsWith('delete:')) {
+          app.deleteCustomPalette(v.substring('delete:'.length));
         }
       },
       itemBuilder: (_) => [
@@ -2071,8 +2071,58 @@ class _PalettePicker extends StatelessWidget {
                 style: TextStyle(fontSize: 13)),
           ]),
         ),
+        // Deleting is offered per palette, and only for the ones you made:
+        // the built-ins are the floor you can always get back to.
+        for (final p in app.customPalettes)
+          PopupMenuItem<Object>(
+            value: 'delete:${p.name}',
+            height: 34,
+            child: Row(children: [
+              const Icon(Icons.delete_outline, size: 16),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text('Delete “${p.name}”',
+                      style: const TextStyle(fontSize: 13))),
+            ]),
+          ),
+        const PopupMenuItem<Object>(
+          value: 'reset',
+          height: 36,
+          child: Row(children: [
+            Icon(Icons.restart_alt, size: 16),
+            SizedBox(width: 10),
+            Text('Reset palettes', style: TextStyle(fontSize: 13)),
+          ]),
+        ),
       ],
     );
+  }
+
+  /// Reset asks first: it throws away every palette the user saved, and that
+  /// is not something a menu click should be able to do silently.
+  Future<void> _reset(BuildContext context) async {
+    final ok = await showOnoteDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset palettes?'),
+        content: Text(
+          app.customPalettes.isEmpty
+              ? 'The colours go back to the built-in set.'
+              : 'The colours go back to the built-in set, and the '
+                  '${app.customPalettes.length} palette'
+                  '${app.customPalettes.length == 1 ? '' : 's'} you saved '
+                  'are deleted.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Reset')),
+        ],
+      ),
+    );
+    if (ok == true) app.resetPalettes();
   }
 
   Future<void> _savePalette(BuildContext context) async {

@@ -4006,7 +4006,7 @@ class AppState extends ChangeNotifier
   /// [cycleInkColor] worth pressing.
   static const int maxPaletteColours = 4;
 
-  List<String> penPalette = InkPalettes.presets.first.colours.toList();
+  List<String> penPalette = InkPalettes.classic.colours.toList();
   List<String> highlighterPalette =
       _hexes(OnoteColors.highlighterColors).take(maxPaletteColours).toList();
 
@@ -4088,9 +4088,7 @@ class AppState extends ChangeNotifier
   void addInkColor(String hex) {
     final list = tool == Tool.highlighter ? highlighterPalette : penPalette;
     if (list.length >= maxPaletteColours) return;
-    final k = sanitiseShortcut('');
     list.add(hex);
-    (tool == Tool.highlighter ? highlighterShortcuts : penShortcuts).add(k);
     penColor = list.length - 1;
     _savePalette();
     notifyListeners();
@@ -4102,8 +4100,6 @@ class AppState extends ChangeNotifier
     final list = tool == Tool.highlighter ? highlighterPalette : penPalette;
     if (list.length <= 1 || i < 0 || i >= list.length) return;
     list.removeAt(i);
-    final keys = tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
-    if (i < keys.length) keys.removeAt(i);
     // Keep something armed, and keep it near where the eye already was.
     penColor = penColor.clamp(0, list.length - 1);
     _savePalette();
@@ -4111,14 +4107,25 @@ class AppState extends ChangeNotifier
   }
 
   /// Replace the current tool's row with a ready-made palette.
+  ///
+  /// The outgoing colours are kept as "Previous" first. Applying a palette is
+  /// one click and used to discard a row somebody had built by hand, with no
+  /// undo and no warning — which is exactly how a hand-picked palette was
+  /// lost. One slot, overwritten each time: a growing pile of Previous 1, 2,
+  /// 3 would be its own mess.
   void applyInkPalette(InkPalette p) {
+    final outgoing = List<String>.from(inkPalette);
+    if (outgoing.isNotEmpty && !_sameStrings(outgoing, p.colours)) {
+      customPalettes.removeWhere((e) => e.name == _previousPaletteName);
+      customPalettes.insert(
+          0, InkPalette(_previousPaletteName, outgoing));
+      _saveCustomPalettes();
+    }
     final colours = p.colours.take(maxPaletteColours).toList();
     if (tool == Tool.highlighter) {
       highlighterPalette = colours;
-      highlighterShortcuts = List.filled(colours.length, '');
     } else {
       penPalette = colours;
-      penShortcuts = List.filled(colours.length, '');
     }
     penColor = 0;
     activePaletteName = p.name;
@@ -4129,18 +4136,53 @@ class AppState extends ChangeNotifier
 
   /// The name of the palette last chosen, for the picker's tick. Empty once a
   /// colour has been edited by hand — the row is then nobody's preset.
-  String activePaletteName = InkPalettes.presets.first.name;
+  String activePaletteName = InkPalettes.classic.name;
 
   /// Palettes the user made, on top of the built-in ones.
   List<InkPalette> customPalettes = [];
 
+  static const String _previousPaletteName = 'Previous';
+
   void addCustomPalette(String name, List<String> colours) {
     customPalettes.add(InkPalette(
         name, colours.take(maxPaletteColours).toList(growable: false)));
+    _saveCustomPalettes();
+    notifyListeners();
+  }
+
+  /// Forget a palette you made. Built-in ones are not removable — they are
+  /// the floor you can always get back to.
+  void deleteCustomPalette(String name) {
+    final before = customPalettes.length;
+    customPalettes.removeWhere((p) => p.name == name);
+    if (customPalettes.length == before) return;
+    _saveCustomPalettes();
+    notifyListeners();
+  }
+
+  /// Throw away every palette you made and put the built-in row back.
+  ///
+  /// The way out of a palette you have painted yourself into, which otherwise
+  /// means editing four colours one at a time to get back to something
+  /// legible.
+  void resetPalettes() {
+    customPalettes.clear();
+    _saveCustomPalettes();
+    penPalette = InkPalettes.classic.colours.toList();
+    highlighterPalette =
+        _hexes(OnoteColors.highlighterColors).take(maxPaletteColours).toList();
+    penColor = 0;
+    activePaletteName = InkPalettes.classic.name;
+    _repo.setSetting('activePalette', activePaletteName);
+    _repo.setSetting('penPalette', penPalette);
+    _repo.setSetting('highlighterPalette', highlighterPalette);
+    notifyListeners();
+  }
+
+  void _saveCustomPalettes() {
     _repo.setSetting('customPalettes', [
       for (final p in customPalettes) {'name': p.name, 'colours': p.colours}
     ]);
-    notifyListeners();
   }
 
   /// Every palette on offer: the built-ins, then anything the user made.
@@ -4153,9 +4195,6 @@ class AppState extends ChangeNotifier
     _repo.setSetting(
         tool == Tool.highlighter ? 'highlighterPalette' : 'penPalette',
         tool == Tool.highlighter ? highlighterPalette : penPalette);
-    _repo.setSetting(
-        tool == Tool.highlighter ? 'highlighterShortcuts' : 'penShortcuts',
-        tool == Tool.highlighter ? highlighterShortcuts : penShortcuts);
   }
 
   /// Step the armed well by [delta] (+1 next, -1 previous).
@@ -4177,16 +4216,26 @@ class AppState extends ChangeNotifier
   /// A user-chosen key for each ink well, as a printable character — 'q',
   /// '5', '/' — or the empty string for "no shortcut on this well".
   ///
-  /// The fixed 1…6 keys stay, and are not stored here: they are the ones you
-  /// can rely on in someone else's copy of Openote. These are additions, for
-  /// people whose hand does not want to leave the letters to reach the number
-  /// row, and they are per tool for the same reason the palettes are — the
-  /// key that means yellow highlighter should not mean yellow pen.
-  /// Sized to the palette, and RESIZED with it. A fixed-length list beside a
-  /// variable-length one is a pair that drifts, and the drift shows up as a
-  /// key that arms a colour which is no longer there.
-  List<String> penShortcuts = List.filled(maxPaletteColours, '');
-  List<String> highlighterShortcuts = List.filled(maxPaletteColours, '');
+  /// ONE key steps the palette, and it is the only colour shortcut there is.
+  ///
+  /// There used to be a bindable key per well as well. Two schemes for one
+  /// job is one more than anyone holds in their head — the owner's words were
+  /// "don't give alternate shortcuts to each colour set; the colours in the
+  /// palette will just always have the round robin". A row of at most four,
+  /// stepped by one key, needs no second scheme, and removing it took a
+  /// per-tool list that had to be kept the same length as the palette with
+  /// it.
+  ///
+  /// Held with Ctrl and stored as the bare character: a naked letter is the
+  /// tool keys' territory, and this has to work while a tool is armed.
+  /// Customisable in Settings; empty means no cycling key at all.
+  String cycleColorKey = 'k';
+
+  void setCycleColorKey(String key) {
+    cycleColorKey = sanitiseShortcut(key);
+    _repo.setSetting('cycleColorKey', cycleColorKey);
+    notifyListeners();
+  }
 
   /// A shortcut is one PRINTABLE character, or nothing.
   ///
@@ -4218,29 +4267,7 @@ class AppState extends ChangeNotifier
           sanitiseShortcut(i < raw.length ? raw[i] as String? : null)
       ];
 
-  List<String> get inkShortcuts =>
-      tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
 
-  /// Bind [key] to well [i] of the current tool, or clear it with ''.
-  ///
-  /// A key can only mean one well, so binding a key that is already taken
-  /// takes it: a shortcut list where the same key appears twice has a winner
-  /// decided by iteration order, which is not something a user can see.
-  void setInkShortcut(int i, String key) {
-    final list = tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
-    if (i < 0 || i >= list.length) return;
-    final k = sanitiseShortcut(key.trim());
-    if (k.isNotEmpty) {
-      for (var j = 0; j < list.length; j++) {
-        if (list[j] == k) list[j] = '';
-      }
-    }
-    list[i] = k;
-    _repo.setSetting(
-        tool == Tool.highlighter ? 'highlighterShortcuts' : 'penShortcuts',
-        list);
-    notifyListeners();
-  }
 
   /// A user-chosen key for a TOOL, as a printable character. Keyed by
   /// [Tool.name] so a new tool cannot silently inherit somebody's binding.
@@ -4278,12 +4305,6 @@ class AppState extends ChangeNotifier
     return null;
   }
 
-  /// The well [key] is bound to for the armed tool, or -1.
-  int inkWellForKey(String key) {
-    final k = sanitiseShortcut(key);
-    if (k.isEmpty) return -1;
-    return inkShortcuts.indexOf(k);
-  }
 
 
   // ── Tags (TEXT-5) ────────────────────────────────────────────────────
@@ -6222,20 +6243,12 @@ class AppState extends ChangeNotifier
     // for every future build to re-clean, and leaves a settings file that
     // says something the app does not believe — the next tool to read it
     // (an export, a sync, a person) would still see the invisible byte.
-    // Sized to the palette that was just loaded, not to a constant: the two
-    // are indexed together, and a shortcut list longer than the row it
-    // belongs to would bind a key to a colour that is not there.
-    final psc = _repo.getSetting('penShortcuts');
-    penShortcuts =
-        _sanitisedList(psc is List ? psc : const [], penPalette.length);
-    if (psc is List && !_sameStrings(psc, penShortcuts)) {
-      _repo.setSetting('penShortcuts', penShortcuts);
-    }
-    final hsc = _repo.getSetting('highlighterShortcuts');
-    highlighterShortcuts = _sanitisedList(
-        hsc is List ? hsc : const [], highlighterPalette.length);
-    if (hsc is List && !_sameStrings(hsc, highlighterShortcuts)) {
-      _repo.setSetting('highlighterShortcuts', highlighterShortcuts);
+    final ck = _repo.getSetting('cycleColorKey');
+    if (ck is String) cycleColorKey = sanitiseShortcut(ck);
+    // The per-well keys are gone; drop what they left behind rather than
+    // leaving two dead lists in everybody's settings file forever.
+    for (final dead in const ['penShortcuts', 'highlighterShortcuts']) {
+      if (_repo.getSetting(dead) != null) _repo.setSetting(dead, null);
     }
     final tsc = _repo.getSetting('toolShortcuts');
     if (tsc is Map) {
@@ -7608,9 +7621,17 @@ class AppState extends ChangeNotifier
     // inside the paper means the sheet fills the window AND there is nothing
     // to scroll to. The canvas is deliberately NOT clamped to the sheet —
     // that would make anything already drawn outside it unreachable.
+    // In page mode it is the SHEET that must match the window, edge to edge.
+    // The surface is wider when something has strayed outside the paper, and
+    // fitting that instead shrinks the sheet to a fraction of the window with
+    // a band of desk beside it — which is not what "fit" was asked for. The
+    // stray is unreachable while the fit is latched; that is the cost of "no
+    // horizontal scrolling at all", chosen deliberately, and zooming by hand
+    // releases the latch and gives the sideways movement back.
     canvas.fillWidth(pageProps.isPaged
         ? pageProps.paper.width
         : (canvas.pageSize?.width ?? pageSize().width));
+    notifyListeners();
   }
 
   /// Append a blank sheet to the end of the document.

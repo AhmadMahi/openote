@@ -253,7 +253,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
               // symptoms that looked unrelated.
               if (widget.onShortcut != null) ...[
                 const Divider(height: 18),
-                _ShortcutField(
+                ShortcutField(
                   value: widget.shortcut ?? '',
                   onChanged: widget.onShortcut!,
                 ),
@@ -356,17 +356,18 @@ class _SVPainter extends CustomPainter {
 /// one is holding a line. The bare-key handler in `app_shell` already stands
 /// aside whenever a text field has focus, which is what makes a bare letter
 /// safe to claim.
-class _ShortcutField extends StatefulWidget {
-  const _ShortcutField({required this.value, required this.onChanged});
+class ShortcutField extends StatefulWidget {
+  const ShortcutField(
+      {super.key, required this.value, required this.onChanged});
 
   final String value;
   final ValueChanged<String> onChanged;
 
   @override
-  State<_ShortcutField> createState() => _ShortcutFieldState();
+  State<ShortcutField> createState() => _ShortcutFieldState();
 }
 
-class _ShortcutFieldState extends State<_ShortcutField> {
+class _ShortcutFieldState extends State<ShortcutField> {
   late String _key = widget.value;
   bool _listening = false;
 
@@ -492,7 +493,7 @@ class _ToolShortcutDialogState extends State<_ToolShortcutDialog> {
                 fontSize: 12, color: context.surfaces.textSecondary),
           ),
           const SizedBox(height: 14),
-          _ShortcutField(
+          ShortcutField(
             value: _key,
             onChanged: (k) => setState(() => _key = k),
           ),

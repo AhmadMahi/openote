@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
 import '../update/app_update.dart';
 import 'mcp_dialog.dart';
+import 'color_picker.dart' show ShortcutField;
 import 'onote_dialog.dart';
 import 'shortcut_overlay.dart';
 import 'sync_dialog.dart';
@@ -179,6 +180,19 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   ],
                   selected: {app.penCursorStyle},
                   onSelectionChanged: (s) => app.setPenCursorStyle(s.first),
+                ),
+              ),
+              // ONE colour shortcut, and it is here rather than hidden on a
+              // swatch's context menu — a key you can rebind should be
+              // findable in the place people look for keys.
+              _rowStacked(
+                'Next ink colour  (with Ctrl)',
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ShortcutField(
+                    value: app.cycleColorKey,
+                    onChanged: app.setCycleColorKey,
+                  ),
                 ),
               ),
               _row('Spell check', _toggle(app.spellCheckEnabled, app.setSpellCheck)),

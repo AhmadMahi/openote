@@ -39,6 +39,7 @@ void main() {
 
     test('and there is nothing left to scroll to, in either direction', () {
       c.fillWidth(1000);
+      expect(c.fitLocked, isTrue);
       expect(c.canPanHorizontally, isFalse,
           reason: 'the report: a small scroll one way only');
       final before = c.offset.dx;
@@ -56,18 +57,35 @@ void main() {
       expect(c.pageSize!.width * c.scale, closeTo(1400, 0.01));
     });
 
-    test('fitting a SHEET narrower than the surface still leaves the stray '
-        'content reachable', () {
-      // Page mode fits the paper, because "fit" is asked in order to make the
-      // PAGE the width of the screen — fitting the surface instead shrinks
-      // the sheet to a fraction of the window whenever anything has strayed
-      // outside it. The cost is that panning stays available, and that is the
-      // point: it is the only way to reach what is out there.
+    test('a fitted SHEET locks sideways movement, whatever the surface says',
+        () {
+      // THE LATCH. Fit used to be a one-off action, and horizontal scrolling
+      // kept coming back: the fit was right for one frame, then anything that
+      // recomputed the surface left the page a little wider than the window
+      // with slack to drag into. "No scrolling at all" was asked for three
+      // times before it was taken literally.
+      //
+      // The cost is stated rather than hidden: a stroke outside the sheet is
+      // unreachable while the latch is on. Zooming by hand releases it.
       c.pageSize = const Size(1800, 3000); // surface, content-driven
       c.fillWidth(700); // an A5 sheet
       expect(c.scale, closeTo(2.0, 0.01), reason: '1400 / 700');
-      expect(c.canPanHorizontally, isTrue,
-          reason: 'the surface is wider than the window at this scale');
+      expect(c.fitLocked, isTrue);
+      expect(c.canPanHorizontally, isFalse,
+          reason: 'even though the surface is wider than the window');
+      expect(c.offset.dx, 0,
+          reason: 'flush left — centring is what puts a margin down each side');
+    });
+
+    test('zooming by hand releases the latch and gives panning back', () {
+      c.pageSize = const Size(1800, 3000);
+      c.fillWidth(700);
+      expect(c.canPanHorizontally, isFalse);
+      c.setZoom(c.scale * 1.5);
+      expect(c.fitLocked, isFalse,
+          reason: 'a scale of your own means sideways movement is how you '
+              'reach the rest of the page at it');
+      expect(c.canPanHorizontally, isTrue);
     });
 
     test('a page wider than the window still pans, which is the normal case',

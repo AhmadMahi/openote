@@ -57,19 +57,19 @@ dev_dependencies:
 #   dart run flutter_launcher_icons
 # to generate the Windows .ico / macOS / etc. app icons from the logo.
 flutter_launcher_icons:
-  image_path: "assets/icon/openote_icon.png"
+  image_path: "assets/icon/slate_icon.png"
   windows:
     generate: true
-    image_path: "assets/icon/openote_icon.png"
+    image_path: "assets/icon/slate_icon.png"
     icon_size: 256
   macos:
     generate: true
-    image_path: "assets/icon/openote_icon.png"
+    image_path: "assets/icon/slate_icon.png"
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon/openote_icon.png
+    - assets/icon/slate_icon.png
     # Spell-check wordlist (TEXT-11). Loaded lazily on a background isolate the
     # first time text is edited — never at startup.
     - assets/dict/en_us.txt.gz

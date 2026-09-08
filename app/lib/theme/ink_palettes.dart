@@ -70,5 +70,18 @@ class InkPalettes {
     '#CC79A7',
   ]);
 
-  static const presets = [classic, night, ink, bold, accessible];
+  /// The owner's own row, restored after a preset overwrote it.
+  ///
+  /// Kept as a named palette rather than written straight into the settings
+  /// file: a palette that exists in the picker can be switched back to, and
+  /// switching away from it no longer loses it — applying anything now saves
+  /// the outgoing row as "Previous" first.
+  static const yours = InkPalette('Yours', [
+    '#211F1B',
+    '#8BF224',
+    '#C63838',
+    '#2E8B57',
+  ]);
+
+  static const presets = [yours, classic, night, ink, bold, accessible];
 }

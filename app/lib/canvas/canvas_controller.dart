@@ -29,8 +29,24 @@ class CanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// FIT-TO-WIDTH IS A MODE, not a one-off action.
+  ///
+  /// It was an action, and that is why horizontal scrolling kept coming back:
+  /// the fit put the page at the right scale for one frame, and then anything
+  /// that recomputed the surface — a stroke near the edge, content growing —
+  /// left the page a little wider than the window again, with slack to drag
+  /// into. Latching it means the answer to "can I scroll sideways?" is a
+  /// property of the view rather than an arithmetic coincidence that has to
+  /// keep holding.
+  ///
+  /// Zooming by hand turns it off, because at that point the user has said
+  /// they want a scale of their own and sideways movement is how you reach
+  /// the rest of the page at it.
+  bool fitLocked = false;
+
   /// Zoom keeping the given screen point fixed (style guide §8.2).
   void zoomAt(Offset screenFocal, double factor) {
+    fitLocked = false;
     final newScale = (scale * factor).clamp(minScale, maxScale);
     final pageFocal = screenToPage(screenFocal);
     scale = newScale;
@@ -78,11 +94,16 @@ class CanvasController extends ChangeNotifier {
     if (ps == null || viewport == Size.zero) return;
     final wPx = ps.width * scale;
     offset = Offset(
-      // Fits: centred, and there is nowhere to scroll to. Overflows: free to
-      // pan, but never past an edge.
-      wPx <= viewport.width
-          ? (viewport.width - wPx) / 2
-          : offset.dx.clamp(viewport.width - wPx, 0.0),
+      // Latched to a fit: hard against the left edge, so the sheet starts at
+      // the window edge and fills it. Not centred — centring is what puts a
+      // margin down each side, and "no borders at all" is the ask.
+      fitLocked
+          ? 0.0
+          // Fits: centred, and there is nowhere to scroll to. Overflows:
+          // free to pan, but never past an edge.
+          : wPx <= viewport.width
+              ? (viewport.width - wPx) / 2
+              : offset.dx.clamp(viewport.width - wPx, 0.0),
       () {
         final hPx = ps.height * scale;
         return hPx <= viewport.height ? 0.0 : offset.dy.clamp(viewport.height - hPx, 0.0);
@@ -157,6 +178,11 @@ class CanvasController extends ChangeNotifier {
   /// so a sideways trackpad flick cannot nudge a page that already fits — it
   /// would move a page that has nowhere to go and then snap it back.
   bool get canPanHorizontally {
+    // Fit means fit: while it is latched there is no sideways movement at
+    // all, whatever the surface happens to measure. That is the whole point
+    // of the mode — the previous rule ("is the surface wider than the
+    // window?") was true again the moment anything grew sideways.
+    if (fitLocked) return false;
     final ps = pageSize;
     if (ps == null || viewport == Size.zero) return false;
     return ps.width * scale > viewport.width + 0.5;
@@ -206,13 +232,15 @@ class CanvasController extends ChangeNotifier {
       centerPage();
       return;
     }
-    // EXACTLY the window width, with no breathing room.
+    fitLocked = true;
+    // EXACTLY the window width, with no breathing room and no margin.
     //
     // A 16px pad each side was "tidier" and it is what left a sliver to
     // scroll to: the page then ends 32px short of the window, `clampToPage`
-    // centres it, and dragging one way finds slack the other. Fit means fit.
+    // centres it, and dragging one way finds slack the other. Fit means fit —
+    // edge to edge, nothing down either side.
     scale = (viewport.width / contentWidth).clamp(minScale, maxScale);
-    offset = Offset.zero; // clampToPage puts it flush
+    offset = Offset(0, offset.dy);
     clampToPage();
     notifyListeners();
   }

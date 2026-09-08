@@ -580,18 +580,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return true;
       }
       if (k == LogicalKeyboardKey.keyP) {
-        // Ctrl+P now STEPS THE INK COLOUR, and Ctrl+Shift+P prints.
+        // Print keeps the platform chord. Colour cycling briefly took it and
+        // that was the wrong trade: Ctrl+P means print everywhere, and a note
+        // app that prints on Ctrl+Shift+P is a note app you get wrong once a
+        // month forever. Cycling has its own key, set in Settings.
         //
-        // Giving up the platform chord for printing is a real cost and it was
-        // the owner's call: colour is changed dozens of times in a drawing
-        // session and printing perhaps once, so the cheaper key goes to the
-        // commoner act. Print keeps a chord, and keeps it next door.
-        if (shift) {
-          // Unawaited: the OS dialog owns the interaction from here.
-          unawaited(printCurrentPage(app));
-          return true;
-        }
-        app.cycleInkColor(1);
+        // Unawaited: the OS dialog owns the interaction from here.
+        unawaited(printCurrentPage(app));
+        return true;
+      }
+      // The palette-cycling key, whatever the user set it to. Checked here,
+      // among the Ctrl chords, because it is one.
+      if (app.cycleColorKey.isNotEmpty &&
+          e.character?.toLowerCase() == app.cycleColorKey) {
+        app.cycleInkColor(shift ? -1 : 1);
         return true;
       }
       if (k == LogicalKeyboardKey.keyZ && !shift) {
@@ -695,17 +697,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         if (k == LogicalKeyboardKey.bracketLeft) {
           app.cycleInkColor(-1);
           return true;
-        }
-        // The user's own keys, checked AFTER the fixed ones so a binding can
-        // never take 1…6 or [ ] away from someone who is relying on them.
-        final ch = e.character;
-        if (ch != null && ch.length == 1) {
-          final well = app.inkWellForKey(ch);
-          if (well >= 0) {
-            app.setPenColor(well);
-            if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[well]);
-            return true;
-          }
         }
       }
     }

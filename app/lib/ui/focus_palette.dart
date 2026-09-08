@@ -294,8 +294,6 @@ class _FocusPaletteState extends State<FocusPalette> {
       app,
       initial: app.inkPalette[i],
       title: app.tool == Tool.highlighter ? 'Highlighter colour' : 'Pen colour',
-      shortcut: app.inkShortcuts[i],
-      onShortcut: (k) => app.setInkShortcut(i, k),
     );
     if (picked == null) return;
     app.setInkPaletteColor(i, picked.startsWith('#') ? picked : '#$picked');

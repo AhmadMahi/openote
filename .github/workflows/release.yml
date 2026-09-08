@@ -644,7 +644,7 @@ jobs:
       # deliberate and identical to a local `flutter build macos`.
       - name: Bundle dylib and re-sign (ad-hoc)
         run: |
-          APP=app/build/macos/Build/Products/Release/openote.app
+          APP=app/build/macos/Build/Products/Release/Slate.app
           cp rust/onote_core/libonote_core.dylib "$APP/Contents/MacOS/"
           codesign --force --sign - "$APP/Contents/MacOS/libonote_core.dylib"
           codesign --force --sign - \
@@ -653,11 +653,11 @@ jobs:
 
       - name: Package dmg (unsigned)
         run: |
-          APP=app/build/macos/Build/Products/Release/openote.app
+          APP=app/build/macos/Build/Products/Release/Slate.app
           mkdir dmg-staging
           cp -R "$APP" dmg-staging/
           ln -s /Applications dmg-staging/Applications
-          hdiutil create -volname "Openote" -srcfolder dmg-staging -ov \
+          hdiutil create -volname "Slate" -srcfolder dmg-staging -ov \
             -format UDZO "openote-${VERSION}-macos-universal.dmg"
 
       - uses: actions/upload-artifact@v4
@@ -840,7 +840,7 @@ jobs:
             Gatekeeper quarantines unsigned downloads. After copying to
             Applications, clear the flag once:
 
-                xattr -cr /Applications/openote.app
+                xattr -cr /Applications/Slate.app
 
             Your notes never leave your machine either way — see the project's
             local-first principles.

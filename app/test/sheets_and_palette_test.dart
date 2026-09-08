@@ -153,7 +153,6 @@ void main() {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       app.setTool(Tool.pen);
       app.penPalette = ['#111111'];
-      app.penShortcuts = [''];
       app.addInkColor('#222222');
       expect(app.penPalette.length, 2);
       expect(app.penColor, 1, reason: 'the new colour is the armed one');
@@ -170,7 +169,6 @@ void main() {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       app.setTool(Tool.pen);
       app.penPalette = ['#111111'];
-      app.penShortcuts = [''];
       app.removeInkColor(0);
       expect(app.penPalette.length, 1,
           reason: 'a pen with no colour is not a state anything handles');
@@ -180,7 +178,6 @@ void main() {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       app.setTool(Tool.pen);
       app.penPalette = ['#111111', '#222222', '#333333'];
-      app.penShortcuts = ['', '', ''];
       app.penColor = 2;
       app.removeInkColor(2);
       expect(app.penColor, lessThan(app.penPalette.length));
@@ -193,8 +190,6 @@ void main() {
         app.applyInkPalette(p);
         expect(app.penPalette.length,
             lessThanOrEqualTo(AppState.maxPaletteColours));
-        expect(app.penShortcuts.length, app.penPalette.length,
-            reason: 'the keys are indexed with the colours and must match');
         expect(app.penColor, 0);
         expect(app.activePaletteName, p.name);
       }
@@ -204,7 +199,6 @@ void main() {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       app.setTool(Tool.pen);
       app.penPalette = ['#111111', '#222222', '#333333'];
-      app.penShortcuts = ['', '', ''];
       app.penColor = 0;
       app.cycleInkColor(1);
       expect(app.penColor, 1);

@@ -142,7 +142,7 @@ class _OpenoteBootState extends State<OpenoteBoot> {
     final app = _app;
     if (app != null) return OpenoteApp(app: app);
     return MaterialApp(
-      title: 'Openote',
+      title: 'Slate',
       debugShowCheckedModeBanner: false,
       theme: onoteTheme(Brightness.light),
       darkTheme: onoteTheme(Brightness.dark),
@@ -173,7 +173,7 @@ class _StartupError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Openote',
+      title: 'Slate',
       theme: onoteTheme(Brightness.light),
       home: Scaffold(
         body: Center(
@@ -230,7 +230,7 @@ class _OpenoteAppState extends State<OpenoteApp> {
         }
         _builtMode = widget.app.themeMode;
         return _built = MaterialApp(
-          title: 'Openote',
+          title: 'Slate',
           debugShowCheckedModeBanner: false,
           theme: onoteTheme(Brightness.light),
           darkTheme: onoteTheme(Brightness.dark),
