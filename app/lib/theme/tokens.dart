@@ -52,6 +52,7 @@ abstract final class OnoteType {
       fontFamilyFallback: onoteFontFallback,
       fontSize: 22,
       height: 28 / 22,
+      letterSpacing: -.4,
       fontWeight: FontWeight.w700);
 
   /// The headline of an empty state or a first-run step — the one line that
@@ -61,6 +62,7 @@ abstract final class OnoteType {
       fontFamilyFallback: onoteFontFallback,
       fontSize: 18,
       height: 24 / 18,
+      letterSpacing: -.3,
       fontWeight: FontWeight.w600);
 
   /// Dialog and sheet titles. The largest size chrome is allowed.
@@ -69,6 +71,7 @@ abstract final class OnoteType {
       fontFamilyFallback: onoteFontFallback,
       fontSize: 15,
       height: 20 / 15,
+      letterSpacing: -.2,
       fontWeight: FontWeight.w600);
 
   /// The default: rows, menu items, inputs, buttons, body copy in dialogs.
@@ -76,7 +79,8 @@ abstract final class OnoteType {
       fontFamily: family,
       fontFamilyFallback: onoteFontFallback,
       fontSize: 13,
-      height: 18 / 13);
+      height: 18 / 13,
+      letterSpacing: -.08);
 
   /// Emphasis within [ui] — a row's title against its subtitle, a count.
   static const uiStrong = TextStyle(
@@ -84,6 +88,7 @@ abstract final class OnoteType {
       fontFamilyFallback: onoteFontFallback,
       fontSize: 13,
       height: 18 / 13,
+      letterSpacing: -.08,
       fontWeight: FontWeight.w600);
 
   /// Secondary text: subtitles, tooltips, supporting lines under a control.
@@ -110,8 +115,8 @@ abstract final class OnoteType {
     fontFamilyFallback: onoteFontFallback,
     fontSize: 11,
     height: 14 / 11,
-    fontWeight: FontWeight.w700,
-    letterSpacing: .5,
+    fontWeight: FontWeight.w600,
+    letterSpacing: .4,
   );
 
   /// Code and other monospaced runs inside chrome (paths, hashes, key names).
@@ -145,22 +150,23 @@ abstract final class OnoteIcon {
 
 /// Corner radii (style guide §5.2).
 ///
-/// One step tighter than this document's first draft (4/8/12/16), because the
-/// app's realised character is denser than v0.1 imagined and 16px reads
-/// consumer-mobile at this density. Stock Material 3 must never show through:
-/// un-themed M3 dialogs are 28 and M3 buttons are full stadiums.
+/// The macOS scale — 6/8/12/16 — chosen with the material restyle. Corners
+/// this size are what make a control read as a *shape sitting on* the chrome
+/// rather than a cell cut out of it; tighter radii read as a spreadsheet, and
+/// stock Material 3 must never show through either: un-themed M3 dialogs are
+/// 28 and M3 buttons are full stadiums. Pills are still [full].
 abstract final class OnoteRadius {
   /// Inputs, checkboxes, small chips, colour swatches.
-  static const sm = 4.0;
+  static const sm = 6.0;
 
   /// Buttons, menu items, toggles, list rows, small controls.
-  static const md = 6.0;
+  static const md = 8.0;
 
   /// Menus, popovers, cards, inline banners.
-  static const lg = 8.0;
+  static const lg = 12.0;
 
   /// Dialogs, large floating surfaces, canvas text containers.
-  static const xl = 12.0;
+  static const xl = 16.0;
 
   /// Pills only — badges, avatars.
   static const full = 999.0;
@@ -281,6 +287,8 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
     required this.textPrimary,
     required this.textSecondary,
     required this.textDisabled,
+    required this.well,
+    required this.lift,
   });
 
   /// The page itself — and **nothing else**. Keeping this exclusive is what
@@ -311,6 +319,16 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
   /// Disabled and decorative only, where the 4.5:1 text rule does not apply.
   final Color textDisabled;
 
+  /// A **field or track sunk into chrome**: search boxes, inputs, the
+  /// segmented control's track. Lighter than the chrome in light mode (a
+  /// white well on grey, as a macOS search field is), darker in dark mode.
+  final Color well;
+
+  /// A **selected segment or thumb lifted off a well**: the white pill in a
+  /// segmented control, a slider's thumb. Always the brightest surface in
+  /// the stack it sits in, so it reads as the thing nearest the eye.
+  final Color lift;
+
   static const light = OnoteSurfaces(
     canvas: OnoteColors.paper0,
     chrome: OnoteColors.paper50,
@@ -320,6 +338,8 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
     textPrimary: OnoteColors.graphite700,
     textSecondary: OnoteColors.graphite500,
     textDisabled: OnoteColors.graphite400,
+    well: OnoteColors.paper0,
+    lift: OnoteColors.paper0,
   );
 
   static const dark = OnoteSurfaces(
@@ -331,6 +351,8 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
     textPrimary: OnoteColors.moon100,
     textSecondary: OnoteColors.moon300,
     textDisabled: OnoteColors.moon400,
+    well: OnoteColors.night200,
+    lift: OnoteColors.night300,
   );
 
   @override
@@ -343,6 +365,8 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
     Color? textPrimary,
     Color? textSecondary,
     Color? textDisabled,
+    Color? well,
+    Color? lift,
   }) =>
       OnoteSurfaces(
         canvas: canvas ?? this.canvas,
@@ -353,6 +377,8 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
         textPrimary: textPrimary ?? this.textPrimary,
         textSecondary: textSecondary ?? this.textSecondary,
         textDisabled: textDisabled ?? this.textDisabled,
+        well: well ?? this.well,
+        lift: lift ?? this.lift,
       );
 
   @override
@@ -367,6 +393,8 @@ class OnoteSurfaces extends ThemeExtension<OnoteSurfaces> {
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textDisabled: Color.lerp(textDisabled, other.textDisabled, t)!,
+      well: Color.lerp(well, other.well, t)!,
+      lift: Color.lerp(lift, other.lift, t)!,
     );
   }
 }
@@ -427,4 +455,3 @@ abstract final class OnoteInput {
 /// of the palette, and clears AA against both the light and the dark raised
 /// surface.
 const Color kGraphLinkColour = Color(0xFF1E8E93);
-

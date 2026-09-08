@@ -54,45 +54,50 @@ const List<String> onoteFontFallback = <String>[
 ];
 
 abstract final class OnoteColors {
-  // Ink (primary)
-  static const ink50 = Color(0xFFEEF0FF);
-  static const ink100 = Color(0xFFDFE2FF);
-  static const ink200 = Color(0xFFC2C7FB);
-  static const ink300 = Color(0xFF9AA0F5);
-  static const ink400 = Color(0xFF7B7FEE);
-  static const ink500 = Color(0xFF5B5BE6);
-  static const ink600 = Color(0xFF4A45D6);
-  static const ink700 = Color(0xFF3D38B4);
-  static const ink800 = Color(0xFF302B8C);
-  static const ink900 = Color(0xFF20205C);
-  // Brass (accent)
-  static const brass100 = Color(0xFFFBEFD3);
-  static const brass400 = Color(0xFFEBB24A);
-  static const brass500 = Color(0xFFD9971F);
-  static const brass700 = Color(0xFF9A6A12);
-  // Paper & graphite (light)
+  // Ink (primary) — the system-blue ramp. `ink500` is the light-mode accent,
+  // `ink400` the dark-mode one; the rest are its tints for tinted fills and
+  // link colour in rendered Markdown.
+  static const ink50 = Color(0xFFEAF3FF);
+  static const ink100 = Color(0xFFD6E8FF);
+  static const ink200 = Color(0xFFB3D4FF);
+  static const ink300 = Color(0xFF7FB8FF);
+  static const ink400 = Color(0xFF4DA1FF);
+  static const ink500 = Color(0xFF0A7AFF);
+  static const ink600 = Color(0xFF0066DB);
+  static const ink700 = Color(0xFF0052B4);
+  static const ink800 = Color(0xFF003E8C);
+  static const ink900 = Color(0xFF002A5C);
+  // Brass (accent) — the warm counterpart, for favourites and reminders.
+  static const brass100 = Color(0xFFFFEFD6);
+  static const brass400 = Color(0xFFF5A524);
+  static const brass500 = Color(0xFFE08E0B);
+  static const brass700 = Color(0xFF9A5E05);
+  // Paper & graphite (light). Cool neutrals: a white page, a near-white
+  // toolbar, a grey sidebar, and hairlines two steps darker than the chrome
+  // they divide. No warmth in the greys — the page's own paper carries it.
   static const paper0 = Color(0xFFFFFFFF);
-  static const paper50 = Color(0xFFFAF9F7);
-  static const paper100 = Color(0xFFF2F1ED);
-  static const paper200 = Color(0xFFE7E5DF);
-  static const paper300 = Color(0xFFD6D3CA);
-  static const graphite400 = Color(0xFF9A968C);
-  static const graphite500 = Color(0xFF6E6B63);
-  static const graphite700 = Color(0xFF403D38);
+  static const paper50 = Color(0xFFF7F7F9);
+  static const paper100 = Color(0xFFEFEFF3);
+  static const paper200 = Color(0xFFE3E3E8);
+  static const paper300 = Color(0xFFD1D1D6);
+  static const graphite400 = Color(0xFF8E8E93);
+  static const graphite500 = Color(0xFF6E6E73);
+  static const graphite700 = Color(0xFF2C2C2E);
+  // Kept: this is also the default pen ink, and pen ink is data on disk.
   static const graphite900 = Color(0xFF211F1B);
-  // Night ink (dark)
-  static const night0 = Color(0xFF17161C);
-  static const night50 = Color(0xFF1E1D24);
-  static const night100 = Color(0xFF26252E);
-  static const night200 = Color(0xFF33313C);
-  static const night300 = Color(0xFF45424F);
-  static const moon0 = Color(0xFFF6F4FA);
-  static const moon100 = Color(0xFFE6E3EC);
-  static const moon300 = Color(0xFFB8B4C2);
-  static const moon400 = Color(0xFF8E8A99);
+  // Night ink (dark). Same ordering, so the roles fall out the same way.
+  static const night0 = Color(0xFF17171A);
+  static const night50 = Color(0xFF1F1F23);
+  static const night100 = Color(0xFF29292E);
+  static const night200 = Color(0xFF37373D);
+  static const night300 = Color(0xFF4A4A52);
+  static const moon0 = Color(0xFFF5F5F7);
+  static const moon100 = Color(0xFFE8E8ED);
+  static const moon300 = Color(0xFFB0B0B8);
+  static const moon400 = Color(0xFF8A8A93);
   // Semantic
-  static const danger = Color(0xFFC63838);
-  static const success = Color(0xFF2E8B57);
+  static const danger = Color(0xFFD93634);
+  static const success = Color(0xFF2DA44E);
 
   /// Default content-ink pen colors (style guide §3.6).
   static const penColors = <Color>[
@@ -201,20 +206,34 @@ ThemeData onoteTheme(Brightness brightness) {
   // is nearly invisible on these surfaces.
   final focusBorder = OutlineInputBorder(
     borderRadius: OnoteRadius.smAll,
-    borderSide: BorderSide(color: primary, width: 2),
+    borderSide: BorderSide(color: primary.withValues(alpha: .75), width: 1.5),
   );
   final restBorder = OutlineInputBorder(
     borderRadius: OnoteRadius.smAll,
     borderSide: BorderSide(color: surfaces.border),
   );
 
+  // Hover and press are a wash of the text colour over the control — the
+  // same wash on every control in the app — never Material's coloured splash.
+  Color? overlayFor(Set<WidgetState> states) {
+    if (states.contains(WidgetState.pressed)) {
+      return surfaces.textPrimary.withValues(alpha: OnoteAlpha.selected);
+    }
+    if (states.contains(WidgetState.hovered) ||
+        states.contains(WidgetState.focused)) {
+      return surfaces.textPrimary.withValues(alpha: OnoteAlpha.hover);
+    }
+    return null;
+  }
+
   ButtonStyle buttonBase({Color? fg, Color? bg}) => ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(
-            Size(0, OnoteSize.buttonCompact)),
+        minimumSize:
+            const WidgetStatePropertyAll(Size(0, OnoteSize.buttonCompact)),
         padding: const WidgetStatePropertyAll(OnoteSpace.control),
         textStyle: const WidgetStatePropertyAll(OnoteType.ui),
         foregroundColor: fg == null ? null : WidgetStatePropertyAll(fg),
         backgroundColor: bg == null ? null : WidgetStatePropertyAll(bg),
+        overlayColor: WidgetStateProperty.resolveWith(overlayFor),
         // Never the stadium. This single line is the difference between
         // "an app" and "a Material demo" on every dialog in the product.
         shape: const WidgetStatePropertyAll(
@@ -240,20 +259,32 @@ ThemeData onoteTheme(Brightness brightness) {
     splashFactory: NoSplash.splashFactory,
     extensions: [surfaces],
 
-    dividerTheme: DividerThemeData(
-        color: surfaces.border, thickness: 1, space: 1),
+    hoverColor: surfaces.textPrimary.withValues(alpha: OnoteAlpha.hover),
+    highlightColor: surfaces.textPrimary.withValues(alpha: OnoteAlpha.selected),
+    splashColor: Colors.transparent,
+
+    dividerTheme:
+        DividerThemeData(color: surfaces.border, thickness: 1, space: 1),
 
     iconTheme: IconThemeData(size: OnoteIcon.sm, color: surfaces.textPrimary),
 
     tooltipTheme: TooltipThemeData(
       waitDuration: const Duration(milliseconds: 500),
-      textStyle: OnoteType.caption.copyWith(
-          color: dark ? OnoteColors.graphite900 : OnoteColors.moon0),
+      textStyle: OnoteType.caption.copyWith(color: surfaces.textPrimary),
       decoration: BoxDecoration(
-        color: dark ? OnoteColors.moon100 : OnoteColors.graphite900,
+        color: dark ? OnoteColors.night200 : OnoteColors.paper0,
         borderRadius: OnoteRadius.smAll,
+        border: Border.all(color: surfaces.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? .45 : .14),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+          horizontal: OnoteSpace.x4, vertical: OnoteSpace.x3),
     ),
 
     // ── Buttons ────────────────────────────────────────────────────────
@@ -265,13 +296,53 @@ ThemeData onoteTheme(Brightness brightness) {
         side: WidgetStatePropertyAll(BorderSide(color: surfaces.border)),
       ),
     ),
-    iconButtonTheme: const IconButtonThemeData(
+    iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
-        iconSize: WidgetStatePropertyAll(OnoteIcon.sm),
+        iconSize: const WidgetStatePropertyAll(OnoteIcon.sm),
         splashFactory: NoSplash.splashFactory,
-        shape: WidgetStatePropertyAll(
+        shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: OnoteRadius.mdAll)),
         visualDensity: VisualDensity.compact,
+        overlayColor: WidgetStateProperty.resolveWith(overlayFor),
+        // The active tool, the open panel: a tinted pill in the accent, the
+        // way a toolbar toggle sits "down" on macOS. Rest state stays ink.
+        backgroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? primary.withValues(alpha: OnoteAlpha.selectedStrong)
+                : null),
+        foregroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected)
+                ? primary
+                : s.contains(WidgetState.disabled)
+                    ? surfaces.textDisabled
+                    : surfaces.textPrimary),
+      ),
+    ),
+
+    // ── Segmented controls ─────────────────────────────────────────────
+    //
+    // A sunk track with the chosen segment lifted off it as a bright pill —
+    // the macOS control, not M3's row of outlined cells.
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        splashFactory: NoSplash.splashFactory,
+        minimumSize:
+            const WidgetStatePropertyAll(Size(0, OnoteSize.buttonCompact)),
+        padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: OnoteSpace.x4)),
+        textStyle: WidgetStatePropertyAll(
+            OnoteType.caption.copyWith(fontWeight: FontWeight.w500)),
+        side: WidgetStatePropertyAll(BorderSide(color: surfaces.border)),
+        shape: const WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: OnoteRadius.mdAll)),
+        backgroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected) ? surfaces.lift : surfaces.well),
+        foregroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? surfaces.textPrimary
+                : surfaces.textSecondary),
+        overlayColor: WidgetStateProperty.resolveWith(overlayFor),
       ),
     ),
 
@@ -281,37 +352,40 @@ ThemeData onoteTheme(Brightness brightness) {
     popupMenuTheme: PopupMenuThemeData(
       color: surfaces.raised,
       surfaceTintColor: Colors.transparent,
-      elevation: 4,
+      elevation: 12,
+      shadowColor: Colors.black.withValues(alpha: dark ? .6 : .22),
       textStyle: OnoteType.ui.copyWith(color: surfaces.textPrimary),
       shape: RoundedRectangleBorder(
         borderRadius: OnoteRadius.lgAll,
         side: BorderSide(color: surfaces.border),
       ),
-      menuPadding: const EdgeInsets.symmetric(vertical: OnoteSpace.x2),
+      menuPadding: const EdgeInsets.symmetric(vertical: OnoteSpace.x3),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(surfaces.raised),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        elevation: const WidgetStatePropertyAll(4),
+        shadowColor: WidgetStatePropertyAll(
+            Colors.black.withValues(alpha: dark ? .6 : .22)),
+        elevation: const WidgetStatePropertyAll(12),
         padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(vertical: OnoteSpace.x2)),
+            EdgeInsets.symmetric(vertical: OnoteSpace.x3)),
         shape: WidgetStatePropertyAll(RoundedRectangleBorder(
           borderRadius: OnoteRadius.lgAll,
           side: BorderSide(color: surfaces.border),
         )),
       ),
     ),
-    menuButtonTheme: const MenuButtonThemeData(
+    menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
-        minimumSize:
-            WidgetStatePropertyAll(Size(0, OnoteSize.menuRow)),
-        padding: WidgetStatePropertyAll(
+        minimumSize: const WidgetStatePropertyAll(Size(0, OnoteSize.menuRow)),
+        padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: OnoteSpace.x5)),
-        textStyle: WidgetStatePropertyAll(OnoteType.ui),
+        textStyle: const WidgetStatePropertyAll(OnoteType.ui),
         splashFactory: NoSplash.splashFactory,
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder()),
+        shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
         visualDensity: VisualDensity.compact,
+        overlayColor: WidgetStateProperty.resolveWith(overlayFor),
       ),
     ),
     menuBarTheme: MenuBarThemeData(
@@ -367,8 +441,8 @@ ThemeData onoteTheme(Brightness brightness) {
       ),
       helpTextStyle: OnoteType.small.copyWith(color: surfaces.textSecondary),
       dialTextStyle: OnoteType.ui,
-      hourMinuteShape: const RoundedRectangleBorder(
-          borderRadius: OnoteRadius.lgAll),
+      hourMinuteShape:
+          const RoundedRectangleBorder(borderRadius: OnoteRadius.lgAll),
     ),
 
     // ── Toasts (style guide §7 Toasts) ─────────────────────────────────
@@ -379,8 +453,8 @@ ThemeData onoteTheme(Brightness brightness) {
       behavior: SnackBarBehavior.floating,
       width: 440,
       backgroundColor: dark ? OnoteColors.night200 : OnoteColors.graphite900,
-      contentTextStyle: OnoteType.small.copyWith(
-          color: dark ? OnoteColors.moon0 : OnoteColors.paper0),
+      contentTextStyle: OnoteType.small
+          .copyWith(color: dark ? OnoteColors.moon0 : OnoteColors.paper0),
       actionTextColor: dark ? OnoteColors.ink300 : OnoteColors.ink200,
       elevation: 6,
       shape: const RoundedRectangleBorder(borderRadius: OnoteRadius.lgAll),
@@ -391,7 +465,7 @@ ThemeData onoteTheme(Brightness brightness) {
     inputDecorationTheme: InputDecorationTheme(
       isDense: true,
       filled: true,
-      fillColor: surfaces.chrome2,
+      fillColor: surfaces.well,
       contentPadding: OnoteSpace.control,
       border: restBorder,
       enabledBorder: restBorder,
@@ -404,7 +478,7 @@ ThemeData onoteTheme(Brightness brightness) {
     checkboxTheme: CheckboxThemeData(
       side: BorderSide(color: surfaces.textSecondary, width: 1.4),
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(3))),
+          borderRadius: BorderRadius.all(Radius.circular(4))),
       splashRadius: 0,
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -418,7 +492,18 @@ ThemeData onoteTheme(Brightness brightness) {
       labelStyle: OnoteType.small.copyWith(color: surfaces.textPrimary),
       padding: const EdgeInsets.symmetric(
           horizontal: OnoteSpace.x4, vertical: OnoteSpace.x1),
-      shape: const RoundedRectangleBorder(borderRadius: OnoteRadius.mdAll),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(OnoteRadius.full))),
+    ),
+    sliderTheme: SliderThemeData(
+      trackHeight: 4,
+      activeTrackColor: primary,
+      inactiveTrackColor: surfaces.well,
+      thumbColor: surfaces.lift,
+      thumbShape: const RoundSliderThumbShape(
+          enabledThumbRadius: 9, elevation: 2, pressedElevation: 3),
+      overlayShape: SliderComponentShape.noOverlay,
+      overlayColor: Colors.transparent,
     ),
     listTileTheme: ListTileThemeData(
       dense: true,
@@ -434,11 +519,12 @@ ThemeData onoteTheme(Brightness brightness) {
       linearTrackColor: surfaces.chrome2,
     ),
     scrollbarTheme: ScrollbarThemeData(
-      thickness: const WidgetStatePropertyAll(8),
-      radius: const Radius.circular(OnoteRadius.sm),
-      thumbColor: WidgetStatePropertyAll(
-          surfaces.textDisabled.withValues(alpha: .5)),
-      crossAxisMargin: 2,
+      thickness: const WidgetStatePropertyAll(6),
+      radius: const Radius.circular(OnoteRadius.full),
+      thumbColor:
+          WidgetStatePropertyAll(surfaces.textDisabled.withValues(alpha: .55)),
+      crossAxisMargin: 3,
+      mainAxisMargin: 3,
     ),
   );
 }

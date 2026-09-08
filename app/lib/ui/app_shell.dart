@@ -31,6 +31,7 @@ import 'study_panel.dart';
 import 'sync_dialog.dart';
 import 'sync_dot.dart';
 import '../theme/tokens.dart';
+import 'glass.dart';
 
 /// Layout per style guide §5.4: navigator | (toolbar / canvas-as-hero / status).
 ///
@@ -501,8 +502,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         // however Shift arrives; `equal` plus the Shift flag is what Windows
         // sends.
         if (_isEqualsKey(k)) {
-          app.wrapSelection(
-              (shift || k == LogicalKeyboardKey.add) ? '^' : '~');
+          app.wrapSelection((shift || k == LogicalKeyboardKey.add) ? '^' : '~');
           return true;
         }
         // Ctrl+Shift+C — flick the selection to the last colour and back.
@@ -766,8 +766,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             control: true, shift: true): _NudgeIntent(-1, 0, fine: true),
         SingleActivator(LogicalKeyboardKey.arrowRight,
             control: true, shift: true): _NudgeIntent(1, 0, fine: true),
-        SingleActivator(LogicalKeyboardKey.arrowUp,
-            control: true, shift: true): _NudgeIntent(0, -1, fine: true),
+        SingleActivator(LogicalKeyboardKey.arrowUp, control: true, shift: true):
+            _NudgeIntent(0, -1, fine: true),
         SingleActivator(LogicalKeyboardKey.arrowDown,
             control: true, shift: true): _NudgeIntent(0, 1, fine: true),
       },
@@ -787,8 +787,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
               _canvasFocus, (i) => _spatial(i.dx, i.dy)),
           _EditIntent:
               _CanvasAction<_EditIntent>(_canvasFocus, (_) => _editSelected()),
-          _NudgeIntent: _CanvasAction<_NudgeIntent>(
-              _canvasFocus,
+          _NudgeIntent: _CanvasAction<_NudgeIntent>(_canvasFocus,
               (i) => _nudge(i.dx.toDouble(), i.dy.toDouble(), fine: i.fine)),
         },
         // Pointer-down (not tap: it must run even when a drag follows)
@@ -828,6 +827,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       FocusNode(debugLabel: 'region-sidebar', skipTraversal: true);
   final FocusNode _toolbarRegion =
       FocusNode(debugLabel: 'region-toolbar', skipTraversal: true);
+
   /// The object row. **Unconditional** — unlike the panel it is always
   /// built, so it is always a stop, and from the page one Shift+F6 lands on
   /// the maths palette.
@@ -911,13 +911,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// panel that is a grade button, and the Space that should have revealed a
   /// card would have graded one the reader had not seen.
   void _focusFirstIn(FocusNode region) {
-    final candidates = region.traversalDescendants
-        .where((n) => !n.rect.isEmpty)
-        .toList()
-      ..sort((a, b) {
-        final dy = a.rect.top.compareTo(b.rect.top);
-        return dy != 0 ? dy : a.rect.left.compareTo(b.rect.left);
-      });
+    final candidates =
+        region.traversalDescendants.where((n) => !n.rect.isEmpty).toList()
+          ..sort((a, b) {
+            final dy = a.rect.top.compareTo(b.rect.top);
+            return dy != 0 ? dy : a.rect.left.compareTo(b.rect.left);
+          });
     (candidates.firstOrNull ?? region).requestFocus();
   }
 
@@ -940,31 +939,37 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         ? child // the canvas already owns _canvasFocus, one node one Focus
         : Focus(focusNode: _regionNode(r), skipTraversal: true, child: child);
     return Stack(
-      // `passthrough`, so wrapping a region cannot change its size. The
-      // default `loose` would hand the canvas — which arrives with TIGHT
-      // constraints from its `Expanded` — loose ones instead, and a page
-      // that sized itself to its content rather than to the window is not a
-      // focus ring, it is a layout bug wearing one.
-      fit: StackFit.passthrough,
-      children: [
-      marked,
-      Positioned.fill(
-        child: IgnorePointer(
-          child: ValueListenableBuilder<_Region?>(
-            valueListenable: _ring,
-            builder: (context, active, _) => active != r
-                ? const SizedBox.shrink()
-                : DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 2),
-                    ),
-                  ),
+        // `passthrough`, so wrapping a region cannot change its size. The
+        // default `loose` would hand the canvas — which arrives with TIGHT
+        // constraints from its `Expanded` — loose ones instead, and a page
+        // that sized itself to its content rather than to the window is not a
+        // focus ring, it is a layout bug wearing one.
+        fit: StackFit.passthrough,
+        children: [
+          marked,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ValueListenableBuilder<_Region?>(
+                valueListenable: _ring,
+                builder: (context, active, _) => active != r
+                    ? const SizedBox.shrink()
+                    : DecoratedBox(
+                        // The macOS focus ring: a soft, rounded halo in the
+                        // accent rather than a hard 2px rule.
+                        decoration: BoxDecoration(
+                          borderRadius: OnoteRadius.mdAll,
+                          border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: .55),
+                              width: 3),
+                        ),
+                      ),
+              ),
+            ),
           ),
-        ),
-      ),
-    ]);
+        ]);
   }
 
   /// The one open panel, or null. A single switch rather than five `if`s in
@@ -1073,8 +1078,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (_routeOnTop) return false;
     final order = _traversable();
     if (order.isEmpty) return false;
-    final cur =
-        order.where((b) => b.id == app.selectedBlockId).firstOrNull;
+    final cur = order.where((b) => b.id == app.selectedBlockId).firstOrNull;
     if (cur == null) {
       app.select(order.first.id);
       return true;
@@ -1116,10 +1120,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (app.selectedIds.length != 1 || app.editingBlockId != null) {
       return false;
     }
-    final t = app.blocks
-        .where((x) => x.id == app.selectedBlockId)
-        .firstOrNull
-        ?.type;
+    final t =
+        app.blocks.where((x) => x.id == app.selectedBlockId).firstOrNull?.type;
     return t == BlockType.text || t == BlockType.code;
   }
 
@@ -1141,10 +1143,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (app.selectedIds.length != 1 || app.editingBlockId != null) {
       return KeyEventResult.ignored;
     }
-    final b =
-        app.blocks.where((x) => x.id == app.selectedBlockId).firstOrNull;
-    if (b == null ||
-        (b.type != BlockType.text && b.type != BlockType.code)) {
+    final b = app.blocks.where((x) => x.id == app.selectedBlockId).firstOrNull;
+    if (b == null || (b.type != BlockType.text && b.type != BlockType.code)) {
       return KeyEventResult.ignored;
     }
     app.select(b.id, edit: true); // no caret token → the editor opens at
@@ -1230,8 +1230,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// here: cycling a ring of sections is the mental model, same as browser
   /// tabs.
   bool _cycleSection(int dir) {
-    final secs =
-        app.nodes.where((n) => n.kind == NodeKind.section).toList();
+    final secs = app.nodes.where((n) => n.kind == NodeKind.section).toList();
     if (secs.isEmpty) return false;
     var i = secs.indexWhere((n) => n.id == app.activeSectionId);
     if (i < 0) i = 0;
@@ -1266,8 +1265,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// Ctrl+V on the canvas: system clipboard media if there is any, else our
   /// own copied blocks.
   Future<void> _pasteFromSystemOrBlocks() async {
-    final at = app.canvas.screenToPage(Offset(
-        app.canvas.viewport.width / 2, app.canvas.viewport.height / 2));
+    final at = app.canvas.screenToPage(
+        Offset(app.canvas.viewport.width / 2, app.canvas.viewport.height / 2));
     final dark = Theme.of(context).brightness == Brightness.dark;
     // Images and files keep first claim — a screenshot just taken must beat
     // a block copied minutes ago (the comment at the Ctrl+V key handler).
@@ -1352,85 +1351,85 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           body: Listener(
             onPointerDown: (_) => _ring.value = null,
             child: Stack(children: [
-            Row(
-            children: [
-              // Focus mode takes the whole frame away, not just the
-              // toolbar: the point is the page edge to edge with nothing
-              // around it, and a sidebar left behind would make it a
-              // half-measure that still has a border down one side.
-              if (!app.focusMode) ...[
-                _regionWrap(_Region.sidebar, _navigator()),
-                const VerticalDivider(width: 1),
-              ],
-              Expanded(
-                child: Column(
-                  children: [
-                    if (!app.focusMode)
-                      _regionWrap(_Region.toolbar, CommandBar(app: app)),
-                    // **The object row**, permanent and always 36 px.
-                    //
-                    // Permanent because a band that appeared with the
-                    // equation would push the page down and putting the page
-                    // back is a pan the canvas controller discards on a short
-                    // or zoomed-out page — so the page would jump exactly
-                    // where a student most often starts an equation. See
-                    // `object_row.dart`; the chrome is 112 px in every state
-                    // of the app and the canvas box never moves.
-                    if (!app.focusMode)
-                      _regionWrap(_Region.object, ObjectRow(app: app)),
-                    if (app.findOpen) _FindBar(app: app),
-                    // The breadcrumb is CONTEXT, not a second navigator
-                    // (§7d). With the navigator expanded it repeats what is
-                    // already on screen two inches to the left, so it spends a
-                    // full-width row saying nothing. Collapsed — or on the
-                    // rail — it is the only place the notebook and section are
-                    // named, and it earns the row.
-                    if (page != null && app.navCollapsed && !app.focusMode)
-                      _PageHeader(app: app, page: page),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            // The gate is HERE, at the point the canvas would
-                            // be built, rather than only on the click that
-                            // opened the page. A page can become locked while
-                            // it is on screen — the policy expires, or "Lock
-                            // now" is pressed — and gating only the click
-                            // would leave the content sitting there.
-                            child: _regionWrap(
-                                _Region.page,
-                                page == null
-                                    ? _EmptyState(app: app)
-                                    : app.isLocked(page.id)
-                                        ? _LockedPage(app: app, page: page)
-                                        : _canvasKeys(PageCanvas(
-                                            key: ValueKey(app.pageId),
-                                            state: app))),
-                          ),
-                          if (panel != null) ...[
-                            const VerticalDivider(width: 1),
-                            PanelEntryFocus(
-                              node: _panelEntry,
-                              child: _regionWrap(_Region.panel, panel),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (!app.focusMode) _StatusBar(app: app),
+              Row(
+                children: [
+                  // Focus mode takes the whole frame away, not just the
+                  // toolbar: the point is the page edge to edge with nothing
+                  // around it, and a sidebar left behind would make it a
+                  // half-measure that still has a border down one side.
+                  if (!app.focusMode) ...[
+                    _regionWrap(_Region.sidebar, _navigator()),
+                    const VerticalDivider(width: 1),
                   ],
-                ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        if (!app.focusMode)
+                          _regionWrap(_Region.toolbar, CommandBar(app: app)),
+                        // **The object row**, permanent and always 36 px.
+                        //
+                        // Permanent because a band that appeared with the
+                        // equation would push the page down and putting the page
+                        // back is a pan the canvas controller discards on a short
+                        // or zoomed-out page — so the page would jump exactly
+                        // where a student most often starts an equation. See
+                        // `object_row.dart`; the chrome is 112 px in every state
+                        // of the app and the canvas box never moves.
+                        if (!app.focusMode)
+                          _regionWrap(_Region.object, ObjectRow(app: app)),
+                        if (app.findOpen) _FindBar(app: app),
+                        // The breadcrumb is CONTEXT, not a second navigator
+                        // (§7d). With the navigator expanded it repeats what is
+                        // already on screen two inches to the left, so it spends a
+                        // full-width row saying nothing. Collapsed — or on the
+                        // rail — it is the only place the notebook and section are
+                        // named, and it earns the row.
+                        if (page != null && app.navCollapsed && !app.focusMode)
+                          _PageHeader(app: app, page: page),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                // The gate is HERE, at the point the canvas would
+                                // be built, rather than only on the click that
+                                // opened the page. A page can become locked while
+                                // it is on screen — the policy expires, or "Lock
+                                // now" is pressed — and gating only the click
+                                // would leave the content sitting there.
+                                child: _regionWrap(
+                                    _Region.page,
+                                    page == null
+                                        ? _EmptyState(app: app)
+                                        : app.isLocked(page.id)
+                                            ? _LockedPage(app: app, page: page)
+                                            : _canvasKeys(PageCanvas(
+                                                key: ValueKey(app.pageId),
+                                                state: app))),
+                              ),
+                              if (panel != null) ...[
+                                const VerticalDivider(width: 1),
+                                PanelEntryFocus(
+                                  node: _panelEntry,
+                                  child: _regionWrap(_Region.panel, panel),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (!app.focusMode) _StatusBar(app: app),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-            // The tools, when the chrome that held them is gone. In the Stack
-            // so it floats OVER the page rather than taking a strip of it —
-            // an edge-to-edge page with a bar reserved along one side is not
-            // edge to edge.
-            if (app.focusMode) FocusPalette(app: app),
-            AlertPopup(app: app, regionFocus: _alertRegion),
-            ImportProgressCard(app: app),
-          ]),
+              // The tools, when the chrome that held them is gone. In the Stack
+              // so it floats OVER the page rather than taking a strip of it —
+              // an edge-to-edge page with a bar reserved along one side is not
+              // edge to edge.
+              if (app.focusMode) FocusPalette(app: app),
+              AlertPopup(app: app, regionFocus: _alertRegion),
+              ImportProgressCard(app: app),
+            ]),
           ),
         );
       },
@@ -1462,8 +1461,8 @@ class _FindBarState extends State<_FindBar> {
   }
 
   void _replace({required bool all}) {
-    final n = app.replaceAll(app.findQuery, _replaceCtl.text,
-        onlyCurrent: !all);
+    final n =
+        app.replaceAll(app.findQuery, _replaceCtl.text, onlyCurrent: !all);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(n == 0
@@ -1502,11 +1501,13 @@ class _FindBarState extends State<_FindBar> {
             ),
           ),
           TextButton(
-            onPressed: app.findMatches.isEmpty ? null : () => _replace(all: false),
+            onPressed:
+                app.findMatches.isEmpty ? null : () => _replace(all: false),
             child: const Text('Replace', style: TextStyle(fontSize: 12)),
           ),
           TextButton(
-            onPressed: app.findMatches.isEmpty ? null : () => _replace(all: true),
+            onPressed:
+                app.findMatches.isEmpty ? null : () => _replace(all: true),
             child: const Text('All', style: TextStyle(fontSize: 12)),
           ),
         ]),
@@ -1562,7 +1563,8 @@ class _FindBarState extends State<_FindBar> {
             app.findMatches.isEmpty
                 ? (app.findQuery.isEmpty ? '' : 'No matches')
                 : '${app.findIndex + 1} of ${app.findMatches.length}',
-            style: TextStyle(fontSize: 12, color: context.surfaces.textSecondary),
+            style:
+                TextStyle(fontSize: 12, color: context.surfaces.textSecondary),
           ),
           // The two buttons that had no tooltip at all: the chord is the
           // faster route and the button is where anyone would look for it.
@@ -1608,8 +1610,7 @@ class _PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final section = app.node(page.parentId ?? '');
-    final notebook =
-        app.notebooks.firstWhere((n) => n.id == app.notebookId);
+    final notebook = app.notebooks.firstWhere((n) => n.id == app.notebookId);
     final crumbStyle =
         TextStyle(fontSize: 12, color: context.surfaces.textSecondary);
     return Container(
@@ -1670,58 +1671,55 @@ class _TagsPanel extends StatelessWidget {
               ],
             )
           : ListView(
-                padding: const EdgeInsets.only(bottom: 8),
-                children: [
-                  for (final kind in byKind.keys)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-                          child: Row(children: [
-                            Icon(kind.icon, size: 16, color: kind.color),
-                            const SizedBox(width: 5),
-                            Text('${kind.label}  (${byKind[kind]!.length})',
-                                style: const TextStyle(
-                                    fontSize: 11, fontWeight: FontWeight.w600)),
-                          ]),
-                        ),
-                        for (final e in byKind[kind]!)
-                          InkWell(
-                            onTap: () => app.selectPage(e.pageId),
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(30, 3, 12, 3),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                      e.text.isEmpty ? '(empty line)' : e.text,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          decoration:
-                                              (e.tag.checked ?? false)
-                                                  ? TextDecoration.lineThrough
-                                                  : null,
-                                          color: (e.tag.checked ?? false)
-                                              ? context.surfaces.textSecondary
-                                              : null)),
-                                  Text(e.pageTitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: context.surfaces.textSecondary)),
-                                ],
-                              ),
+              padding: const EdgeInsets.only(bottom: 8),
+              children: [
+                for (final kind in byKind.keys)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                        child: Row(children: [
+                          Icon(kind.icon, size: 16, color: kind.color),
+                          const SizedBox(width: 5),
+                          Text('${kind.label}  (${byKind[kind]!.length})',
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                      for (final e in byKind[kind]!)
+                        InkWell(
+                          onTap: () => app.selectPage(e.pageId),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(30, 3, 12, 3),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(e.text.isEmpty ? '(empty line)' : e.text,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        decoration: (e.tag.checked ?? false)
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                        color: (e.tag.checked ?? false)
+                                            ? context.surfaces.textSecondary
+                                            : null)),
+                                Text(e.pageTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: context.surfaces.textSecondary)),
+                              ],
                             ),
                           ),
-                      ],
-                    ),
-                ],
-              ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -1750,30 +1748,29 @@ class _TocPanel extends StatelessWidget {
                   'to date.',
             )
           : ListView.builder(
-                padding: const EdgeInsets.only(bottom: 8),
-                itemCount: items.length,
-                itemBuilder: (_, i) {
-                  final it = items[i];
-                  return InkWell(
-                    onTap: () => app.jumpToBlock(it.blockId),
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          12.0 + (it.level - 1) * 14.0, 5, 12, 5),
-                      child: Text(
-                        it.text,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: it.level == 1 ? 13 : 12,
-                          fontWeight: it.level == 1
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
+              padding: const EdgeInsets.only(bottom: 8),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final it = items[i];
+                return InkWell(
+                  onTap: () => app.jumpToBlock(it.blockId),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        12.0 + (it.level - 1) * 14.0, 5, 12, 5),
+                    child: Text(
+                      it.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: it.level == 1 ? 13 : 12,
+                        fontWeight:
+                            it.level == 1 ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
@@ -1787,8 +1784,8 @@ class _LinksPanel extends StatelessWidget {
     final backlinks = app.backlinksForCurrent();
     final outgoing = app.outgoingLinksForCurrent();
 
-    Widget section(String label, IconData icon, List<TreeNode> pages,
-        String empty) {
+    Widget section(
+        String label, IconData icon, List<TreeNode> pages, String empty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1815,8 +1812,8 @@ class _LinksPanel extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               child: Text(empty,
-                  style:
-                      TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
+                  style: TextStyle(
+                      fontSize: 12, color: context.surfaces.textSecondary)),
             )
           else
             for (final p in pages)
@@ -1893,137 +1890,142 @@ class _StatusBar extends StatelessWidget {
     // dialog that keeps the technical half behind an Advanced fold.
     final problem = app.saveError;
     final failed = problem != null;
-    return Container(
-      height: 24,
-      // Tighter at the trailing edge than the leading one, on purpose. The
-      // left-hand cluster is a run of icon-and-label pairs whose glyphs need
-      // breathing room from the frame; the right-hand end is the shortcut
-      // cheat-sheet, which is a single line of text and reads as *detached*
-      // when it floats 12px in from the window edge — the "the UI doesn't
-      // reach the sides" complaint. 6px is the optical match.
-      padding: const EdgeInsets.only(left: OnoteSpace.x5, right: OnoteSpace.x3),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
-      child: Row(
-        children: [
-          Tooltip(
-            message: failed
-                ? '${problem.message}\n\nMore detail.'
-                : saved
-                    ? 'This page is saved to your local .onote file.'
-                    : 'Saving…',
-            child: MouseRegion(
-              cursor: failed ? SystemMouseCursors.click : MouseCursor.defer,
-              child: GestureDetector(
-                onTap:
-                    failed ? () => showSaveProblemDialog(context, problem) : null,
-                child: Row(children: [
-                  Icon(
-                      failed
-                          ? Icons.error_outline
-                          : saved
-                              ? Icons.check_circle_outline
-                              : Icons.sync,
-                      size: OnoteIcon.sm,
-                      color: failed
-                          ? OnoteColors.danger
-                          : saved
-                              ? OnoteColors.success
-                              : context.surfaces.textSecondary),
-                  const SizedBox(width: 5),
+    return ChromeBar(
+      edge: ChromeEdge.top,
+      height: OnoteSize.statusBar,
+      child: Padding(
+        // Tighter at the trailing edge than the leading one, on purpose. The
+        // left-hand cluster is a run of icon-and-label pairs whose glyphs need
+        // breathing room from the frame; the right-hand end is the shortcut
+        // cheat-sheet, which is a single line of text and reads as *detached*
+        // when it floats 12px in from the window edge — the "the UI doesn't
+        // reach the sides" complaint. 6px is the optical match.
+        padding:
+            const EdgeInsets.only(left: OnoteSpace.x5, right: OnoteSpace.x3),
+        child: Row(
+          children: [
+            Tooltip(
+              message: failed
+                  ? '${problem.message}\n\nMore detail.'
+                  : saved
+                      ? 'This page is saved to your local .onote file.'
+                      : 'Saving…',
+              child: MouseRegion(
+                cursor: failed ? SystemMouseCursors.click : MouseCursor.defer,
+                child: GestureDetector(
+                  onTap: failed
+                      ? () => showSaveProblemDialog(context, problem)
+                      : null,
+                  child: Row(children: [
+                    Icon(
+                        failed
+                            ? Icons.error_outline
+                            : saved
+                                ? Icons.check_circle_outline
+                                : Icons.sync,
+                        size: OnoteIcon.sm,
+                        color: failed
+                            ? OnoteColors.danger
+                            : saved
+                                ? OnoteColors.success
+                                : context.surfaces.textSecondary),
+                    const SizedBox(width: 5),
+                    Text(
+                        failed
+                            ? problem.short
+                            : saved
+                                ? 'Saved on this device'
+                                : 'Saving…',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: failed
+                                ? OnoteColors.danger
+                                : context.surfaces.textSecondary)),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Sync (ADR-0006). Shown only once a second device has touched this
+            // notebook — until then there is nothing to say, and a permanent
+            // "1 device" chip would be noise.
+            if (app.notebookId != null) _SyncChip(app: app),
+            // Background housekeeping, when there is any. Nothing to click and
+            // nothing to decide — it says what is happening and goes away.
+            // "Without requiring direct input" is not the same as "in secret":
+            // a notebook that quietly rewrites itself is alarming if you notice.
+            if (app.housekeepingNote != null) ...[
+              const SizedBox(width: 10),
+              Text(app.housekeepingNote!,
+                  style: TextStyle(
+                      fontSize: 11, color: context.surfaces.textSecondary)),
+            ],
+            const SizedBox(width: 12),
+            // Active compute engine (§ADR-0002): green chip when the Rust core
+            // is linked, with the live page content-hash it computed on save.
+            //
+            // DEBUG BUILDS ONLY. The stale-library trap this chip exists for
+            // is a developer problem; a student reading "Rust · a3f9c210"
+            // learns nothing except that the app is talking to itself. The
+            // user-facing health signals (saved state, sync) stay.
+            if (kDebugMode)
+              Tooltip(
+                // The build stamp is here because the stale-library trap keeps
+                // costing real time: the app loads a compiled artefact, so being on
+                // the right branch says nothing about what is actually running.
+                // Importer and repair fixes live in that library, so "I pulled and
+                // it still does the old thing" is answered by reading this line.
+                message: rust
+                    ? 'The Rust core (onote-core) is linked and computing this '
+                        "page's content hash on save.\n${_coreBuildLine()}"
+                    : 'Running the pure-Dart engine. Build the onote-core library '
+                        'to link the Rust core.',
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.memory,
+                      size: 16,
+                      color: rust
+                          ? OnoteColors.success
+                          : context.surfaces.textSecondary),
+                  const SizedBox(width: 4),
                   Text(
-                      failed
-                          ? problem.short
-                          : saved
-                              ? 'Saved on this device'
-                              : 'Saving…',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: failed
-                              ? OnoteColors.danger
-                              : context.surfaces.textSecondary)),
+                    rust && hash != null && hash.length >= 8
+                        ? '${app.engineLabel} · ${hash.substring(0, 8)}'
+                        : app.engineLabel,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: rust
+                            ? OnoteColors.success
+                            : context.surfaces.textSecondary),
+                  ),
                 ]),
               ),
+            // The cheat-sheet (§7a.4), dropped whole rather than ellipsised
+            // (§7d). Truncating it produces "V select · T text · P pen · H…",
+            // which is not a shorter version of the message — it is a different,
+            // useless one, and it also drags the state cluster on its left into
+            // truncation with it. Below the threshold the shortcuts are still on
+            // every button's tooltip, which is where they are actually read.
+            //
+            // **One flex child, not a `Spacer` plus a `Flexible`.** That pairing
+            // splits the free space evenly between them, so the measurement ran
+            // against half the width the text was then allowed to occupy — the
+            // text passed the fits-whole check and was clipped anyway, which is
+            // precisely the outcome this widget exists to prevent. `Expanded` +
+            // right alignment gives the measurement and the layout the same
+            // number.
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _DropIfTight(
+                  text: 'V select · T text · P pen · H highlight · E erase · '
+                      'Ctrl+Z undo · Ctrl+scroll zoom',
+                  style: OnoteType.caption
+                      .copyWith(color: context.surfaces.textSecondary),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          // Sync (ADR-0006). Shown only once a second device has touched this
-          // notebook — until then there is nothing to say, and a permanent
-          // "1 device" chip would be noise.
-          if (app.notebookId != null) _SyncChip(app: app),
-          // Background housekeeping, when there is any. Nothing to click and
-          // nothing to decide — it says what is happening and goes away.
-          // "Without requiring direct input" is not the same as "in secret":
-          // a notebook that quietly rewrites itself is alarming if you notice.
-          if (app.housekeepingNote != null) ...[
-            const SizedBox(width: 10),
-            Text(app.housekeepingNote!,
-                style: TextStyle(
-                    fontSize: 11, color: context.surfaces.textSecondary)),
           ],
-          const SizedBox(width: 12),
-          // Active compute engine (§ADR-0002): green chip when the Rust core
-          // is linked, with the live page content-hash it computed on save.
-          //
-          // DEBUG BUILDS ONLY. The stale-library trap this chip exists for
-          // is a developer problem; a student reading "Rust · a3f9c210"
-          // learns nothing except that the app is talking to itself. The
-          // user-facing health signals (saved state, sync) stay.
-          if (kDebugMode)
-            Tooltip(
-            // The build stamp is here because the stale-library trap keeps
-            // costing real time: the app loads a compiled artefact, so being on
-            // the right branch says nothing about what is actually running.
-            // Importer and repair fixes live in that library, so "I pulled and
-            // it still does the old thing" is answered by reading this line.
-            message: rust
-                ? 'The Rust core (onote-core) is linked and computing this '
-                    "page's content hash on save.\n${_coreBuildLine()}"
-                : 'Running the pure-Dart engine. Build the onote-core library '
-                    'to link the Rust core.',
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.memory,
-                  size: 16,
-                  color: rust ? OnoteColors.success : context.surfaces.textSecondary),
-              const SizedBox(width: 4),
-              Text(
-                rust && hash != null && hash.length >= 8
-                    ? '${app.engineLabel} · ${hash.substring(0, 8)}'
-                    : app.engineLabel,
-                style: TextStyle(
-                    fontSize: 11,
-                    color: rust ? OnoteColors.success : context.surfaces.textSecondary),
-              ),
-            ]),
-          ),
-          // The cheat-sheet (§7a.4), dropped whole rather than ellipsised
-          // (§7d). Truncating it produces "V select · T text · P pen · H…",
-          // which is not a shorter version of the message — it is a different,
-          // useless one, and it also drags the state cluster on its left into
-          // truncation with it. Below the threshold the shortcuts are still on
-          // every button's tooltip, which is where they are actually read.
-          //
-          // **One flex child, not a `Spacer` plus a `Flexible`.** That pairing
-          // splits the free space evenly between them, so the measurement ran
-          // against half the width the text was then allowed to occupy — the
-          // text passed the fits-whole check and was clipped anyway, which is
-          // precisely the outcome this widget exists to prevent. `Expanded` +
-          // right alignment gives the measurement and the layout the same
-          // number.
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _DropIfTight(
-                text: 'V select · T text · P pen · H highlight · E erase · '
-                    'Ctrl+Z undo · Ctrl+scroll zoom',
-                style: OnoteType.caption
-                    .copyWith(color: context.surfaces.textSecondary),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2077,13 +2079,13 @@ class _EmptyState extends StatelessWidget {
           Icon(Icons.auto_stories_outlined,
               size: OnoteIcon.xl, color: context.surfaces.textSecondary),
           const SizedBox(height: 12),
-          const Text('An open page awaits',
-              style: OnoteType.headline),
+          const Text('An open page awaits', style: OnoteType.headline),
           const SizedBox(height: 6),
           Text(
             'Everything you make here lives on your device,\nin an open format you own.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: context.surfaces.textSecondary),
+            style:
+                TextStyle(fontSize: 13, color: context.surfaces.textSecondary),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -2115,7 +2117,8 @@ class _SyncChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     // Green once it is actually somewhere that syncs; grey when it is only on
     // this machine. The colour is the whole at-a-glance answer.
-    final color = s.isSynced ? OnoteColors.success : context.surfaces.textSecondary;
+    final color =
+        s.isSynced ? OnoteColors.success : context.surfaces.textSecondary;
 
     return Tooltip(
       message: syncChipTooltip(s),
@@ -2194,7 +2197,8 @@ class _LockedPage extends StatelessWidget {
             const SizedBox(height: 14),
             Text('“$rootTitle” is locked',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             const Text(
               'Enter the passcode to read it. This hides the page inside '

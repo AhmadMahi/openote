@@ -398,8 +398,9 @@ void main() {
   });
 
   group('the focus ring', () {
-    /// The ring is the only thing on screen drawn as a 2px box border in the
-    /// primary colour, so counting those is how the test sees it.
+    /// The ring is the only thing on screen drawn as a 3px box border in the
+    /// primary hue (at reduced alpha — the macOS-style halo), so counting
+    /// those is how the test sees it.
     int rings(WidgetTester tester) {
       final scheme = onoteTheme(Brightness.light).colorScheme;
       return tester
@@ -409,8 +410,9 @@ void main() {
         if (dec is! BoxDecoration) return false;
         final b = dec.border;
         return b is Border &&
-            b.top.width == 2 &&
-            b.top.color == scheme.primary &&
+            b.top.width == 3 &&
+            (b.top.color.toARGB32() & 0xFFFFFF) ==
+                (scheme.primary.toARGB32() & 0xFFFFFF) &&
             b.isUniform;
       }).length;
     }

@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -29,6 +28,7 @@ import 'object_face.dart';
 import 'settings_dialog.dart';
 import 'update_dialog.dart';
 import '../theme/tokens.dart';
+import 'glass.dart';
 import 'onote_dialog.dart';
 import 'object_row.dart' show BackgroundSpacingButton, WordCount;
 
@@ -70,12 +70,7 @@ class _CommandBarState extends State<CommandBar> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        border:
-            Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
+    return ChromeBar(
       child: Column(
         children: [
           // ── Tab row ──
@@ -90,16 +85,32 @@ class _CommandBarState extends State<CommandBar> {
                 // part of the frame — and cost hit area at the screen edge,
                 // which is the one place a pointer can be thrown at infinitely
                 // fast (Fitts's law) and always land.
-                for (var i = 0; i < _tabs.length; i++)
-                  _tabButton(scheme, i, _tabs[i]),
+                // The four tabs are one segmented control: a sunk track with
+                // the chosen tab lifted off it as a bright pill. One shape,
+                // read at a glance as "pick one of these", against the old
+                // row of underlined words that read as a web page.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      OnoteSpace.x3, OnoteSpace.x2, 0, OnoteSpace.x2),
+                  child: Container(
+                    padding: const EdgeInsets.all(OnoteSpace.x1),
+                    decoration: BoxDecoration(
+                      color: context.surfaces.chrome2,
+                      borderRadius: BorderRadius.circular(OnoteRadius.full),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      for (var i = 0; i < _tabs.length; i++)
+                        _tabButton(scheme, i, _tabs[i]),
+                    ]),
+                  ),
+                ),
                 // **A badge, not a tab.** It says what the row below is
                 // about and it cannot be pressed, so there is nothing here to
                 // be moved onto and nothing to be moved back from. It sits
                 // where the old Maths tab sat, deliberately: same place,
                 // opposite kind.
                 if (objectFaceOf(app) == ObjectFace.equation)
-                  const _SubjectBadge(
-                      icon: Icons.functions, label: 'Equation'),
+                  const _SubjectBadge(icon: Icons.functions, label: 'Equation'),
                 const Spacer(),
                 // The trailing cluster COMPACTS rather than scrolling.
                 //
@@ -213,7 +224,8 @@ class _CommandBarState extends State<CommandBar> {
                         selected: app.showLinksPanel,
                         onPressed: app.toggleLinksPanel,
                         inline: IconButton(
-                          icon: const Icon(Icons.account_tree_outlined, size: 18),
+                          icon:
+                              const Icon(Icons.account_tree_outlined, size: 18),
                           tooltip: 'Links & backlinks',
                           isSelected: app.showLinksPanel,
                           visualDensity: VisualDensity.compact,
@@ -240,7 +252,8 @@ class _CommandBarState extends State<CommandBar> {
                         label: 'Export',
                         inline: MenuAnchor(
                           builder: (context, controller, _) => IconButton(
-                            icon: const Icon(Icons.ios_share_outlined, size: 18),
+                            icon:
+                                const Icon(Icons.ios_share_outlined, size: 18),
                             tooltip: 'Export page…',
                             visualDensity: VisualDensity.compact,
                             onPressed: () => controller.isOpen
@@ -293,13 +306,14 @@ class _CommandBarState extends State<CommandBar> {
                           // other user-visible string in the app.
                           ToolbarSubmenuItem(
                             icon: Icons.folder_zip_outlined,
-                            label: 'Save the whole notebook as folders and files…',
+                            label:
+                                'Save the whole notebook as folders and files…',
                             onPressed: () => _exportWithProgress(
                                 context,
                                 'Saving the notebook…',
                                 (report) => materializeNotebook(app,
-                                    onProgress: (done, total) => report(
-                                        'Page $done of $total…'))),
+                                    onProgress: (done, total) =>
+                                        report('Page $done of $total…'))),
                           ),
                         ],
                       ),
@@ -485,7 +499,8 @@ class _CommandBarState extends State<CommandBar> {
         ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.print_outlined, size: 18),
-          shortcut: const SingleActivator(LogicalKeyboardKey.keyP, control: true),
+          shortcut:
+              const SingleActivator(LogicalKeyboardKey.keyP, control: true),
           onPressed: () => printCurrentPage(app),
           child: const Text('Print…'),
         ),
@@ -526,8 +541,7 @@ class _CommandBarState extends State<CommandBar> {
     try {
       final path = await fn(app);
       if (path != null) {
-        messenger?.showSnackBar(
-            SnackBar(content: Text('Exported to $path')));
+        messenger?.showSnackBar(SnackBar(content: Text('Exported to $path')));
       }
     } catch (e) {
       messenger?.showSnackBar(SnackBar(
@@ -588,12 +602,12 @@ class _CommandBarState extends State<CommandBar> {
       // AFTER the last control, so it displaces nothing — says why.
       fmt(Icons.format_bold, 'Bold  (Ctrl+B)', () => app.wrapSelection('**'),
           MdInline.bold),
-      fmt(Icons.format_italic, 'Italic  (Ctrl+I)',
-          () => app.wrapSelection('*'), MdInline.italic),
+      fmt(Icons.format_italic, 'Italic  (Ctrl+I)', () => app.wrapSelection('*'),
+          MdInline.italic),
       fmt(Icons.format_underlined, 'Underline  (Ctrl+U)',
           () => app.wrapSelection('++'), MdInline.underline),
-      fmt(Icons.strikethrough_s, 'Strikethrough',
-          () => app.wrapSelection('~~'), MdInline.strike),
+      fmt(Icons.strikethrough_s, 'Strikethrough', () => app.wrapSelection('~~'),
+          MdInline.strike),
       fmt(Icons.code, 'Inline code', () => app.wrapSelection('`'),
           MdInline.code),
       fmt(Icons.border_color, 'Highlight', () => app.wrapSelection('=='),
@@ -628,7 +642,8 @@ class _CommandBarState extends State<CommandBar> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.format_color_text,
-                  size: 18, color: canFormat ? null : context.surfaces.textSecondary),
+                  size: 18,
+                  color: canFormat ? null : context.surfaces.textSecondary),
               Container(
                   width: 18,
                   height: 3,
@@ -670,7 +685,8 @@ class _CommandBarState extends State<CommandBar> {
       if (!canFormat) ...[
         const SizedBox(width: 10),
         Text('Click into a text box to format',
-            style: TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+            style:
+                TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
       ],
     ]);
   }
@@ -679,28 +695,35 @@ class _CommandBarState extends State<CommandBar> {
 
   Widget _tabButton(ColorScheme scheme, int i, String label) {
     final on = _tab == i;
+    final s = context.surfaces;
     return InkWell(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(OnoteRadius.full),
       // **The one thing that writes `_tab`.** Nothing else in the app may,
       // which is the whole of the answer to "don't force any navigation".
       onTap: () => setState(() => _tab = i),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: OnoteSpace.x5),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              width: 2,
-              color: on ? scheme.primary : Colors.transparent,
-            ),
-          ),
+          // The chosen tab is the lifted pill; the accent is not spent here
+          // because the tab is a *place*, not a state (§3.5).
+          color: on ? s.lift : Colors.transparent,
+          borderRadius: BorderRadius.circular(OnoteRadius.full),
+          boxShadow: on
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .12),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: on ? FontWeight.w600 : FontWeight.w400,
-            color: on ? scheme.primary : null,
+          style: OnoteType.small.copyWith(
+            fontWeight: on ? FontWeight.w600 : FontWeight.w500,
+            color: on ? s.textPrimary : s.textSecondary,
           ),
         ),
       ),
@@ -759,8 +782,8 @@ class _CommandBarState extends State<CommandBar> {
               icon: item.icon,
               label: item.label,
               inline: _InsertButton(app: app, item: item),
-              onPressed:
-                  _insert(() => item.run(context, app, insertAnchor(app, item))),
+              onPressed: _insert(
+                  () => item.run(context, app, insertAnchor(app, item))),
               submenu: item.extras.isEmpty
                   ? null
                   : [
@@ -770,8 +793,8 @@ class _CommandBarState extends State<CommandBar> {
                       ToolbarSubmenuItem(
                         icon: item.icon,
                         label: item.label,
-                        onPressed: _insert(
-                            () => item.run(context, app, insertAnchor(app, item))),
+                        onPressed: _insert(() =>
+                            item.run(context, app, insertAnchor(app, item))),
                       ),
                       for (final extra in item.extras)
                         ToolbarSubmenuItem(
@@ -784,6 +807,7 @@ class _CommandBarState extends State<CommandBar> {
             ),
         ],
       );
+
   /// Pick a colour, and add it to the row.
   Future<void> _addColour(BuildContext context) async {
     final picked = await showOnoteColorPicker(context, app,
@@ -835,7 +859,8 @@ class _CommandBarState extends State<CommandBar> {
       // How far apart that pattern is drawn — dot gap, ruled line height,
       // grid square. Only with a pattern up; on a blank page it controls
       // nothing.
-      if (app.pageProps.background != 'blank') BackgroundSpacingButton(app: app),
+      if (app.pageProps.background != 'blank')
+        BackgroundSpacingButton(app: app),
       const _Div(),
       // Canvas or paper. Per page, not per notebook: one notebook holds the
       // lecture you scribble on and the essay you hand in, and making you
@@ -1010,6 +1035,7 @@ class _CommandBarState extends State<CommandBar> {
         ),
       );
     }
+
     // The swatches also appear with ink selected, so a lassoed diagram can be
     // recoloured without first re-picking the pen.
     // The arrow is in this list because it draws in the pen's colour and
@@ -1035,7 +1061,10 @@ class _CommandBarState extends State<CommandBar> {
       toolButton(Tool.lasso, Icons.gesture_outlined, 'Lasso-select ink'),
       toolButton(Tool.arrow, Icons.north_east,
           'Arrow  (A) — drag; the head lands where you let go'),
-      toolButton(Tool.space, Icons.unfold_more, 'Insert space — drag to push '
+      toolButton(
+          Tool.space,
+          Icons.unfold_more,
+          'Insert space — drag to push '
           'everything below down'),
       const _Div(),
       // Focus mode. In the Draw row because that is when you want it: the
@@ -1135,13 +1164,16 @@ class _CommandBarState extends State<CommandBar> {
             app.eraserMode == EraserMode.area
                 ? 'Splits strokes where you rub'
                 : 'Removes any stroke you touch',
-            style: TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+            style:
+                TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
       ] else if (app.tool == Tool.lasso)
         Text('Draw a loop around ink to select it — then drag or delete',
-            style: TextStyle(fontSize: 11, color: context.surfaces.textSecondary))
+            style:
+                TextStyle(fontSize: 11, color: context.surfaces.textSecondary))
       else
         Text('Pick the pen or highlighter to draw',
-            style: TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+            style:
+                TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
       // NO `Spacer` here, and none in any command row. Every row is built
       // inside a horizontal `SingleChildScrollView`, which offers unbounded
       // width — and a flex child (`Spacer` is `Expanded`) under an unbounded
@@ -1192,7 +1224,6 @@ class _CommandBarState extends State<CommandBar> {
       const SizedBox(width: 4),
     ]);
   }
-
 }
 
 /// `H2` / `H3` on the Home row.
@@ -1219,9 +1250,9 @@ class _Div extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: 1,
-        height: 22,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-        color: Theme.of(context).dividerColor,
+        height: 16,
+        margin: const EdgeInsets.symmetric(horizontal: OnoteSpace.x3),
+        color: context.surfaces.border,
       );
 }
 
@@ -1286,7 +1317,8 @@ class _FontSizeField extends StatelessWidget {
                       fontSize: 12,
                       color: enabled ? null : context.surfaces.textSecondary)),
               Icon(Icons.arrow_drop_down,
-                  size: 16, color: enabled ? null : context.surfaces.textSecondary),
+                  size: 16,
+                  color: enabled ? null : context.surfaces.textSecondary),
             ]),
           ),
         ),
@@ -1341,7 +1373,8 @@ class _TagButton extends StatelessWidget {
                           ? null
                           : active.first.color),
               Icon(Icons.arrow_drop_down,
-                  size: 16, color: enabled ? null : context.surfaces.textSecondary),
+                  size: 16,
+                  color: enabled ? null : context.surfaces.textSecondary),
             ]),
           ),
         ),
@@ -1364,7 +1397,8 @@ class _TagButton extends StatelessWidget {
           MenuItemButton(
             leadingIcon: const Icon(Icons.event_outlined, size: 16),
             onPressed: () => _setDue(context),
-            child: Text(_dueOfCaret() == null ? 'Due date…' : 'Change due date…'),
+            child:
+                Text(_dueOfCaret() == null ? 'Due date…' : 'Change due date…'),
           ),
           if (_dueOfCaret() != null)
             MenuItemButton(
@@ -1464,9 +1498,7 @@ class _MakeCardButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Tooltip(
-            message: onLine
-                ? 'Make this line a flashcard'
-                : 'New flashcard',
+            message: onLine ? 'Make this line a flashcard' : 'New flashcard',
             child: InkWell(
               borderRadius: BorderRadius.circular(6),
               onTap: () {
@@ -1549,8 +1581,7 @@ class _StudyButton extends StatelessWidget {
     // through `examPlanFor`, which would walk the deck a second time on a
     // widget that rebuilds with every keystroke.
     final exam = app.study.examDate(app.activeSectionId);
-    final daysLeft =
-        exam == null ? null : daysBetween(DateTime.now(), exam);
+    final daysLeft = exam == null ? null : daysBetween(DateTime.now(), exam);
     final urgent =
         daysLeft != null && daysLeft >= 0 && daysLeft <= _urgentDays && due > 0;
     final countdown = daysLeft == null || daysLeft < 0
@@ -1776,9 +1807,6 @@ class _InsertButton extends StatelessWidget {
   }
 }
 
-
-
-
 /// Lets the toolbar row be dragged and wheel-scrolled when it is wider than
 /// the window. Flutter's default behaviour excludes mouse and trackpad from
 /// drag scrolling, and a horizontal viewport ignores a vertical wheel.
@@ -1818,8 +1846,7 @@ class _SubjectBadge extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(left: 6),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-              width: 1, height: 18, color: context.surfaces.border),
+          Container(width: 1, height: 18, color: context.surfaces.border),
           const SizedBox(width: 6),
           Tooltip(
             message: 'Esc when you are done',
@@ -1834,8 +1861,8 @@ class _SubjectBadge extends StatelessWidget {
                 Icon(icon, size: 14, color: accent),
                 const SizedBox(width: 4),
                 Text(label,
-                    style: OnoteType.caption.copyWith(
-                        fontWeight: FontWeight.w600, color: accent)),
+                    style: OnoteType.caption
+                        .copyWith(fontWeight: FontWeight.w600, color: accent)),
               ]),
             ),
           ),
@@ -1844,7 +1871,6 @@ class _SubjectBadge extends StatelessWidget {
     );
   }
 }
-
 
 /// One colour well in the Draw row — the Notability switching model.
 ///
@@ -1929,7 +1955,8 @@ class _ColorWellState extends State<_ColorWell> {
       context: context,
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
       items: [
-        const PopupMenuItem(value: 'edit', height: 36, child: Text('Change colour…')),
+        const PopupMenuItem(
+            value: 'edit', height: 36, child: Text('Change colour…')),
         PopupMenuItem(
           value: 'remove',
           height: 36,

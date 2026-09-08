@@ -50,6 +50,7 @@ import '../model/page_stats.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
+import 'glass.dart';
 import 'math_bar.dart';
 import 'object_face.dart';
 
@@ -88,14 +89,12 @@ class ObjectRow extends StatelessWidget {
   }
 
   Widget _band(BuildContext context, OnoteSurfaces s, ObjectFace face) {
-    return Container(
+    // `inset` — the "insets within chrome" role — so the row reads as a
+    // different layer and is never mistaken for a second command row.
+    return ChromeBar(
+      inset: true,
+      edge: ChromeEdge.none,
       height: kObjectRowHeight,
-      decoration: BoxDecoration(
-        // `chrome2` — the "insets within chrome" role — so the row reads as a
-        // different layer and is never mistaken for a second command row.
-        color: s.chrome2,
-        border: Border(top: BorderSide(color: s.border)),
-      ),
       child: ScrollConfiguration(
         behavior: const _RowScroll(),
         child: SingleChildScrollView(
@@ -256,11 +255,8 @@ class _WordCountState extends State<WordCount> {
             height: 34,
             // Rounded UP and never zero: "0 min" reads as a failure, and
             // anything written at all takes a moment to read.
-            child: _row(
-                'Reading time',
-                stats.words == 0
-                    ? '—'
-                    : '${stats.readingMinutes} min'),
+            child: _row('Reading time',
+                stats.words == 0 ? '—' : '${stats.readingMinutes} min'),
           ),
         ],
         child: Padding(
@@ -417,7 +413,8 @@ class BackgroundSpacingButton extends StatelessWidget {
             child: Row(children: [
               Expanded(
                 child: Slider(
-                  value: v.clamp(PageProps.minBgSpacing, PageProps.maxBgSpacing),
+                  value:
+                      v.clamp(PageProps.minBgSpacing, PageProps.maxBgSpacing),
                   min: PageProps.minBgSpacing,
                   max: PageProps.maxBgSpacing,
                   onChanged: (x) => app.setBackgroundSpacing(x.roundToDouble()),

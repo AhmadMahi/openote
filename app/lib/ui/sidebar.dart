@@ -113,9 +113,7 @@ class _Reveal extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
         alignment: Alignment.topCenter,
-        child: open
-            ? child
-            : const SizedBox(width: double.infinity, height: 0),
+        child: open ? child : const SizedBox(width: double.infinity, height: 0),
       ),
     );
   }
@@ -202,7 +200,6 @@ class _SidebarState extends State<Sidebar> {
   // ── Search / quick-jump ───────────────────────────────────────────────
 
   Widget _searchRow(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 2, 4, 6),
       child: Row(
@@ -232,13 +229,14 @@ class _SidebarState extends State<Sidebar> {
                       const BoxConstraints(minWidth: 30, minHeight: 30),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  // A white well with a hairline, the macOS search field.
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: scheme.outline),
+                    borderRadius: OnoteRadius.lgAll,
+                    borderSide: BorderSide(color: context.surfaces.border),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: scheme.outline.withValues(alpha: .6)),
+                    borderRadius: OnoteRadius.lgAll,
+                    borderSide: BorderSide(color: context.surfaces.border),
                   ),
                 ),
               ),
@@ -274,7 +272,8 @@ class _SidebarState extends State<Sidebar> {
     if (results.isEmpty && contentHits.isEmpty) {
       return Center(
         child: Text('No matches for “${_query.trim()}”',
-            style: TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
+            style:
+                TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
       );
     }
     return ListView(
@@ -401,9 +400,8 @@ class _SidebarState extends State<Sidebar> {
         Expanded(
           child: Container(
             color: context.surfaces.chrome,
-            child: app.navHome
-                ? _HomePane(app: app)
-                : _pagesZone(context, active),
+            child:
+                app.navHome ? _HomePane(app: app) : _pagesZone(context, active),
           ),
         ),
       ],
@@ -436,9 +434,7 @@ class _SidebarState extends State<Sidebar> {
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: .6,
-                    color: dark
-                        ? OnoteColors.moon300
-                        : OnoteColors.graphite500,
+                    color: dark ? OnoteColors.moon300 : OnoteColors.graphite500,
                   ),
                 ),
               ),
@@ -488,10 +484,7 @@ class _SidebarState extends State<Sidebar> {
     }
 
     Widget row(TreeNode s) => _SectionHeader(
-        app: app,
-        section: s,
-        dark: dark,
-        active: app.activeSectionId == s.id);
+        app: app, section: s, dark: dark, active: app.activeSectionId == s.id);
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 8),
@@ -510,9 +503,8 @@ class _SidebarState extends State<Sidebar> {
                 decoration: BoxDecoration(
                   border: Border(
                     left: BorderSide(
-                        color: dark
-                            ? OnoteColors.night300
-                            : OnoteColors.paper300),
+                        color:
+                            dark ? OnoteColors.night300 : OnoteColors.paper300),
                   ),
                 ),
                 child: Column(
@@ -632,7 +624,7 @@ class _GroupHeaderState extends State<_GroupHeader> {
             decoration: target
                 ? BoxDecoration(
                     border: Border.all(color: scheme.primary, width: 1.5),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: OnoteRadius.mdAll,
                     color: scheme.primary.withValues(alpha: .06))
                 : null,
             padding: const EdgeInsets.fromLTRB(8, 10, 8, 2),
@@ -709,13 +701,13 @@ class _HomeTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: OnoteRadius.mdAll,
         onTap: app.openHome,
         child: Container(
           decoration: active
               ? BoxDecoration(
-                  color: scheme.primary.withValues(alpha: .09),
-                  borderRadius: BorderRadius.circular(6))
+                  color: scheme.primary.withValues(alpha: OnoteAlpha.selected),
+                  borderRadius: OnoteRadius.mdAll)
               : null,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           child: Row(children: [
@@ -764,7 +756,8 @@ class _HomePane extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(children: [
-              Icon(icon, size: 16, color: iconColor ?? context.surfaces.textSecondary),
+              Icon(icon,
+                  size: 16, color: iconColor ?? context.surfaces.textSecondary),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -776,7 +769,8 @@ class _HomePane extends StatelessWidget {
                     Text(app.node(page.parentId)?.title ?? '',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: 11, color: context.surfaces.textSecondary)),
+                            fontSize: 11,
+                            color: context.surfaces.textSecondary)),
                   ],
                 ),
               ),
@@ -941,8 +935,7 @@ class _ComingUp extends StatelessWidget {
         DatedKind.event => Icons.schedule,
       };
 
-  static Color _colour(
-          DatedKind k, ColorScheme scheme, OnoteSurfaces s) =>
+  static Color _colour(DatedKind k, ColorScheme scheme, OnoteSurfaces s) =>
       switch (k) {
         DatedKind.exam => OnoteColors.brass500,
         DatedKind.task => scheme.primary,
@@ -1028,7 +1021,7 @@ class _NavRail extends StatelessWidget {
                       child: Tooltip(
                         message: s.title,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: OnoteRadius.mdAll,
                           onTap: () {
                             app.toggleNavCollapsed();
                             app.activateSection(s.id);
@@ -1040,7 +1033,7 @@ class _NavRail extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: _sectionColor(s.color, dark)
                                   .withValues(alpha: .18),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: OnoteRadius.mdAll,
                               border: app.activeSectionId == s.id
                                   ? Border.all(color: scheme.primary)
                                   : null,
@@ -1084,8 +1077,7 @@ class _NotebookHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final current =
-        app.notebooks.firstWhere((n) => n.id == app.notebookId);
+    final current = app.notebooks.firstWhere((n) => n.id == app.notebookId);
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 10, 6, 4),
       child: Tooltip(
@@ -1235,12 +1227,13 @@ class _SectionHeaderState extends State<_SectionHeader> {
         decoration: pageTarget
             ? BoxDecoration(
                 border: Border.all(color: scheme.primary, width: 1.5),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: OnoteRadius.mdAll,
                 color: scheme.primary.withValues(alpha: .06))
             : active
                 ? BoxDecoration(
-                    color: scheme.primary.withValues(alpha: .09),
-                    borderRadius: BorderRadius.circular(6))
+                    color:
+                        scheme.primary.withValues(alpha: OnoteAlpha.selected),
+                    borderRadius: OnoteRadius.mdAll)
                 : null,
         padding: const EdgeInsets.fromLTRB(6, 7, 6, 7),
         child: Row(
@@ -1281,8 +1274,7 @@ class _SectionHeaderState extends State<_SectionHeader> {
 
 /// How long until a trashed item (deleted at [deletedAt]) is auto-purged.
 String _retentionSubtitle(int deletedAt, int retentionDays) {
-  final expireMs =
-      deletedAt + Duration(days: retentionDays).inMilliseconds;
+  final expireMs = deletedAt + Duration(days: retentionDays).inMilliseconds;
   final remaining = expireMs - DateTime.now().millisecondsSinceEpoch;
   final days = (remaining / const Duration(days: 1).inMilliseconds).ceil();
   if (days <= 0) return 'Deletes soon';
@@ -1410,7 +1402,8 @@ Future<void> showRecycleBin(BuildContext context, AppState app) async {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close')),
           ],
         );
       },
@@ -1494,8 +1487,7 @@ class _InlineRenameState extends State<_InlineRename> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _focus.requestFocus();
-      _c.selection =
-          TextSelection(baseOffset: 0, extentOffset: _c.text.length);
+      _c.selection = TextSelection(baseOffset: 0, extentOffset: _c.text.length);
     });
     _focus.addListener(() {
       if (!_focus.hasFocus) _commit();
@@ -1538,11 +1530,11 @@ class _InlineRenameState extends State<_InlineRename> {
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: OnoteRadius.mdAll,
           borderSide: BorderSide(color: scheme.primary),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: OnoteRadius.mdAll,
           borderSide: BorderSide(color: scheme.primary, width: 1.4),
         ),
       ),
@@ -1561,14 +1553,14 @@ Widget dragChip(BuildContext context, String label, IconData icon) {
         color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(8),
         boxShadow: const [
-          BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))
+          BoxShadow(
+              color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))
         ],
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 16, color: Colors.white),
         const SizedBox(width: 6),
-        Text(label,
-            style: const TextStyle(color: Colors.white, fontSize: 12)),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
       ]),
     ),
   );
@@ -1642,8 +1634,8 @@ class _PageTileState extends State<_PageTile> {
       },
       builder: (ctx, cand, rej) {
         final active = cand.isNotEmpty;
-        final tile = _tile(context,
-            subpageTarget: active && _zone == _DropZone.into);
+        final tile =
+            _tile(context, subpageTarget: active && _zone == _DropZone.into);
         if (active && (_zone == _DropZone.before || _zone == _DropZone.after)) {
           // An insertion line, the universal "it will land here" signal.
           final line = Container(
@@ -1725,7 +1717,7 @@ class _PageTileState extends State<_PageTile> {
           decoration: subpageTarget
               ? BoxDecoration(
                   border: Border.all(color: scheme.primary, width: 1.5),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: OnoteRadius.mdAll,
                   color: scheme.primary.withValues(alpha: .06))
               : null,
           padding: EdgeInsets.only(
@@ -1752,7 +1744,9 @@ class _PageTileState extends State<_PageTile> {
                       ? Icons.description_outlined
                       : Icons.subdirectory_arrow_right,
                   size: 16,
-                  color: selected ? scheme.primary : context.surfaces.textSecondary),
+                  color: selected
+                      ? scheme.primary
+                      : context.surfaces.textSecondary),
               const SizedBox(width: 7),
               Expanded(
                 child: _renaming
@@ -1879,8 +1873,8 @@ KeyEventResult _nodeDeleteKey(BuildContext context, AppState app, TreeNode node,
   return KeyEventResult.handled;
 }
 
-Future<void> _deleteNodeFromKey(BuildContext context, AppState app,
-    TreeNode node, FocusNode row) async {
+Future<void> _deleteNodeFromKey(
+    BuildContext context, AppState app, TreeNode node, FocusNode row) async {
   final messenger = ScaffoldMessenger.of(context);
   final title = node.title;
   // Hand the keyboard on BEFORE this row is destroyed, and before the await:
@@ -1946,8 +1940,7 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
     {required bool canIndent, required Offset position}) async {
   final isPage = node.kind == NodeKind.page;
   final isSection = node.kind == NodeKind.section;
-  final overlay =
-      Overlay.of(context).context.findRenderObject() as RenderBox?;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
   final action = await showMenu<String>(
     context: context,
     position: RelativeRect.fromLTRB(
@@ -2007,7 +2000,9 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
         _nodeItem(
             'favourite',
             app.isFavourite(node.id) ? Icons.star : Icons.star_border,
-            app.isFavourite(node.id) ? 'Remove from favourites' : 'Add to favourites'),
+            app.isFavourite(node.id)
+                ? 'Remove from favourites'
+                : 'Add to favourites'),
         _nodeItem('sharepdf', Icons.picture_as_pdf_outlined, 'Share as PDF…'),
         _nodeItem('print', Icons.print_outlined, 'Print…'),
         _nodeItem('copylink', Icons.link, 'Copy link to page'),
@@ -2101,9 +2096,8 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
             content: Text('Link copied — paste it into any page')));
       }
     case 'togroup':
-      final groups = app.nodes
-          .where((n) => n.kind == NodeKind.sectionGroup)
-          .toList();
+      final groups =
+          app.nodes.where((n) => n.kind == NodeKind.sectionGroup).toList();
       final choice = await showOnoteDialog<String>(
         context: context,
         builder: (ctx) => SimpleDialog(
@@ -2274,8 +2268,8 @@ Future<void> promptApplyTemplate(BuildContext context, AppState app) async {
 /// `selectPage` also clears the undo stack, so the cost of the detour is not
 /// only the view: a student who printed a neighbouring page lost the ability
 /// to undo on the one they were writing.
-Future<void> _onPage(AppState app, String pageId, Future<void> Function() body)
-    async {
+Future<void> _onPage(
+    AppState app, String pageId, Future<void> Function() body) async {
   final cameFrom = app.pageId;
   if (cameFrom != pageId) await app.selectPage(pageId);
   try {
@@ -2286,4 +2280,3 @@ Future<void> _onPage(AppState app, String pageId, Future<void> Function() body)
     }
   }
 }
-
