@@ -215,6 +215,44 @@ void main() {
     });
   });
 
+  group('a stored palette from an older build survives', () {
+    // THE ONE THAT SHIPPED WRONG. The palettes used to hold six colours. When
+    // the ceiling became four, the load path still demanded an exact length
+    // match, so a stored six-colour row failed the check and was ignored
+    // WHOLESALE — a hand-picked palette silently replaced by the default,
+    // with nothing on screen to say why. Caught by installing the build and
+    // looking at the swatches, which did not match the settings file.
+    const stored = [
+      '#211F1B',
+      '#8BF224',
+      '#C63838',
+      '#2E8B57',
+      '#248BF2',
+      '#D9971F',
+    ];
+    const fallback = ['#000000'];
+
+    test('six stored colours become the first four, not the default', () {
+      expect(AppState.truncatePalette(stored, fallback),
+          stored.take(AppState.maxPaletteColours).toList(),
+          reason: 'their colours, in their order — not the default palette');
+    });
+
+    test('a palette already within the ceiling is untouched', () {
+      const four = ['#111111', '#222222', '#333333', '#444444'];
+      expect(AppState.truncatePalette(four, fallback), four);
+    });
+
+    test('anything unusable falls back rather than emptying the row', () {
+      // A pen with no colour is not a state anything downstream handles.
+      expect(AppState.truncatePalette(const <String>[], fallback), fallback);
+      expect(AppState.truncatePalette(null, fallback), fallback);
+      expect(AppState.truncatePalette('#ff0000', fallback), fallback);
+      expect(AppState.truncatePalette(const [1, 2, 3], fallback), fallback,
+          reason: 'a list of the wrong thing is not a palette');
+    });
+  });
+
   group('every preset is fit to write with', () {
     test('four colours, all parseable, no duplicates', () {
       for (final p in InkPalettes.presets) {

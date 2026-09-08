@@ -4062,6 +4062,24 @@ class AppState extends ChangeNotifier
     tool = back;
   }
 
+  /// A stored palette, cut down to the ceiling.
+  ///
+  /// Pure, and public, so the rule can be tested without standing up a whole
+  /// AppState — it is the rule that shipped wrong once. The palettes used to
+  /// hold six; when the ceiling became four the load path still demanded an
+  /// exact length match, so a stored six-colour row failed it and was ignored
+  /// WHOLESALE. A hand-picked palette was replaced by the default with
+  /// nothing on screen to say why.
+  ///
+  /// Truncating keeps the first four, which is the order they were already
+  /// in. Anything unusable — not a list, empty, no strings in it — falls back
+  /// rather than leaving a pen with no colour.
+  static List<String> truncatePalette(dynamic raw, List<String> fallback) {
+    if (raw is! List) return fallback;
+    final kept = raw.whereType<String>().take(maxPaletteColours).toList();
+    return kept.isEmpty ? fallback : kept;
+  }
+
   /// Add a colour to the current tool's row, and arm it.
   ///
   /// Silently does nothing at the ceiling rather than throwing or growing:
@@ -6158,15 +6176,46 @@ class AppState extends ChangeNotifier
     unawaited(checkForAppUpdate());
     final cc = _repo.getSetting('customColors');
     if (cc is List) customColors.addAll(cc.cast<String>());
-    // Palettes: length-checked, not just cast. A shorter list from a build
-    // with fewer wells would silently shrink the row and strand `penColor`.
-    final pal = _repo.getSetting('penPalette');
-    if (pal is List && pal.length == penPalette.length) {
-      penPalette = pal.cast<String>().toList();
+    // TRUNCATED, not rejected — and this replaces an exact-length check that
+    // silently threw somebody's colours away.
+    //
+    // The palettes used to hold six. When the ceiling became four, a stored
+    // six-colour row stopped matching `penPalette.length` and the whole list
+    // was ignored, so a hand-picked palette was replaced by the default with
+    // nothing on screen to say why. Those are somebody's actual colours; the
+    // first four are kept, which is the order they were already in.
+    //
+    // Written back when the truncation changed something, for the reason the
+    // shortcut sanitising is: a settings file that says one thing while the
+    // app believes another is read by the next tool along, and re-truncated
+    // on every launch until somebody edits a colour by hand.
+    List<String> loadPalette(String key, List<String> fallback) {
+      final raw = _repo.getSetting(key);
+      final kept = truncatePalette(raw, fallback);
+      // Healed on disk when the truncation changed something, so it is not
+      // re-truncated on every launch and the file does not go on saying
+      // something the app no longer believes.
+      if (raw is List && kept.length != raw.length) _repo.setSetting(key, kept);
+      return kept;
     }
-    final hpal = _repo.getSetting('highlighterPalette');
-    if (hpal is List && hpal.length == highlighterPalette.length) {
-      highlighterPalette = hpal.cast<String>().toList();
+
+    penPalette = loadPalette('penPalette', penPalette);
+    highlighterPalette =
+        loadPalette('highlighterPalette', highlighterPalette);
+    final activeName = _repo.getSetting('activePalette');
+    if (activeName is String) activePaletteName = activeName;
+    final custom = _repo.getSetting('customPalettes');
+    if (custom is List) {
+      customPalettes = [
+        for (final e in custom)
+          if (e is Map && e['name'] is String && e['colours'] is List)
+            InkPalette(
+                e['name'] as String,
+                (e['colours'] as List)
+                    .whereType<String>()
+                    .take(maxPaletteColours)
+                    .toList(growable: false)),
+      ];
     }
     // Cleaned on the way in AND WRITTEN BACK when the cleaning changed
     // something. Sanitising only in memory leaves the bad value in the file
