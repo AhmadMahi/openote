@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/services.dart';
 
 import '../canvas/media_drop.dart';
@@ -120,6 +122,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _chromeTop.dispose();
     HardwareKeyboard.instance.removeHandler(_onKey);
     WidgetsBinding.instance.removeObserver(this);
     app.navigateNudge = null;
@@ -850,6 +853,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// Which region wears the focus ring, or null for none.
   final ValueNotifier<_Region?> _ring = ValueNotifier<_Region?>(null);
 
+  /// Height of the glass stack floating over the top of the canvas, measured
+  /// after layout, so the canvas knows how far down its page should rest.
+  /// Starts at the command bar's own height so the first frame is not laid
+  /// out with the page under the toolbar and then nudged.
+  final ValueNotifier<double> _chromeTop = ValueNotifier<double>(76);
+
   List<_Region> _regions() => [
         _Region.sidebar,
         _Region.toolbar,
@@ -1361,63 +1370,114 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                     _regionWrap(_Region.sidebar, _navigator()),
                     const VerticalDivider(width: 1),
                   ],
+                  // The chrome FLOATS over the page. The canvas takes the
+                  // whole column and the bars sit on it in a Stack, on glass,
+                  // so the page scrolls under them and the glass has something
+                  // to blur. The canvas is told how tall the bars are
+                  // (`insets`) so its page comes to rest below them rather
+                  // than under them — see `CanvasController.insets`.
                   Expanded(
-                    child: Column(
-                      children: [
-                        if (!app.focusMode)
-                          _regionWrap(_Region.toolbar, CommandBar(app: app)),
-                        // **The object row**, permanent and always 36 px.
-                        //
-                        // Permanent because a band that appeared with the
-                        // equation would push the page down and putting the page
-                        // back is a pan the canvas controller discards on a short
-                        // or zoomed-out page — so the page would jump exactly
-                        // where a student most often starts an equation. See
-                        // `object_row.dart`; the chrome is 112 px in every state
-                        // of the app and the canvas box never moves.
-                        if (!app.focusMode)
-                          _regionWrap(_Region.object, ObjectRow(app: app)),
-                        if (app.findOpen) _FindBar(app: app),
-                        // The breadcrumb is CONTEXT, not a second navigator
-                        // (§7d). With the navigator expanded it repeats what is
-                        // already on screen two inches to the left, so it spends a
-                        // full-width row saying nothing. Collapsed — or on the
-                        // rail — it is the only place the notebook and section are
-                        // named, and it earns the row.
-                        if (page != null && app.navCollapsed && !app.focusMode)
-                          _PageHeader(app: app, page: page),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                // The gate is HERE, at the point the canvas would
-                                // be built, rather than only on the click that
-                                // opened the page. A page can become locked while
-                                // it is on screen — the policy expires, or "Lock
-                                // now" is pressed — and gating only the click
-                                // would leave the content sitting there.
-                                child: _regionWrap(
-                                    _Region.page,
-                                    page == null
-                                        ? _EmptyState(app: app)
-                                        : app.isLocked(page.id)
-                                            ? _LockedPage(app: app, page: page)
-                                            : _canvasKeys(PageCanvas(
-                                                key: ValueKey(app.pageId),
-                                                state: app))),
-                              ),
-                              if (panel != null) ...[
-                                const VerticalDivider(width: 1),
-                                PanelEntryFocus(
-                                  node: _panelEntry,
-                                  child: _regionWrap(_Region.panel, panel),
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _chromeTop,
+                      builder: (context, chromeTop, _) {
+                        final insets = app.focusMode
+                            ? EdgeInsets.zero
+                            : EdgeInsets.only(
+                                top: chromeTop, bottom: OnoteSize.statusBar);
+                        return Stack(children: [
+                          Positioned.fill(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  // The gate is HERE, at the point the canvas
+                                  // would be built, rather than only on the
+                                  // click that opened the page. A page can
+                                  // become locked while it is on screen — the
+                                  // policy expires, or "Lock now" is pressed —
+                                  // and gating only the click would leave the
+                                  // content sitting there.
+                                  //
+                                  // Only the canvas goes UNDER the glass; the
+                                  // empty and locked states are padded clear
+                                  // of it, since they have nothing to scroll.
+                                  child: _regionWrap(
+                                      _Region.page,
+                                      page == null
+                                          ? Padding(
+                                              padding: insets,
+                                              child: _EmptyState(app: app))
+                                          : app.isLocked(page.id)
+                                              ? Padding(
+                                                  padding: insets,
+                                                  child: _LockedPage(
+                                                      app: app, page: page))
+                                              : _canvasKeys(PageCanvas(
+                                                  key: ValueKey(app.pageId),
+                                                  state: app,
+                                                  insets: insets))),
                                 ),
+                                if (panel != null) ...[
+                                  const VerticalDivider(width: 1),
+                                  PanelEntryFocus(
+                                    node: _panelEntry,
+                                    child: _regionWrap(_Region.panel,
+                                        Padding(padding: insets, child: panel)),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        if (!app.focusMode) _StatusBar(app: app),
-                      ],
+                          // The top stack: one sheet of glass, measured so the
+                          // canvas can be told where its page should rest.
+                          if (!app.focusMode)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 0,
+                              child: _MeasureHeight(
+                                onHeight: (h) => _chromeTop.value = h,
+                                child: GlassSheet(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _regionWrap(_Region.toolbar,
+                                          CommandBar(app: app)),
+                                      // **The object row.** With nothing
+                                      // selected it takes no height; when it
+                                      // opens, the page is pushed down by
+                                      // exactly its height (the insets setter
+                                      // does that) so the line under it stays
+                                      // readable. See `object_row.dart`.
+                                      _regionWrap(
+                                          _Region.object, ObjectRow(app: app)),
+                                      if (app.findOpen) _FindBar(app: app),
+                                      // The breadcrumb is CONTEXT, not a second
+                                      // navigator (§7d). With the navigator
+                                      // expanded it repeats what is already on
+                                      // screen two inches to the left, so it
+                                      // spends a full-width row saying nothing.
+                                      // Collapsed — or on the rail — it is the
+                                      // only place the notebook and section are
+                                      // named, and it earns the row.
+                                      if (page != null && app.navCollapsed)
+                                        _PageHeader(app: app, page: page),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (!app.focusMode)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: GlassSheet(
+                                edge: ChromeEdge.top,
+                                child: _StatusBar(app: app),
+                              ),
+                            ),
+                        ]);
+                      },
                     ),
                   ),
                 ],
@@ -1482,9 +1542,8 @@ class _FindBarState extends State<_FindBar> {
         height: 40,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
           border:
-              Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+              Border(top: BorderSide(color: Theme.of(context).dividerColor)),
         ),
         child: Row(children: [
           const SizedBox(width: 24),
@@ -1518,9 +1577,7 @@ class _FindBarState extends State<_FindBar> {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border:
-            Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         children: [
@@ -1618,9 +1675,7 @@ class _PageHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border:
-            Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         children: [
@@ -1891,7 +1946,6 @@ class _StatusBar extends StatelessWidget {
     final problem = app.saveError;
     final failed = problem != null;
     return ChromeBar(
-      edge: ChromeEdge.top,
       height: OnoteSize.statusBar,
       child: Padding(
         // Tighter at the trailing edge than the leading one, on purpose. The
@@ -2259,4 +2313,42 @@ class _NudgeIntent extends Intent {
   final int dx;
   final int dy;
   final bool fine;
+}
+
+/// Reports its child's laid-out height, once per change, after the frame.
+///
+/// The canvas under the glass needs to know how tall the stack of bars over it
+/// is, and the bars are the only thing that knows — the find bar can be one
+/// or two rows, the object row is 0 or 36, the breadcrumb comes and goes.
+/// Measuring is honest where a sum of constants would drift. Reported after
+/// the frame because layout is the wrong place to mark anything dirty.
+class _MeasureHeight extends SingleChildRenderObjectWidget {
+  const _MeasureHeight({required this.onHeight, required super.child});
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasureHeight(onHeight);
+
+  @override
+  void updateRenderObject(
+          BuildContext context, _RenderMeasureHeight renderObject) =>
+      renderObject.onHeight = onHeight;
+}
+
+class _RenderMeasureHeight extends RenderProxyBox {
+  _RenderMeasureHeight(this.onHeight);
+  ValueChanged<double> onHeight;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final h = size.height;
+    if (_reported == h) return;
+    _reported = h;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (attached) onHeight(h);
+    });
+  }
 }

@@ -104,6 +104,11 @@ void main() {
       await t.tap(find.text('View'));
       await t.pump(const Duration(milliseconds: 300));
       await shoot(t, 'view-${mode.name}');
+      // Content under the glass: scroll the page up so the heading passes
+      // beneath the bars, which is the only state in which glass is visible.
+      app.canvas.panBy(const Offset(0, -150));
+      await t.pump(const Duration(milliseconds: 300));
+      await shoot(t, 'scrolled-${mode.name}');
       app.cancelPendingSave();
     });
   }

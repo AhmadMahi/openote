@@ -30,8 +30,14 @@ import 'page_title_view.dart';
 ///   · middle-drag                          → pan · Ctrl+scroll → zoom
 ///   · trackpad pan/pinch                   → pan/zoom · two-finger touch → pinch
 class PageCanvas extends StatefulWidget {
-  const PageCanvas({super.key, required this.state});
+  const PageCanvas(
+      {super.key, required this.state, this.insets = EdgeInsets.zero});
   final AppState state;
+
+  /// The chrome floating over this canvas's top and bottom edges — see
+  /// [CanvasController.insets]. The canvas is laid out under the glass bars
+  /// so they have a page to blur; this is how it knows where they are.
+  final EdgeInsets insets;
 
   @override
   State<PageCanvas> createState() => _PageCanvasState();
@@ -157,7 +163,9 @@ class _PageCanvasState extends State<PageCanvas>
   CanvasController get controller => app.canvas;
 
   bool get _inkTool =>
-      app.tool == Tool.pen || app.tool == Tool.highlighter || app.tool == Tool.eraser;
+      app.tool == Tool.pen ||
+      app.tool == Tool.highlighter ||
+      app.tool == Tool.eraser;
 
   /// Follow the pointer with the drawn cursor, through hover AND drag.
   ///
@@ -165,9 +173,8 @@ class _PageCanvasState extends State<PageCanvas>
   /// the point, and painting a nib under a real pen tip is a second pen
   /// chasing the first one.
   void _trackPenCursor(PointerEvent e) {
-    _penCursor.value = _inkTool && e.kind == PointerDeviceKind.mouse
-        ? e.localPosition
-        : null;
+    _penCursor.value =
+        _inkTool && e.kind == PointerDeviceKind.mouse ? e.localPosition : null;
   }
 
   /// What the drawn cursor is filled with: the armed ink, so the nib shows
@@ -581,8 +588,8 @@ class _PageCanvasState extends State<PageCanvas>
       }
     }
     if (changed) {
-      app.blocks.removeWhere(
-          (b) => b.type == BlockType.ink && (b.content['strokes'] as List).isEmpty);
+      app.blocks.removeWhere((b) =>
+          b.type == BlockType.ink && (b.content['strokes'] as List).isEmpty);
       app.markDirty();
       setState(() {});
     }
@@ -611,9 +618,8 @@ class _PageCanvasState extends State<PageCanvas>
 
   void _lassoDown(PointerDownEvent e) {
     app.claimedPointers.remove(e.pointer);
-    setState(() => _lasso = [
-          _clampToPagePoint(controller.screenToPage(e.localPosition))
-        ]);
+    setState(() =>
+        _lasso = [_clampToPagePoint(controller.screenToPage(e.localPosition))]);
   }
 
   void _lassoMove(PointerMoveEvent e) {
@@ -697,8 +703,7 @@ class _PageCanvasState extends State<PageCanvas>
     for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       final a = poly[i], b = poly[j];
       if (((a.dy > pt.dy) != (b.dy > pt.dy)) &&
-          (pt.dx <
-              (b.dx - a.dx) * (pt.dy - a.dy) / (b.dy - a.dy) + a.dx)) {
+          (pt.dx < (b.dx - a.dx) * (pt.dy - a.dy) / (b.dy - a.dy) + a.dx)) {
         inside = !inside;
       }
     }
@@ -742,8 +747,8 @@ class _PageCanvasState extends State<PageCanvas>
 
   // ── Select-mode pointer model ───────────────────────────────────────────
 
-  Rect _blockRect(Block b) => Rect.fromLTWH(
-      b.x, b.y, b.w, b.h ?? app.renderSizes[b.id]?.height ?? 60);
+  Rect _blockRect(Block b) =>
+      Rect.fromLTWH(b.x, b.y, b.w, b.h ?? app.renderSizes[b.id]?.height ?? 60);
 
   String? _hitInk(Offset pagePt) {
     for (final b in app.blocks.reversed.where((b) => b.type == BlockType.ink)) {
@@ -785,8 +790,7 @@ class _PageCanvasState extends State<PageCanvas>
     final inkHit = _hitInk(pagePt);
     if (inkHit != null) {
       if (!app.selectedIds.contains(inkHit)) {
-        app.select(inkHit,
-            additive: HardwareKeyboard.instance.isShiftPressed);
+        app.select(inkHit, additive: HardwareKeyboard.instance.isShiftPressed);
       }
       _mode = _DragMode.moveSelection;
       _moveUndoPushed = false;
@@ -841,7 +845,8 @@ class _PageCanvasState extends State<PageCanvas>
           app.pushUndo();
           _moveUndoPushed = true;
         }
-        app.moveSelectedBy(delta.dx / controller.scale, delta.dy / controller.scale);
+        app.moveSelectedBy(
+            delta.dx / controller.scale, delta.dy / controller.scale);
       case _DragMode.none:
         break;
     }
@@ -914,16 +919,19 @@ class _PageCanvasState extends State<PageCanvas>
     final vp = controller.viewport;
     final ps = controller.pageSize;
     if (ps == null || vp == Size.zero) return const [];
+    final insets = widget.insets;
+    final visibleH = vp.height - insets.vertical;
     final docH = ps.height * controller.scale;
-    final scrollable = docH - vp.height;
-    if (scrollable <= 1) return const [];
+    final scrollable = docH - visibleH;
+    if (scrollable <= 1 || visibleH <= 0) return const [];
 
     const margin = 4.0;
-    final trackH = vp.height - margin * 2;
-    final thumbH = (trackH * vp.height / docH).clamp(48.0, trackH);
+    final trackH = visibleH - margin * 2;
+    final thumbH = (trackH * visibleH / docH).clamp(48.0, trackH);
     final range = trackH - thumbH;
     if (range <= 0) return const [];
-    final progress = (-controller.offset.dy / scrollable).clamp(0.0, 1.0);
+    final progress =
+        ((insets.top - controller.offset.dy) / scrollable).clamp(0.0, 1.0);
     // Visible while it is being used, and for a moment after any scrolling.
     // A bar that is always on takes a strip of the page for information you
     // only want at the moment you are moving — which is why every platform
@@ -933,7 +941,8 @@ class _PageCanvasState extends State<PageCanvas>
 
     void jumpTo(double localY) {
       final p = ((localY - margin - thumbH / 2) / range).clamp(0.0, 1.0);
-      controller.panBy(Offset(0, -p * scrollable - controller.offset.dy));
+      controller
+          .panBy(Offset(0, insets.top - p * scrollable - controller.offset.dy));
     }
 
     return [
@@ -942,8 +951,8 @@ class _PageCanvasState extends State<PageCanvas>
       // bar already takes.
       Positioned(
         right: 0,
-        top: 0,
-        bottom: 0,
+        top: insets.top,
+        bottom: insets.bottom,
         width: 12,
         child: MouseRegion(
           onEnter: (_) => setState(() => _scrollbarHover = true),
@@ -967,8 +976,7 @@ class _PageCanvasState extends State<PageCanvas>
                 controller.panBy(Offset(0, -d.delta.dy * scrollable / range));
                 _noteScrollActivity();
               },
-              onVerticalDragEnd: (_) =>
-                  setState(() => _scrollbarDrag = false),
+              onVerticalDragEnd: (_) => setState(() => _scrollbarDrag = false),
               onVerticalDragCancel: () =>
                   setState(() => _scrollbarDrag = false),
               child: AnimatedOpacity(
@@ -986,7 +994,7 @@ class _PageCanvasState extends State<PageCanvas>
       ),
       Positioned(
         right: 2,
-        top: margin + progress * range,
+        top: insets.top + margin + progress * range,
         child: IgnorePointer(
           // The track above owns the gestures; the thumb is the indicator —
           // brighter under the mouse, primary while dragging, so consuming
@@ -1077,284 +1085,289 @@ class _PageCanvasState extends State<PageCanvas>
             AppState.defaultPageHeight, ext.bottom + AppState.pageGrowMargin);
     final pageSize = Size(pw, ph);
     controller.pageSize = pageSize;
+    controller.insets = widget.insets;
 
     Widget canvas = LayoutBuilder(builder: (context, constraints) {
       controller.viewport = Size(constraints.maxWidth, constraints.maxHeight);
       return AnimatedBuilder(
         animation: controller,
         builder: (context, _) {
-        // Visible page-space rect (padded) for culling (CANVAS-9). Computed
-        // INSIDE the AnimatedBuilder: the transform changes without a full
-        // rebuild (viewport assignment above, per-page view restore, pans), and
-        // a culling list captured outside would go stale — the "page is blank
-        // until I scroll" bug, where the first frame culled everything against
-        // an uninitialised viewport and nothing invalidated the list.
-        final visible = Rect.fromPoints(
-          controller.screenToPage(Offset.zero),
-          controller.screenToPage(
-              Offset(controller.viewport.width, controller.viewport.height)),
-        ).inflate(200);
-        final inkBlocks = app.blocks.where((b) => b.type == BlockType.ink);
-        final visibleStrokes = [
-          for (final b in inkBlocks)
-            // Never cull the selected/editing block (CANVAS-9), so a selected
-            // ink block off-screen still paints under its selection rect.
-            if (app.selectedIds.contains(b.id) ||
-                app.editingBlockId == b.id ||
-                visible.overlaps(_blockRect(b)))
-              ..._strokesOf(b),
-        ];
-        final selectedInkRects = [
-          for (final b in inkBlocks)
-            if (app.selectedIds.contains(b.id)) _blockRect(b),
-        ];
-        return RepaintBoundary(
-          key: app.canvasKey,
-          child: ClipRect(
-            child: Stack(
-              children: [
-                // Backdrop + page surface + page background pattern
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _PagePainter(
-                      controller: controller,
-                      pageSize: pageSize,
-                      background: app.pageProps.background,
-                      // The PATTERN's spacing, not the SNAP grid's — see
-                      // PageProps.bgSpacing for why those stopped being one
-                      // number.
-                      spacing: app.pageProps.bgSpacing,
-                      dark: dark,
-                      sheet: app.pageProps.isPaged
-                          ? Size(app.pageProps.paper.width,
-                              app.pageProps.paper.height)
-                          : null,
-                      sheets: app.scrollableSheetCount,
+          // Visible page-space rect (padded) for culling (CANVAS-9). Computed
+          // INSIDE the AnimatedBuilder: the transform changes without a full
+          // rebuild (viewport assignment above, per-page view restore, pans), and
+          // a culling list captured outside would go stale — the "page is blank
+          // until I scroll" bug, where the first frame culled everything against
+          // an uninitialised viewport and nothing invalidated the list.
+          final visible = Rect.fromPoints(
+            controller.screenToPage(Offset.zero),
+            controller.screenToPage(
+                Offset(controller.viewport.width, controller.viewport.height)),
+          ).inflate(200);
+          final inkBlocks = app.blocks.where((b) => b.type == BlockType.ink);
+          final visibleStrokes = [
+            for (final b in inkBlocks)
+              // Never cull the selected/editing block (CANVAS-9), so a selected
+              // ink block off-screen still paints under its selection rect.
+              if (app.selectedIds.contains(b.id) ||
+                  app.editingBlockId == b.id ||
+                  visible.overlaps(_blockRect(b)))
+                ..._strokesOf(b),
+          ];
+          final selectedInkRects = [
+            for (final b in inkBlocks)
+              if (app.selectedIds.contains(b.id)) _blockRect(b),
+          ];
+          return RepaintBoundary(
+            key: app.canvasKey,
+            child: ClipRect(
+              child: Stack(
+                children: [
+                  // Backdrop + page surface + page background pattern
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _PagePainter(
+                        controller: controller,
+                        pageSize: pageSize,
+                        background: app.pageProps.background,
+                        // The PATTERN's spacing, not the SNAP grid's — see
+                        // PageProps.bgSpacing for why those stopped being one
+                        // number.
+                        spacing: app.pageProps.bgSpacing,
+                        dark: dark,
+                        sheet: app.pageProps.isPaged
+                            ? Size(app.pageProps.paper.width,
+                                app.pageProps.paper.height)
+                            : null,
+                        sheets: app.scrollableSheetCount,
+                      ),
                     ),
                   ),
-                ),
-                // Page space. `Positioned(left/top only)` gives loose
-                // constraints so the inner Stack can be sized to the FULL page
-                // (not the viewport). This is essential for hit-testing: a Stack
-                // sized to the viewport refuses pointer events on children below
-                // the fold, so clicks on a tall text box's lower half used to
-                // fall through and create a new box (the reported bug).
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  child: Transform(
-                    transform: controller.matrix,
-                    child: SizedBox(
-                      width: pageSize.width,
-                      height: pageSize.height,
-                      child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // In-page title band (OneNote-style)
-                        Positioned(
-                          left: AppState.pageLeftMargin,
-                          top: 20,
-                          child: IgnorePointer(
-                            ignoring: _inkTool,
-                            child: PageTitleView(
-                              key: ValueKey('title-${app.pageId}'),
-                              app: app,
-                              width: pageSize.width -
-                                  AppState.pageLeftMargin * 2,
-                            ),
-                          ),
-                        ),
-                        // Painted in z order (review fix: z was stored but
-                        // insertion order used to win) — except that the
-                        // SELECTION outranks z. Hit-testing follows paint
-                        // order, so a selected box whose end runs under a
-                        // neighbour could not be resized or have its text
-                        // reached where they overlap: the neighbour's opaque
-                        // body swallowed the click. The box the user chose is
-                        // the box the mouse should mean, so it paints (and
-                        // therefore hit-tests) above everything while
-                        // selected, and drops back into place on deselect.
-                        for (final b in ([
-                          ...app.blocks.where((b) =>
-                              b.type != BlockType.ink &&
-                              (visible.overlaps(_blockRect(b)) ||
-                                  app.selectedIds.contains(b.id) ||
-                                  app.editingBlockId == b.id))
-                        ]..sort((a, b) {
-                            int lift(Block x) => app.selectedIds.contains(x.id) ||
-                                    app.editingBlockId == x.id
-                                ? 1
-                                : 0;
-                            final byLift = lift(a) - lift(b);
-                            return byLift != 0 ? byLift : a.z.compareTo(b.z);
-                          })))
-                          BlockView(
-                            key: ValueKey('${b.id}#${app.docRevision}'),
-                            block: b,
-                            app: app,
-                            controller: controller,
-                          ),
-                        // INK PAINTS OVER THE BLOCKS, and this used to be the
-                        // first child of this Stack rather than the last.
-                        //
-                        // Every stroke was drawn UNDER every block. Blocks are
-                        // opaque, so annotating a pasted photograph recorded
-                        // the ink perfectly and then hid it behind the
-                        // picture: "I can paste and drag images but I cannot
-                        // draw on them". The strokes were always there.
-                        //
-                        // One layer above everything, rather than each ink
-                        // block interleaved by z. Interleaving is the more
-                        // faithful model and it costs a separate paint layer
-                        // per ink block — this canvas opens a new one every
-                        // couple of seconds of drawing, so a lesson's worth of
-                        // annotation would be hundreds of layers. Ink on top
-                        // is also what the tools this is used beside do:
-                        // annotation is a sheet laid over the page, not
-                        // another object competing for depth with it.
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          child: IgnorePointer(
-                            child: RepaintBoundary(
-                              child: CustomPaint(
-                                size: Size.zero,
-                                painter: InkPainter(visibleStrokes,
-                                    wet: _wetForPaint,
-                                    // Per-point repaint without widget rebuild.
-                                    repaint: _wetTick,
-                                    // Theme default for "auto" strokes: dark
-                                    // ink on light pages, light ink on dark.
-                                    autoColor: dark
-                                        ? OnoteColors.moon100
-                                        : OnoteColors.graphite900),
+                  // Page space. `Positioned(left/top only)` gives loose
+                  // constraints so the inner Stack can be sized to the FULL page
+                  // (not the viewport). This is essential for hit-testing: a Stack
+                  // sized to the viewport refuses pointer events on children below
+                  // the fold, so clicks on a tall text box's lower half used to
+                  // fall through and create a new box (the reported bug).
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: Transform(
+                      transform: controller.matrix,
+                      child: SizedBox(
+                        width: pageSize.width,
+                        height: pageSize.height,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // In-page title band (OneNote-style)
+                            Positioned(
+                              left: AppState.pageLeftMargin,
+                              top: 20,
+                              child: IgnorePointer(
+                                ignoring: _inkTool,
+                                child: PageTitleView(
+                                  key: ValueKey('title-${app.pageId}'),
+                                  app: app,
+                                  width: pageSize.width -
+                                      AppState.pageLeftMargin * 2,
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    ),
-                  ),
-                ),
-                // Alignment grid — only visible while dragging a block
-                // effectiveSnap, not snapToGrid: holding Ctrl mid-drag pulls
-                // the block out of the grid, and the grid must stop being
-                // drawn at the same moment or the overlay is telling the user
-                // something that is no longer true.
-                if (app.draggingBlock && app.effectiveSnap)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _DragGridPainter(
-                          controller: controller,
-                          gridSize: app.gridSize,
-                          dark: dark,
-                        ),
-                      ),
-                    ),
-                  ),
-                // Alignment guides (CANVAS-7), above the grid so they read as
-                // the stronger signal while dragging.
-                if (app.alignGuides.isNotEmpty)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _AlignGuidePainter(
-                          controller: controller,
-                          guides: app.alignGuides,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                // Marquee + selected-ink outlines (screen-space overlay)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: _OverlayPainter(
-                        controller: controller,
-                        marquee: _mode == _DragMode.marquee
-                            ? Rect.fromPoints(_marqueeStartPage, _marqueeEndPage)
-                            : null,
-                        inkSelections: selectedInkRects,
-                        lasso: _lasso,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                ),
-                // Insert Space, while the drag is happening: the line you
-                // started on, and the band that is about to open under it.
-                if (_spaceAtY != null)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _InsertSpacePainter(
-                          controller: controller,
-                          atY: _spaceAtY!,
-                          dy: _spaceDy,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                // The arrow being dragged, so its length and direction are
-                // visible before it is committed.
-                if (_arrowFrom != null && _arrowTo != null)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _ArrowPreviewPainter(
-                          controller: controller,
-                          from: _arrowFrom!,
-                          to: _arrowTo!,
-                          color: _penCursorColor(dark),
-                          size: app.penSize,
+                            // Painted in z order (review fix: z was stored but
+                            // insertion order used to win) — except that the
+                            // SELECTION outranks z. Hit-testing follows paint
+                            // order, so a selected box whose end runs under a
+                            // neighbour could not be resized or have its text
+                            // reached where they overlap: the neighbour's opaque
+                            // body swallowed the click. The box the user chose is
+                            // the box the mouse should mean, so it paints (and
+                            // therefore hit-tests) above everything while
+                            // selected, and drops back into place on deselect.
+                            for (final b in ([
+                              ...app.blocks.where((b) =>
+                                  b.type != BlockType.ink &&
+                                  (visible.overlaps(_blockRect(b)) ||
+                                      app.selectedIds.contains(b.id) ||
+                                      app.editingBlockId == b.id))
+                            ]..sort((a, b) {
+                                int lift(Block x) =>
+                                    app.selectedIds.contains(x.id) ||
+                                            app.editingBlockId == x.id
+                                        ? 1
+                                        : 0;
+                                final byLift = lift(a) - lift(b);
+                                return byLift != 0
+                                    ? byLift
+                                    : a.z.compareTo(b.z);
+                              })))
+                              BlockView(
+                                key: ValueKey('${b.id}#${app.docRevision}'),
+                                block: b,
+                                app: app,
+                                controller: controller,
+                              ),
+                            // INK PAINTS OVER THE BLOCKS, and this used to be the
+                            // first child of this Stack rather than the last.
+                            //
+                            // Every stroke was drawn UNDER every block. Blocks are
+                            // opaque, so annotating a pasted photograph recorded
+                            // the ink perfectly and then hid it behind the
+                            // picture: "I can paste and drag images but I cannot
+                            // draw on them". The strokes were always there.
+                            //
+                            // One layer above everything, rather than each ink
+                            // block interleaved by z. Interleaving is the more
+                            // faithful model and it costs a separate paint layer
+                            // per ink block — this canvas opens a new one every
+                            // couple of seconds of drawing, so a lesson's worth of
+                            // annotation would be hundreds of layers. Ink on top
+                            // is also what the tools this is used beside do:
+                            // annotation is a sheet laid over the page, not
+                            // another object competing for depth with it.
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              child: IgnorePointer(
+                                child: RepaintBoundary(
+                                  child: CustomPaint(
+                                    size: Size.zero,
+                                    painter: InkPainter(visibleStrokes,
+                                        wet: _wetForPaint,
+                                        // Per-point repaint without widget rebuild.
+                                        repaint: _wetTick,
+                                        // Theme default for "auto" strokes: dark
+                                        // ink on light pages, light ink on dark.
+                                        autoColor: dark
+                                            ? OnoteColors.moon100
+                                            : OnoteColors.graphite900),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                // The sheet rail: which page of a paged document you are on,
-                // and one click to any other. Only in page mode, because on a
-                // boundless canvas there are no pages to list.
-                if (app.pageProps.isPaged && app.sheetRailOpen)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _SheetRail(app: app, dark: dark),
-                  ),
-                // The drawn pen/highlighter/eraser cursor, above everything
-                // so it is never buried under a block — a cursor that can go
-                // behind the thing you are pointing at is not a cursor.
-                if (_inkTool && !app.penCursorStyle.isSystem)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: RepaintBoundary(
+                  // Alignment grid — only visible while dragging a block
+                  // effectiveSnap, not snapToGrid: holding Ctrl mid-drag pulls
+                  // the block out of the grid, and the grid must stop being
+                  // drawn at the same moment or the overlay is telling the user
+                  // something that is no longer true.
+                  if (app.draggingBlock && app.effectiveSnap)
+                    Positioned.fill(
+                      child: IgnorePointer(
                         child: CustomPaint(
-                          painter: _PenCursorPainter(
-                            at: _penCursor,
-                            tool: app.tool,
-                            style: app.penCursorStyle,
-                            color: _penCursorColor(dark),
-                            penSize: app.penSize,
-                            scale: controller.scale,
+                          painter: _DragGridPainter(
+                            controller: controller,
+                            gridSize: app.gridSize,
                             dark: dark,
                           ),
                         ),
                       ),
                     ),
+                  // Alignment guides (CANVAS-7), above the grid so they read as
+                  // the stronger signal while dragging.
+                  if (app.alignGuides.isNotEmpty)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _AlignGuidePainter(
+                            controller: controller,
+                            guides: app.alignGuides,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Marquee + selected-ink outlines (screen-space overlay)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _OverlayPainter(
+                          controller: controller,
+                          marquee: _mode == _DragMode.marquee
+                              ? Rect.fromPoints(
+                                  _marqueeStartPage, _marqueeEndPage)
+                              : null,
+                          inkSelections: selectedInkRects,
+                          lasso: _lasso,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                   ),
-                // A real scroll bar for the page — "there is also no scroll
-                // bar for the page". Wheel and drag still pan; this is the
-                // instrument for POSITION: see where you are in a long page,
-                // and cover all of it in one drag.
-                ..._scrollBar(context, dark),
-              ],
+                  // Insert Space, while the drag is happening: the line you
+                  // started on, and the band that is about to open under it.
+                  if (_spaceAtY != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _InsertSpacePainter(
+                            controller: controller,
+                            atY: _spaceAtY!,
+                            dy: _spaceDy,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // The arrow being dragged, so its length and direction are
+                  // visible before it is committed.
+                  if (_arrowFrom != null && _arrowTo != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _ArrowPreviewPainter(
+                            controller: controller,
+                            from: _arrowFrom!,
+                            to: _arrowTo!,
+                            color: _penCursorColor(dark),
+                            size: app.penSize,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // The sheet rail: which page of a paged document you are on,
+                  // and one click to any other. Only in page mode, because on a
+                  // boundless canvas there are no pages to list.
+                  if (app.pageProps.isPaged && app.sheetRailOpen)
+                    Positioned(
+                      top: widget.insets.top,
+                      right: 0,
+                      bottom: widget.insets.bottom,
+                      child: _SheetRail(app: app, dark: dark),
+                    ),
+                  // The drawn pen/highlighter/eraser cursor, above everything
+                  // so it is never buried under a block — a cursor that can go
+                  // behind the thing you are pointing at is not a cursor.
+                  if (_inkTool && !app.penCursorStyle.isSystem)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            painter: _PenCursorPainter(
+                              at: _penCursor,
+                              tool: app.tool,
+                              style: app.penCursorStyle,
+                              color: _penCursorColor(dark),
+                              penSize: app.penSize,
+                              scale: controller.scale,
+                              dark: dark,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  // A real scroll bar for the page — "there is also no scroll
+                  // bar for the page". Wheel and drag still pan; this is the
+                  // instrument for POSITION: see where you are in a long page,
+                  // and cover all of it in one drag.
+                  ..._scrollBar(context, dark),
+                ],
+              ),
             ),
-          ),
-        );
+          );
         },
       );
     });
@@ -1533,11 +1546,11 @@ class _PageCanvasState extends State<PageCanvas>
         // told the student was not accepted.
         final messenger = ScaffoldMessenger.of(context);
         if (n > 0) {
-          messenger.showSnackBar(SnackBar(
-              content: Text('Added $n item${n == 1 ? '' : 's'}')));
+          messenger.showSnackBar(
+              SnackBar(content: Text('Added $n item${n == 1 ? '' : 's'}')));
         } else {
-          final droppedFolder = details.files.any(
-              (f) => Directory(f.path).existsSync());
+          final droppedFolder =
+              details.files.any((f) => Directory(f.path).existsSync());
           messenger.showSnackBar(SnackBar(
             content: Text(droppedFolder
                 ? "Folders can't be dropped in yet — only files."
@@ -1565,7 +1578,8 @@ class _PageCanvasState extends State<PageCanvas>
                           width: 1.5),
                     ),
                     child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       child: Text('Drop to add to this page'),
                     ),
                   ),
@@ -1604,9 +1618,8 @@ class _PageCanvasState extends State<PageCanvas>
       onPointerPanZoomStart: (e) {
         _pzLastScale = 1.0;
         controller.stopGlide(); // fingers on the glass stop the page dead
-        _panZoomClaimedBy = app.claimedPointers.contains(e.pointer)
-            ? e.pointer
-            : null;
+        _panZoomClaimedBy =
+            app.claimedPointers.contains(e.pointer) ? e.pointer : null;
       },
       onPointerPanZoomUpdate: (e) {
         if (_panZoomClaimedBy == e.pointer) return;
@@ -1651,38 +1664,38 @@ class _PageCanvasState extends State<PageCanvas>
         onPointerHover: _trackPenCursor,
         onPointerUp: _trackPenCursor,
         child: MouseRegion(
-        // The drawing tools hide the system cursor and draw their own
-        // (see [_PenCursorPainter]). `precise` — the plus/crosshair — is a
-        // *targeting* cursor: it says "this point", which is what a picker
-        // does, not what a pen does. A pen has a nib, and you hold it at an
-        // angle; every app people already know (Zoom's annotator, Notability,
-        // OneNote) shows one, and the tip is what tells you where the mark
-        // will land. Flutter desktop has no custom-image cursor API, so the
-        // glyph is painted on the canvas and the real pointer is switched off
-        // underneath it.
-        cursor: switch (app.tool) {
-          Tool.text => SystemMouseCursors.text,
-          // Crosshair and Mouse are the styles we do NOT paint: the system
-          // already has them, and the real pointer beats a drawn copy that
-          // lags a frame behind it.
-          Tool.pen || Tool.highlighter || Tool.eraser => switch (
-                app.penCursorStyle) {
-              PenCursorStyle.crosshair => SystemMouseCursors.precise,
-              PenCursorStyle.mouse => SystemMouseCursors.basic,
-              _ => SystemMouseCursors.none,
-            },
-          Tool.lasso => SystemMouseCursors.precise,
-          Tool.space => SystemMouseCursors.resizeUpDown,
-          // Crosshair: an arrow is placed by its two ENDS, so the cursor's
-          // job is to say "this exact point", which is what a reticle is for.
-          Tool.arrow => SystemMouseCursors.precise,
-          _ => MouseCursor.defer,
-        },
-        // Leaving the canvas is the one thing the Listener above cannot see,
-        // because a pointer that has gone gives no more events.
-        onExit: (_) => _penCursor.value = null,
-        child: canvas,
-      ),
+          // The drawing tools hide the system cursor and draw their own
+          // (see [_PenCursorPainter]). `precise` — the plus/crosshair — is a
+          // *targeting* cursor: it says "this point", which is what a picker
+          // does, not what a pen does. A pen has a nib, and you hold it at an
+          // angle; every app people already know (Zoom's annotator, Notability,
+          // OneNote) shows one, and the tip is what tells you where the mark
+          // will land. Flutter desktop has no custom-image cursor API, so the
+          // glyph is painted on the canvas and the real pointer is switched off
+          // underneath it.
+          cursor: switch (app.tool) {
+            Tool.text => SystemMouseCursors.text,
+            // Crosshair and Mouse are the styles we do NOT paint: the system
+            // already has them, and the real pointer beats a drawn copy that
+            // lags a frame behind it.
+            Tool.pen || Tool.highlighter || Tool.eraser => switch (
+                  app.penCursorStyle) {
+                PenCursorStyle.crosshair => SystemMouseCursors.precise,
+                PenCursorStyle.mouse => SystemMouseCursors.basic,
+                _ => SystemMouseCursors.none,
+              },
+            Tool.lasso => SystemMouseCursors.precise,
+            Tool.space => SystemMouseCursors.resizeUpDown,
+            // Crosshair: an arrow is placed by its two ENDS, so the cursor's
+            // job is to say "this exact point", which is what a reticle is for.
+            Tool.arrow => SystemMouseCursors.precise,
+            _ => MouseCursor.defer,
+          },
+          // Leaving the canvas is the one thing the Listener above cannot see,
+          // because a pointer that has gone gives no more events.
+          onExit: (_) => _penCursor.value = null,
+          child: canvas,
+        ),
       ),
     );
   }
@@ -1760,15 +1773,14 @@ class _PagePainter extends CustomPainter {
   }
 
   void _paintPattern(Canvas canvas, Size size) {
-
     // Background pattern (blank = nothing). Drawn across the visible area but
     // starting below the title band and aligned to the content top, so the
     // lines don't run over the title and match the writing spacing.
     if (background == 'blank') return;
     final step = spacing * controller.scale;
     if (step < 6) return;
-    final originY = controller.pageToScreen(
-        const Offset(0, AppState.contentTop)).dy;
+    final originY =
+        controller.pageToScreen(const Offset(0, AppState.contentTop)).dy;
     final right = size.width, bottom = size.height;
     final paint = Paint()
       ..color = dark ? OnoteColors.night200 : OnoteColors.paper200
@@ -1869,8 +1881,7 @@ class _OverlayPainter extends CustomPainter {
     final lassoPts = lasso;
     if (lassoPts != null && lassoPts.length > 1) {
       final path = Path()
-        ..moveTo(
-            controller.pageToScreen(lassoPts.first).dx,
+        ..moveTo(controller.pageToScreen(lassoPts.first).dx,
             controller.pageToScreen(lassoPts.first).dy);
       for (final pt in lassoPts.skip(1)) {
         final sp = controller.pageToScreen(pt);
@@ -1900,10 +1911,13 @@ class _OverlayPainter extends CustomPainter {
       final r = Rect.fromPoints(controller.pageToScreen(pr.topLeft),
               controller.pageToScreen(pr.bottomRight))
           .inflate(4);
-      _dashedRect(canvas, r, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = color);
+      _dashedRect(
+          canvas,
+          r,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..color = color);
     }
   }
 
@@ -2034,8 +2048,8 @@ class _PenCursorPainter extends CustomPainter {
           p,
           4.5,
           Paint()
-            ..color = (dark ? Colors.black : Colors.white)
-                .withValues(alpha: .75));
+            ..color =
+                (dark ? Colors.black : Colors.white).withValues(alpha: .75));
       canvas.drawCircle(p, 3, Paint()..color = color);
       return;
     }
@@ -2062,8 +2076,8 @@ class _PenCursorPainter extends CustomPainter {
     final dx = math.cos(a), dy = math.sin(a);
     // u = (dx, dy) runs down-right from the tip; v = (dy, -dx) is its
     // perpendicular, so `side` fattens the barrel symmetrically.
-    Offset along(double d, double side) => Offset(
-        p.dx + dx * d + dy * side, p.dy + dy * d - dx * side);
+    Offset along(double d, double side) =>
+        Offset(p.dx + dx * d + dy * side, p.dy + dy * d - dx * side);
 
     // Longer than it was (28px against 19): a stubby pen reads as a smudge at
     // a glance, and the length is what makes the direction legible.
@@ -2120,7 +2134,8 @@ class _PenCursorPainter extends CustomPainter {
         p,
         r,
         Paint()
-          ..color = (dark ? Colors.white : Colors.black).withValues(alpha: .06));
+          ..color =
+              (dark ? Colors.white : Colors.black).withValues(alpha: .06));
     canvas.drawCircle(
         p,
         r,
@@ -2190,8 +2205,9 @@ class _SheetRail extends StatelessWidget {
     final n = app.scrollableSheetCount;
     final h = app.pageProps.paper.height;
     // Which sheet the top of the viewport is sitting in.
-    final current =
-        ((-app.canvas.offset.dy / app.canvas.scale) / h).floor().clamp(0, n - 1);
+    final current = ((-app.canvas.offset.dy / app.canvas.scale) / h)
+        .floor()
+        .clamp(0, n - 1);
     return Container(
       width: 44,
       decoration: BoxDecoration(
@@ -2298,7 +2314,8 @@ class _InsertSpacePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final y0 = controller.pageToScreen(Offset(0, atY)).dy;
     final y1 = controller.pageToScreen(Offset(0, atY + dy)).dy;
-    final band = Rect.fromLTRB(0, math.min(y0, y1), size.width, math.max(y0, y1));
+    final band =
+        Rect.fromLTRB(0, math.min(y0, y1), size.width, math.max(y0, y1));
     canvas.drawRect(band, Paint()..color = color.withValues(alpha: .12));
     final line = Paint()
       ..color = color
@@ -2309,7 +2326,9 @@ class _InsertSpacePainter extends CustomPainter {
     if ((y1 - y0).abs() > 1) {
       const dash = 8.0;
       for (var x = 0.0; x < size.width; x += dash * 2) {
-        canvas.drawLine(Offset(x, y1), Offset(x + dash, y1),
+        canvas.drawLine(
+            Offset(x, y1),
+            Offset(x + dash, y1),
             Paint()
               ..color = color.withValues(alpha: .7)
               ..strokeWidth = 1.5);
@@ -2349,8 +2368,8 @@ class _ArrowPreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size _) {
-    final strokes = arrowStrokes(
-        from: from, to: to, colorHex: '#000000', size: size);
+    final strokes =
+        arrowStrokes(from: from, to: to, colorHex: '#000000', size: size);
     if (strokes.isEmpty) return;
     final paint = Paint()
       ..color = color

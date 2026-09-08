@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/scheduler.dart' show Ticker, TickerProvider;
 import 'package:flutter/widgets.dart';
 
@@ -100,6 +102,32 @@ class CanvasController extends ChangeNotifier {
   /// used to clamp panning so the page can't be lost (CANVAS-1 v0.3).
   Size? pageSize;
 
+  /// Chrome that floats OVER the canvas — the glass bars along its top and
+  /// bottom edges.
+  ///
+  /// Page space is still mapped onto the whole box, so content scrolls under
+  /// the bars and the glass has something to blur. What changes is where the
+  /// page comes to REST: its top sits just below the top bar rather than under
+  /// it, and the clamp treats the strip beneath each bar as already spent.
+  /// Zero when nothing floats (focus mode, tests).
+  EdgeInsets _insets = EdgeInsets.zero;
+  EdgeInsets get insets => _insets;
+  set insets(EdgeInsets v) {
+    if (v == _insets) return;
+    final dTop = v.top - _insets.top;
+    _insets = v;
+    // A bar that appears pushes the page down by its own height, so the line
+    // that was under it stays readable; one that leaves gives the space back.
+    // Silent: this is set during build, where a notify would rebuild the tree
+    // it is in the middle of building (the same rule as `viewport`).
+    offset = Offset(offset.dx, offset.dy + dTop);
+    _clampSilently();
+  }
+
+  /// The height a reader can actually see the page through.
+  double get _visibleHeight =>
+      math.max(0.0, viewport.height - _insets.vertical);
+
   /// Keep the page in view, and CENTRE it horizontally when it is narrower
   /// than the window.
   ///
@@ -130,7 +158,10 @@ class CanvasController extends ChangeNotifier {
               : offset.dx.clamp(viewport.width - wPx, 0.0),
       () {
         final hPx = ps.height * scale;
-        return hPx <= viewport.height ? 0.0 : offset.dy.clamp(viewport.height - hPx, 0.0);
+        return hPx <= _visibleHeight
+            ? _insets.top
+            : offset.dy
+                .clamp(viewport.height - _insets.bottom - hPx, _insets.top);
       }(),
     );
   }
@@ -217,7 +248,7 @@ class CanvasController extends ChangeNotifier {
   /// later reveals the page bounds — "a page that can become a canvas."
   void centerPage() {
     scale = 1.0;
-    offset = Offset.zero;
+    offset = Offset(0, _insets.top);
     clampToPage();
     notifyListeners();
   }
@@ -238,7 +269,7 @@ class CanvasController extends ChangeNotifier {
     scale = needed <= viewport.width
         ? 1.0
         : (viewport.width / needed).clamp(minScale, 1.0);
-    offset = Offset.zero;
+    offset = Offset(0, _insets.top);
     clampToPage();
     notifyListeners();
   }
@@ -291,9 +322,10 @@ class CanvasController extends ChangeNotifier {
           : wPx <= viewport.width
               ? (viewport.width - wPx) / 2
               : offset.dx.clamp(viewport.width - wPx, 0.0),
-      hPx <= viewport.height
-          ? 0.0
-          : offset.dy.clamp(viewport.height - hPx, 0.0),
+      hPx <= _visibleHeight
+          ? _insets.top
+          : offset.dy
+              .clamp(viewport.height - _insets.bottom - hPx, _insets.top),
     );
   }
 
@@ -303,14 +335,15 @@ class CanvasController extends ChangeNotifier {
   /// a sheet's top would hang half a viewport of the sheet before it above
   /// the fold — you would land looking at the end of the previous page.
   void scrollToPageY(double pageY) {
-    offset = Offset(offset.dx, -pageY * scale);
+    offset = Offset(offset.dx, _insets.top - pageY * scale);
     clampToPage();
     notifyListeners();
   }
 
   /// Center a page-space point in the viewport (find, navigation).
   void centerOn(Offset pagePoint) {
-    offset = Offset(viewport.width / 2, viewport.height / 2) - pagePoint * scale;
+    offset = Offset(viewport.width / 2, _insets.top + _visibleHeight / 2) -
+        pagePoint * scale;
     clampToPage();
     notifyListeners();
   }
@@ -336,7 +369,8 @@ class CanvasController extends ChangeNotifier {
     scale = (sx < sy ? sx : sy).clamp(minScale, maxScale);
     offset = Offset(
       (viewport.width - pageBounds.width * scale) / 2 - pageBounds.left * scale,
-      (viewport.height - pageBounds.height * scale) / 2 - pageBounds.top * scale,
+      (viewport.height - pageBounds.height * scale) / 2 -
+          pageBounds.top * scale,
     );
     notifyListeners();
   }

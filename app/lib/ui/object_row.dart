@@ -93,7 +93,7 @@ class ObjectRow extends StatelessWidget {
     // different layer and is never mistaken for a second command row.
     return ChromeBar(
       inset: true,
-      edge: ChromeEdge.none,
+      edge: ChromeEdge.top,
       height: kObjectRowHeight,
       child: ScrollConfiguration(
         behavior: const _RowScroll(),

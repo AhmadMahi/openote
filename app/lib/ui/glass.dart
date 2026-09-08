@@ -94,25 +94,108 @@ class GlassPanel extends StatelessWidget {
   }
 }
 
-/// Which edge of a [ChromeBar] carries its hairline — the side that meets
-/// the page.
+/// Which edge of a bar carries its hairline.
 enum ChromeEdge { top, bottom, none }
 
-/// The material the fixed chrome is made of: command bar, status bar, the
-/// bands between them.
+/// The glass the floating chrome is made of — the sheet the command bar, the
+/// object row and the status bar sit on.
 ///
-/// Not glass. Glass needs something behind it to blur, and the only thing
-/// behind the command bar is the window frame — a blur there costs a compositor
-/// pass per frame and shows nothing for it. What *does* make a bar read as a
-/// material rather than a filled rectangle is light: a faint gradient so the
-/// surface is not perfectly flat, a specular hairline along the top where the
-/// light lands, and one hairline on the edge that meets the page. Every bar in
-/// the app is built from this, so every bar agrees.
+/// Real glass this time, because there is now something behind it: the canvas
+/// is laid out under the bars (see [CanvasController.insets]) and the page
+/// scrolls beneath them, the way content passes under a macOS toolbar. Three
+/// things make it read as a material and not a tinted rectangle:
+///  * the **blur**, with a little added saturation so what shows through
+///    keeps its colour instead of greying out;
+///  * a **fill** that is translucent but not thin — legibility of the text on
+///    the bar comes first, and a dark drawing passing underneath must not
+///    swallow a label;
+///  * the **hairlines**: a specular line along the top where the light lands
+///    and one on the edge that meets the page.
+///
+/// One sheet per stack of bars, not one per bar — a backdrop filter is paid
+/// for per instance, and the bars share one.
+class GlassSheet extends StatelessWidget {
+  const GlassSheet({
+    super.key,
+    required this.child,
+    this.edge = ChromeEdge.bottom,
+  });
+
+  final Widget child;
+
+  /// The edge that meets the page: `bottom` for the top stack, `top` for the
+  /// status bar.
+  final ChromeEdge edge;
+
+  /// Vibrancy: a touch more saturation on what shows through the blur.
+  static const _saturate = ColorFilter.matrix(<double>[
+    0.8967, 0.1533, -0.0500, 0, 0, //
+    -0.1033, 1.1533, -0.0500, 0, 0, //
+    -0.1033, 0.1533, 0.9500, 0, 0, //
+    0, 0, 0, 1, 0,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final side = BorderSide(color: s.border.withValues(alpha: dark ? .9 : .8));
+    final tint = dark ? OnoteColors.night50 : OnoteColors.paper50;
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ui.ImageFilter.compose(
+          outer: ui.ImageFilter.blur(
+              sigmaX: 24, sigmaY: 24, tileMode: TileMode.mirror),
+          inner: _saturate,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                tint.withValues(alpha: dark ? .66 : .64),
+                tint.withValues(alpha: dark ? .58 : .56),
+              ],
+            ),
+            border: Border(
+              top: edge == ChromeEdge.top ? side : BorderSide.none,
+              bottom: edge == ChromeEdge.bottom ? side : BorderSide.none,
+            ),
+          ),
+          child: Stack(fit: StackFit.passthrough, children: [
+            child,
+            // The specular edge — light from above.
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: IgnorePointer(
+                child: Container(
+                  height: 1,
+                  color: Colors.white.withValues(alpha: dark ? .07 : .85),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// One bar within a [GlassSheet]: the command bar, the object row, the status
+/// bar. It paints no material of its own — the sheet does that — only what
+/// distinguishes it from its neighbours: an optional inset tint and a hairline
+/// on the edge that meets the bar above or below.
+///
+/// Used on its own (tests, a bar outside any sheet) it is simply transparent,
+/// which is the right answer there too.
 class ChromeBar extends StatelessWidget {
   const ChromeBar({
     super.key,
     required this.child,
-    this.edge = ChromeEdge.bottom,
+    this.edge = ChromeEdge.none,
     this.inset = false,
     this.height,
   });
@@ -120,48 +203,25 @@ class ChromeBar extends StatelessWidget {
   final Widget child;
   final ChromeEdge edge;
 
-  /// Use the `chrome2` role — a band that sits *within* the chrome rather
-  /// than being the chrome, like the object row.
+  /// Tint with the `chrome2` role — a band that sits *within* the chrome
+  /// rather than being the chrome, like the object row.
   final bool inset;
   final double? height;
 
   @override
   Widget build(BuildContext context) {
     final s = context.surfaces;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final base = inset ? s.chrome2 : s.chrome;
-    final side = BorderSide(color: s.border);
+    final side = BorderSide(color: s.border.withValues(alpha: .7));
     return Container(
       height: height,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color.lerp(base, Colors.white, dark ? .02 : .5)!,
-            base,
-          ],
-        ),
+        color: inset ? s.chrome2.withValues(alpha: .55) : null,
         border: Border(
           top: edge == ChromeEdge.top ? side : BorderSide.none,
           bottom: edge == ChromeEdge.bottom ? side : BorderSide.none,
         ),
       ),
-      child: Stack(fit: StackFit.passthrough, children: [
-        child,
-        // The specular edge — light from above.
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          child: IgnorePointer(
-            child: Container(
-              height: 1,
-              color: Colors.white.withValues(alpha: dark ? .05 : .8),
-            ),
-          ),
-        ),
-      ]),
+      child: child,
     );
   }
 }
