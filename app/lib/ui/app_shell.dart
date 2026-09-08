@@ -650,6 +650,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (k == LogicalKeyboardKey.keyP) return _tool(Tool.pen);
       if (k == LogicalKeyboardKey.keyH) return _tool(Tool.highlighter);
       if (k == LogicalKeyboardKey.keyE) return _tool(Tool.eraser);
+      if (k == LogicalKeyboardKey.keyA) return _tool(Tool.arrow);
       // THE PALETTE-CYCLING KEY, and it is BARE — no Ctrl.
       //
       // It was Ctrl+K and it never fired on any platform, because the handler

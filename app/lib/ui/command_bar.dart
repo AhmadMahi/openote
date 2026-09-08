@@ -1012,8 +1012,11 @@ class _CommandBarState extends State<CommandBar> {
     }
     // The swatches also appear with ink selected, so a lassoed diagram can be
     // recoloured without first re-picking the pen.
+    // The arrow is in this list because it draws in the pen's colour and
+    // weight — the row it needs is the row the pen needs.
     final inkActive = app.tool == Tool.pen ||
         app.tool == Tool.highlighter ||
+        app.tool == Tool.arrow ||
         app.hasInkSelection;
     // One palette, from state. These wells are CONTENTS, not constants: the
     // selected one reopens as an editor (below), which is what makes the row
@@ -1030,6 +1033,8 @@ class _CommandBarState extends State<CommandBar> {
           Tool.highlighter, Icons.border_color_outlined, 'Highlighter  (H)'),
       toolButton(Tool.eraser, Icons.cleaning_services_outlined, 'Eraser  (E)'),
       toolButton(Tool.lasso, Icons.gesture_outlined, 'Lasso-select ink'),
+      toolButton(Tool.arrow, Icons.north_east,
+          'Arrow  (A) — drag; the head lands where you let go'),
       toolButton(Tool.space, Icons.unfold_more, 'Insert space — drag to push '
           'everything below down'),
       const _Div(),

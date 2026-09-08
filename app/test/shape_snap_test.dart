@@ -67,6 +67,86 @@ void main() {
     });
   });
 
+  group('the shapes it is asked for most', () {
+    // Recognition was reported as poor. These are the three a diagram is made
+    // of, drawn the way a hand draws them — wobbling, and not closing
+    // cleanly.
+    test('a wobbly rectangle becomes a square-cornered one', () {
+      final rnd = math.Random(5);
+      final pts = <(double, double)>[];
+      void edge((double, double) a, (double, double) b) {
+        for (var i = 0; i < 14; i++) {
+          final t = i / 14;
+          pts.add((
+            a.$1 + (b.$1 - a.$1) * t + rnd.nextDouble() * 6 - 3,
+            a.$2 + (b.$2 - a.$2) * t + rnd.nextDouble() * 6 - 3,
+          ));
+        }
+      }
+      edge((100, 100), (400, 100));
+      edge((400, 100), (400, 300));
+      edge((400, 300), (100, 300));
+      edge((100, 300), (105, 108)); // closes a few pixels off, as hands do
+      final out = ShapeSnap.snap(strokeOf(pts));
+      expect(out, isNotNull, reason: 'four corners is a rectangle');
+      // Snapped to the BOUNDING BOX: every point sits on one of the four
+      // straight edges. Asserted that way rather than by counting distinct
+      // coordinates, because the edges are subdivided so the renderer has
+      // points to smooth — a rectangle here has plenty of distinct x values
+      // and is still a rectangle.
+      final xs = out!.x, ys = out.y;
+      final minX = xs.reduce(math.min), maxX = xs.reduce(math.max);
+      final minY = ys.reduce(math.min), maxY = ys.reduce(math.max);
+      for (var i = 0; i < xs.length; i++) {
+        final onEdge = (xs[i] - minX).abs() < 0.01 ||
+            (xs[i] - maxX).abs() < 0.01 ||
+            (ys[i] - minY).abs() < 0.01 ||
+            (ys[i] - maxY).abs() < 0.01;
+        expect(onEdge, isTrue,
+            reason: 'point ${xs[i]},${ys[i]} is not on the box');
+      }
+      expect(maxX - minX, greaterThan(250), reason: 'and it kept its size');
+    });
+
+    test('a wobbly triangle stays a triangle, and does not shrink', () {
+      final rnd = math.Random(9);
+      final pts = <(double, double)>[];
+      void edge((double, double) a, (double, double) b) {
+        for (var i = 0; i < 16; i++) {
+          final t = i / 16;
+          pts.add((
+            a.$1 + (b.$1 - a.$1) * t + rnd.nextDouble() * 5 - 2.5,
+            a.$2 + (b.$2 - a.$2) * t + rnd.nextDouble() * 5 - 2.5,
+          ));
+        }
+      }
+      edge((250, 80), (420, 320));
+      edge((420, 320), (80, 320));
+      edge((80, 320), (252, 86));
+      final out = ShapeSnap.snap(strokeOf(pts));
+      expect(out, isNotNull);
+      final w = out!.x.reduce(math.max) - out.x.reduce(math.min);
+      // The corner detector lands INSIDE the real vertices; without pulling
+      // them back out the snapped triangle comes out visibly smaller than
+      // the one that was drawn.
+      expect(w, greaterThan(300), reason: 'it kept the size it was drawn at');
+    });
+
+    test('a circle that does not quite close is still a circle', () {
+      // 320 degrees of it, which is what a quick hand actually produces.
+      final pts = [
+        for (var i = 0; i <= 54; i++)
+          (
+            300 + 90 * math.cos(i / 54 * 2 * math.pi * 0.89),
+            300 + 90 * math.sin(i / 54 * 2 * math.pi * 0.89),
+          )
+      ];
+      expect(ShapeSnap.snap(strokeOf(pts)), isNotNull,
+          reason: 'holding still is a REQUEST to snap; refusing a gap a fifth '
+              'of the width wide is the wrong kind of caution');
+    });
+  });
+
   group('what it refuses to touch', () {
     test('a flick is left alone', () {
       expect(ShapeSnap.snap(strokeOf([(0, 0), (3, 3), (6, 5)])), isNull);

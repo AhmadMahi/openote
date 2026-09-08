@@ -23,15 +23,22 @@ import '../model/models.dart';
 /// they cannot get back except by undoing and drawing again.
 class ShapeSnap {
   /// Ends closer than this fraction of the stroke's size count as "joined".
-  static const _closeFrac = 0.28;
+  ///
+  /// Loosened from 0.28 now that snapping is asked for rather than guessed:
+  /// the user has held still to request it, so a circle whose ends missed by
+  /// a fifth of its width is plainly a circle and refusing it is the wrong
+  /// kind of caution. It cost nothing when snapping was a surprise; it costs
+  /// the whole feature when it is a request.
+  static const _closeFrac = 0.38;
 
   /// A straight line's points stay within this fraction of its length of the
-  /// straight line between its ends.
-  static const _straightFrac = 0.07;
+  /// straight line between its ends. Also loosened, for the same reason: a
+  /// line drawn with a mouse bows.
+  static const _straightFrac = 0.11;
 
-  /// A turn sharper than this is a corner. ~55°, comfortably above the
-  /// wobble of a hand-drawn arc and below a real corner's 90°.
-  static const _cornerAngle = 0.95;
+  /// A turn sharper than this is a corner. ~50°, above the wobble of a
+  /// hand-drawn arc and below a real corner's 90°.
+  static const _cornerAngle = 0.88;
 
   /// The snapped stroke, or null to keep what was drawn.
   ///
@@ -57,13 +64,53 @@ class ShapeSnap {
       return _isStraight(pts) ? _line(s, pts.first, pts.last) : null;
     }
 
-    final corners = _corners(pts);
+    final corners = _corners(pts, closed: true);
     return switch (corners.length) {
-      0 || 1 => _ellipse(s, minX, minY, w, h),
-      3 => _polygon(s, corners),
-      4 => _rect(s, minX, minY, w, h),
+      // A closed loop with no sharp turns is a round thing. Two corners is
+      // still round: a hand almost always leaves one kink where it closes,
+      // and sometimes a second where it changed grip.
+      0 || 1 || 2 => _ellipse(s, minX, minY, w, h),
+      3 => _polygon(s, _regularise(corners)),
+      // Four or five: a rectangle whose closing corner was counted twice.
+      // Snapped to the BOUNDING BOX rather than through the corners, because
+      // a hand-drawn box is never square and squaring it is the entire point.
+      4 || 5 => _rect(s, minX, minY, w, h),
       _ => null,
     };
+  }
+
+  /// Pull a triangle's corners out to the points the hand actually reached.
+  ///
+  /// The corner detector finds where the direction turned, which is a step or
+  /// two INSIDE the real vertex — the resampling walks past it. Left alone,
+  /// every snapped triangle comes out slightly smaller than the one drawn,
+  /// which reads as the app shrinking your work.
+  static List<Offset2> _regularise(List<Offset2> corners) {
+    if (corners.length != 3) return corners;
+    var cx = 0.0, cy = 0.0;
+    for (final c in corners) {
+      cx += c.x;
+      cy += c.y;
+    }
+    cx /= 3;
+    cy /= 3;
+    return [
+      for (final c in corners)
+        Offset2(cx + (c.x - cx) * 1.06, cy + (c.y - cy) * 1.06)
+    ];
+  }
+
+  /// The corners the recogniser sees in [s].
+  ///
+  /// Public because classification hangs entirely off this number — 0-2 is a
+  /// round thing, 3 a triangle, 4-5 a box — so when a rectangle comes back as
+  /// an ellipse this is the only place worth looking. Testing the shape it
+  /// produces tells you THAT it was wrong; this tells you why.
+  static List<Offset2> cornersOf(Stroke s, {bool closed = true}) {
+    final n = s.x.length;
+    if (n < 8) return const [];
+    return _corners([for (var i = 0; i < n; i++) Offset2(s.x[i], s.y[i])],
+        closed: closed);
   }
 
   static double _dist(Offset2 a, Offset2 b) =>
@@ -91,19 +138,48 @@ class ShapeSnap {
   /// Fixed-length steps rather than every sample: sample density depends on
   /// how fast the hand moved, so consecutive raw points near a slow corner
   /// are millimetres apart and their angles are noise.
-  static List<Offset2> _corners(List<Offset2> pts) {
-    final resampled = _resample(pts, 32);
+  static List<Offset2> _corners(List<Offset2> pts, {required bool closed}) {
+    // 48 rather than 32: at 32 a small triangle gets barely ten samples a
+    // side and its corners blur into the arcs beside them.
+    final r = _resample(pts, 48);
+    if (r.length < 8) return const [];
+
+    // TURNING MEASURED OVER A WINDOW, not between neighbours.
+    //
+    // A corner almost never lands exactly on a sample. Compared step to step
+    // its 90 degrees arrive as two turns of 45, neither of which crosses the
+    // threshold, and the corner is missed — which is why a drawn rectangle
+    // came back as an ellipse. Comparing the direction of the two steps
+    // BEFORE a point with the two AFTER it collects the whole turn wherever
+    // the corner actually fell.
+    const w = 2;
+
+    // A CLOSED shape is walked as a loop, so the seam where the hand
+    // finished is examined like any other point. Straight-line indexing
+    // skips it, and a rectangle that loses its closing corner has three —
+    // which is a triangle, and was being snapped to one.
+    final n = r.length;
     final out = <Offset2>[];
-    for (var i = 1; i < resampled.length - 1; i++) {
-      final a = resampled[i - 1], b = resampled[i], c = resampled[i + 1];
+    final first = closed ? 0 : w;
+    final last = closed ? n : n - w;
+
+    for (var i = first; i < last; i++) {
+      Offset2 at(int j) => closed ? r[(j % n + n) % n] : r[j];
+      final a = at(i - w), b = at(i), c = at(i + w);
       final a1 = math.atan2(b.y - a.y, b.x - a.x);
       final a2 = math.atan2(c.y - b.y, c.x - b.x);
       var turn = (a2 - a1).abs();
       if (turn > math.pi) turn = 2 * math.pi - turn;
-      if (turn > _cornerAngle) {
-        // One corner, not three: a real corner spans a couple of steps.
-        if (out.isEmpty || _dist(out.last, b) > 20) out.add(b);
-      }
+      if (turn <= _cornerAngle) continue;
+      // Merge turns near each other: a real corner spans several windows,
+      // and counting one twice turns a rectangle into a shape with no name.
+      if (out.isEmpty || _dist(out.last, b) > 24) out.add(b);
+    }
+
+    // On a loop the first and last found corner can be the same corner seen
+    // from either side of the seam.
+    if (closed && out.length > 1 && _dist(out.first, out.last) <= 24) {
+      out.removeLast();
     }
     return out;
   }
@@ -115,24 +191,46 @@ class ShapeSnap {
       total += _dist(pts[i - 1], pts[i]);
     }
     if (total <= 0) return pts;
+    // THIS IS WHERE THE RECOGNITION WAS GOING WRONG.
+    //
+    // The previous version emitted each new point by interpolating from
+    // `pts[i - 1]` — the segment's ORIGINAL start — while measuring the
+    // remaining distance from the point it had just emitted. On a long
+    // straight edge those disagree, so it laid several samples almost on top
+    // of each other near the start of the segment and left the rest of the
+    // edge with none.
+    //
+    // A rectangle's four corners then vanished into a cloud of bunched
+    // samples, the turning looked smooth, and every box came back as an
+    // ellipse. It was reported as "the shape recognition is very bad", and
+    // it was — not because the thresholds were wrong but because the shape
+    // the detector was shown had already been mangled.
+    //
+    // Walking `prev` forward to each emitted point is the whole fix.
     final step = total / (count - 1);
     final out = <Offset2>[pts.first];
+    var prev = pts.first;
     var acc = 0.0;
     for (var i = 1; i < pts.length; i++) {
-      var seg = _dist(pts[i - 1], pts[i]);
-      if (seg <= 0) continue;
-      while (acc + seg >= step && out.length < count) {
+      final curr = pts[i];
+      var seg = _dist(prev, curr);
+      while (seg > 0 && acc + seg >= step && out.length < count) {
         final t = (step - acc) / seg;
-        final nx = pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t;
-        final ny = pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t;
-        out.add(Offset2(nx, ny));
-        // Continue from the point just emitted.
-        seg = _dist(out.last, pts[i]);
+        final p = Offset2(
+          prev.x + (curr.x - prev.x) * t,
+          prev.y + (curr.y - prev.y) * t,
+        );
+        out.add(p);
+        prev = p;
+        seg = _dist(prev, curr);
         acc = 0;
       }
       acc += seg;
+      prev = curr;
     }
-    if (out.length < count) out.add(pts.last);
+    while (out.length < count) {
+      out.add(pts.last);
+    }
     return out;
   }
 

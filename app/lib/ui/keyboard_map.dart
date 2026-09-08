@@ -83,8 +83,8 @@ const List<KeySection> keyboardMap = [
         'A letter on a selected text or code box starts writing at its end'),
     KeyBinding('Ctrl+↑↓←→',
         'Move the selected box (one grid step; add Shift for 1 px)'),
-    KeyBinding('V / T / P / H / E',
-        'Tool: Select, Text, Pen, Highlighter, Eraser'),
+    KeyBinding('V / T / P / H / E / A',
+        'Tool: Select, Text, Pen, Highlighter, Eraser, Arrow'),
     KeyBinding('1…4',
         'Ink colour, with the pen or highlighter up — or with ink lassoed, '
         'recolours it'),

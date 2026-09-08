@@ -95,21 +95,6 @@ class _FocusPaletteState extends State<FocusPalette> {
                   _tool(scheme, Tool.lasso, Icons.gesture_outlined, 'Lasso'),
                   _tool(scheme, Tool.text, Icons.text_fields, 'Text'),
                   _divider(s),
-                  // The sidebar, from inside focus mode. It is the only way
-                  // to another page without leaving the mode, and the button
-                  // that used to do this lives nowhere else now.
-                  IconButton(
-                    icon: Icon(
-                        app.navCollapsed
-                            ? Icons.view_sidebar_outlined
-                            : Icons.view_sidebar,
-                        size: 18),
-                    tooltip: app.navCollapsed
-                        ? 'Show the notebook sidebar'
-                        : 'Hide the sidebar',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: app.toggleNavCollapsed,
-                  ),
                   IconButton(
                     icon: const Icon(Icons.undo, size: 18),
                     tooltip: 'Undo  (Ctrl+Z)',

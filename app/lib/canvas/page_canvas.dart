@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ink/arrow.dart';
 import '../ink/shape_snap.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
@@ -122,6 +123,33 @@ class _PageCanvasState extends State<PageCanvas>
 
   bool get _spaceTool => app.tool == Tool.space;
 
+  // ── Draw and HOLD to snap a shape (INK-10, revised) ──────────────────
+  //
+  // Snapping used to happen on release, and it was startling: you drew a
+  // line, let go, and the app changed it. You could not tell it was coming,
+  // could not see what it decided, and could not decline. So it happens while
+  // you are still holding the pointer down — hold still for [_holdToSnap] and
+  // the tidied shape appears under your hand, which you can then accept by
+  // letting go, or reject by carrying on drawing.
+  //
+  // The RAW stroke is kept intact throughout: [_wet] is always what the hand
+  // did, and [_snapPreview] is the proposal drawn in its place. Moving again
+  // throws the proposal away rather than trying to continue from it, because
+  // continuing from an idealised circle is not what anybody means by
+  // continuing.
+  static const _holdToSnap = Duration(milliseconds: 700);
+  Timer? _holdTimer;
+  Stroke? _snapPreview;
+
+  /// The stroke the ink layer should draw: the proposal if there is one.
+  Stroke? get _wetForPaint => _snapPreview ?? _wet;
+
+  bool get _arrowTool => app.tool == Tool.arrow;
+
+  /// Where an arrow drag began, in page space.
+  Offset2? _arrowFrom;
+  Offset2? _arrowTo;
+
   // Lasso-select (INK-7): the freeform loop being drawn, in page space.
   List<Offset>? _lasso;
 
@@ -228,6 +256,8 @@ class _PageCanvasState extends State<PageCanvas>
   /// finger lands, turning what looked like a draw into a pinch. Without this
   /// the first finger of every two-finger gesture would leave a stray mark.
   void _cancelWetStroke() {
+    _cancelHold();
+    _snapPreview = null;
     if (_wet != null) setState(() => _wet = null);
   }
 
@@ -262,6 +292,7 @@ class _PageCanvasState extends State<PageCanvas>
     _penCursor.dispose();
     _glideArm?.cancel();
     _scrollFade?.cancel();
+    _holdTimer?.cancel();
     controller.stopGlide();
     super.dispose();
   }
@@ -315,7 +346,13 @@ class _PageCanvasState extends State<PageCanvas>
         opacity: app.tool == Tool.highlighter ? 0.4 : 1.0,
       );
       _addPoint(e, pt);
+      _snapPreview = null;
     });
+    if (app.autoShape) {
+      _holdAnchor = Offset(pt.dx, pt.dy);
+      _holdTimer?.cancel();
+      _holdTimer = Timer(_holdToSnap, _offerShape);
+    }
   }
 
   void _inkMove(PointerMoveEvent e) {
@@ -327,7 +364,47 @@ class _PageCanvasState extends State<PageCanvas>
     // Repaint-only: grow the stroke and nudge the ink painter. No setState —
     // rebuilding every visible block per point made inking sluggish.
     _addPoint(e, _clampToPagePoint(controller.screenToPage(e.localPosition)));
+    // Moving again withdraws any proposal and restarts the clock. Only a
+    // MEANINGFUL move counts: a hand resting on a trackpad jitters by a
+    // pixel, and treating that as "still drawing" is why a hold-to-act
+    // gesture feels broken on some hardware.
+    if (app.autoShape) _noteDrawingMovement();
     _wetTick.value++;
+  }
+
+  /// Distance a pointer may wander and still count as held still.
+  static const double _holdSlop = 3.0;
+  Offset? _holdAnchor;
+
+  void _noteDrawingMovement() {
+    final w = _wet;
+    if (w == null || w.x.isEmpty) return;
+    final at = Offset(w.x.last, w.y.last);
+    final anchor = _holdAnchor;
+    if (anchor != null && (at - anchor).distance < _holdSlop) return;
+    _holdAnchor = at;
+    if (_snapPreview != null) {
+      // Withdraw the proposal. setState because the painter's `wet` changes
+      // identity, not just its contents.
+      setState(() => _snapPreview = null);
+    }
+    _holdTimer?.cancel();
+    _holdTimer = Timer(_holdToSnap, _offerShape);
+  }
+
+  /// Hold expired: propose a shape, if the stroke reads as one.
+  void _offerShape() {
+    final w = _wet;
+    if (w == null || !app.autoShape) return;
+    final snapped = ShapeSnap.snap(w);
+    if (snapped == null) return;
+    setState(() => _snapPreview = snapped);
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdAnchor = null;
   }
 
   Offset _clampToPagePoint(Offset p) =>
@@ -344,21 +421,37 @@ class _PageCanvasState extends State<PageCanvas>
   }
 
   void _inkUp(PointerUpEvent e) {
+    final wasErasing = app.tool == Tool.eraser || _gestureErase;
+    final erasedSomething = _eraseUndoPushed;
     _eraseUndoPushed = false;
     _gestureErase = false;
+    _cancelHold();
+    // ERASING HANDS THE PEN BACK.
+    //
+    // Only when something was actually rubbed out: a stray click with the
+    // eraser up should not silently change tool, and `_eraseUndoPushed` is
+    // exactly "this gesture removed ink" — it is what pushed the undo entry.
+    // The gesture-erase path (pen tail, barrel button) is excluded because
+    // the tool was never the eraser there; the hand already went back.
+    if (wasErasing && erasedSomething && app.tool == Tool.eraser) {
+      app.setTool(Tool.pen);
+    }
     final w = _wet;
     if (w == null || w.x.length < 2) {
       setState(() => _wet = null);
       return;
     }
     app.pushUndo();
-    // Auto shapes (INK-10). Applied at commit, never mid-stroke: snapping
-    // while the line is still being drawn makes the ink jump under the hand,
-    // and the recogniser cannot tell a half-drawn circle from an arc anyway.
-    // `snap` returns null whenever it is not confident, and null means keep
-    // exactly what was drawn.
-    final snapped = app.autoShape ? ShapeSnap.snap(w) : null;
-    final stroke = snapped ?? w;
+    // The stroke that was ON SCREEN when the hand let go is the one that
+    // commits. If a proposal was showing, the user saw it and accepted it by
+    // releasing; if not, nothing is changed underneath them.
+    //
+    // Deliberately NO snap attempt here any more. Snapping on release was
+    // startling: you drew a line, let go, and the app rewrote it — with no
+    // warning, no preview and no way to decline. Holding still is the signal
+    // now, and it is a signal you can watch and take back.
+    final stroke = _snapPreview ?? w;
+    _snapPreview = null;
     Block? target;
     for (final b in app.blocks.reversed) {
       if (b.type == BlockType.ink &&
@@ -375,6 +468,33 @@ class _PageCanvasState extends State<PageCanvas>
     _refitInkBounds(target);
     app.updateBlock(target);
     setState(() => _wet = null);
+  }
+
+  /// Put an arrow on the page, in the pen's colour and weight.
+  void _commitArrow(Offset2 from, Offset2 to) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    var color = app.inkColor;
+    if (dark && color == OnoteColors.graphite900) color = OnoteColors.moon0;
+    final strokes = arrowStrokes(
+      from: from,
+      to: to,
+      colorHex: onoteHexOf(color),
+      size: app.penSize,
+    );
+    // Too short to have a direction, so it would be a head pointing nowhere.
+    if (strokes.isEmpty) return;
+    app.pushUndo();
+    final target = app.addBlock(
+        Block(type: BlockType.ink, x: 0, y: 0, content: {'strokes': []}),
+        recordUndo: false);
+    // One block for all three strokes: erase, lasso and recolour all act on a
+    // block's strokes, so an arrow in one block is an arrow they treat whole.
+    for (final st in strokes) {
+      (target.content['strokes'] as List).add(st.toJson());
+    }
+    _refitInkBounds(target);
+    app.updateBlock(target);
+    setState(() {});
   }
 
   /// True area-erase (INK-6, Ink Spec §2): remove points within the eraser
@@ -1100,7 +1220,7 @@ class _PageCanvasState extends State<PageCanvas>
                               child: CustomPaint(
                                 size: Size.zero,
                                 painter: InkPainter(visibleStrokes,
-                                    wet: _wet,
+                                    wet: _wetForPaint,
                                     // Per-point repaint without widget rebuild.
                                     repaint: _wetTick,
                                     // Theme default for "auto" strokes: dark
@@ -1179,6 +1299,22 @@ class _PageCanvasState extends State<PageCanvas>
                       ),
                     ),
                   ),
+                // The arrow being dragged, so its length and direction are
+                // visible before it is committed.
+                if (_arrowFrom != null && _arrowTo != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _ArrowPreviewPainter(
+                          controller: controller,
+                          from: _arrowFrom!,
+                          to: _arrowTo!,
+                          color: _penCursorColor(dark),
+                          size: app.penSize,
+                        ),
+                      ),
+                    ),
+                  ),
                 // The sheet rail: which page of a paged document you are on,
                 // and one click to any other. Only in page mode, because on a
                 // boundless canvas there are no pages to list.
@@ -1223,7 +1359,42 @@ class _PageCanvasState extends State<PageCanvas>
       );
     });
 
-    if (_spaceTool) {
+    if (_arrowTool) {
+      // An arrow is a drag with two ends and nothing in between: the shape is
+      // decided by where you start and where you stop, so there is no path to
+      // record and no reason to route it through the ink handlers.
+      canvas = Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          if (app.claimedPointers.remove(e.pointer)) return;
+          controller.stopGlide();
+          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          setState(() {
+            _arrowFrom = Offset2(p.dx, p.dy);
+            _arrowTo = _arrowFrom;
+          });
+        },
+        onPointerMove: (e) {
+          if (_arrowFrom == null) return;
+          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          setState(() => _arrowTo = Offset2(p.dx, p.dy));
+        },
+        onPointerUp: (e) {
+          final from = _arrowFrom, to = _arrowTo;
+          setState(() {
+            _arrowFrom = null;
+            _arrowTo = null;
+          });
+          if (from == null || to == null) return;
+          _commitArrow(from, to);
+        },
+        onPointerCancel: (_) => setState(() {
+          _arrowFrom = null;
+          _arrowTo = null;
+        }),
+        child: canvas,
+      );
+    } else if (_spaceTool) {
       // Insert Space. A drag, not a click: the distance IS the amount of
       // space, so there is nothing to type and nothing to guess. The page is
       // only rewritten on release — dragging re-lays-out the whole document
@@ -1502,6 +1673,9 @@ class _PageCanvasState extends State<PageCanvas>
             },
           Tool.lasso => SystemMouseCursors.precise,
           Tool.space => SystemMouseCursors.resizeUpDown,
+          // Crosshair: an arrow is placed by its two ENDS, so the cursor's
+          // job is to say "this exact point", which is what a reticle is for.
+          Tool.arrow => SystemMouseCursors.precise,
           _ => MouseCursor.defer,
         },
         // Leaving the canvas is the one thing the Listener above cannot see,
@@ -2148,6 +2322,64 @@ class _InsertSpacePainter extends CustomPainter {
       old.atY != atY ||
       old.dy != dy ||
       old.color != color ||
+      old.controller.scale != controller.scale ||
+      old.controller.offset != controller.offset;
+}
+
+/// The arrow being dragged, drawn in screen space.
+///
+/// A preview rather than a live ink stroke: an arrow has no path to record,
+/// so there is nothing to accumulate — only two ends, redrawn as the far one
+/// moves. Built from the same [arrowStrokes] geometry the commit uses, so
+/// what you drag is what you get rather than an approximation of it.
+class _ArrowPreviewPainter extends CustomPainter {
+  _ArrowPreviewPainter({
+    required this.controller,
+    required this.from,
+    required this.to,
+    required this.color,
+    required this.size,
+  });
+
+  final CanvasController controller;
+  final Offset2 from;
+  final Offset2 to;
+  final Color color;
+  final double size;
+
+  @override
+  void paint(Canvas canvas, Size _) {
+    final strokes = arrowStrokes(
+        from: from, to: to, colorHex: '#000000', size: size);
+    if (strokes.isEmpty) return;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (size * controller.scale).clamp(1.0, 40.0)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    for (final st in strokes) {
+      final path = Path();
+      for (var i = 0; i < st.x.length; i++) {
+        final p = controller.pageToScreen(Offset(st.x[i], st.y[i]));
+        if (i == 0) {
+          path.moveTo(p.dx, p.dy);
+        } else {
+          path.lineTo(p.dx, p.dy);
+        }
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArrowPreviewPainter old) =>
+      old.from.x != from.x ||
+      old.from.y != from.y ||
+      old.to.x != to.x ||
+      old.to.y != to.y ||
+      old.color != color ||
+      old.size != size ||
       old.controller.scale != controller.scale ||
       old.controller.offset != controller.offset;
 }

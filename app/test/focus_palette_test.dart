@@ -102,10 +102,11 @@ void main() {
       expect(find.byTooltip(tip), findsOneWidget, reason: tip);
     }
     expect(find.byTooltip('Leave focus mode  (Esc)'), findsOneWidget);
-    // The sidebar lives ONLY here now — it was taken off the command bar,
-    // which focus mode hides anyway, so this is the single way back to
-    // another page without leaving the mode.
-    expect(find.byTooltip('Hide the sidebar'), findsOneWidget);
+    // And NOT a sidebar toggle. Focus mode has already hidden the sidebar,
+    // so the button offered to hide something that was not on screen; "leave
+    // focus mode" is the way back and it is right beside it.
+    expect(find.byTooltip('Hide the sidebar'), findsNothing);
+    expect(find.byTooltip('Show the notebook sidebar'), findsNothing);
   });
 
   testWidgets('the colours are on their own row, and big enough to hit',

@@ -70,7 +70,31 @@ class CanvasController extends ChangeNotifier {
   }
 
   /// Last known viewport size (set by the canvas widget each layout).
-  Size viewport = Size.zero;
+  Size _viewport = Size.zero;
+  Size get viewport => _viewport;
+
+  /// A LATCHED FIT SURVIVES A RESIZE.
+  ///
+  /// Going full screen made the window wider and left the scale where it was,
+  /// so the page stopped reaching the right-hand edge and a band of desk
+  /// appeared beside it — the exact thing "fit" was turned on to prevent. The
+  /// fit was being treated as a one-off again, just at a different moment.
+  ///
+  /// Re-fitting here rather than at every call site means it holds for the
+  /// window resizing, the sidebar collapsing, focus mode arriving and full
+  /// screen — anything that changes how much room the page has, without each
+  /// of them having to remember.
+  set viewport(Size v) {
+    if (v == _viewport) return;
+    final widthChanged = v.width != _viewport.width;
+    _viewport = v;
+    if (fitLocked && widthChanged && _fitTargetWidth > 0) {
+      _applyFillWidth(_fitTargetWidth);
+    }
+  }
+
+  /// The page width the latch is fitting, remembered so a resize can redo it.
+  double _fitTargetWidth = 0;
 
   /// Current page-surface size in page coords (set by the canvas each build);
   /// used to clamp panning so the page can't be lost (CANVAS-1 v0.3).
@@ -233,6 +257,14 @@ class CanvasController extends ChangeNotifier {
       return;
     }
     fitLocked = true;
+    _fitTargetWidth = contentWidth;
+    _applyFillWidth(contentWidth);
+    notifyListeners();
+  }
+
+  /// The arithmetic of the fit, without the latching — so a resize can redo
+  /// it without re-entering [fillWidth] and re-notifying mid-layout.
+  void _applyFillWidth(double contentWidth) {
     // EXACTLY the window width, with no breathing room and no margin.
     //
     // A 16px pad each side was "tidier" and it is what left a sliver to
@@ -241,8 +273,28 @@ class CanvasController extends ChangeNotifier {
     // edge to edge, nothing down either side.
     scale = (viewport.width / contentWidth).clamp(minScale, maxScale);
     offset = Offset(0, offset.dy);
-    clampToPage();
-    notifyListeners();
+    // NOT `clampToPage()` — that notifies, and this runs from the `viewport`
+    // setter during layout, where a notify would rebuild the tree it is in
+    // the middle of building. The clamp itself is still applied.
+    _clampSilently();
+  }
+
+  /// [clampToPage] without the notify.
+  void _clampSilently() {
+    final ps = pageSize;
+    if (ps == null || viewport == Size.zero) return;
+    final wPx = ps.width * scale;
+    final hPx = ps.height * scale;
+    offset = Offset(
+      fitLocked
+          ? 0.0
+          : wPx <= viewport.width
+              ? (viewport.width - wPx) / 2
+              : offset.dx.clamp(viewport.width - wPx, 0.0),
+      hPx <= viewport.height
+          ? 0.0
+          : offset.dy.clamp(viewport.height - hPx, 0.0),
+    );
   }
 
   /// Put page-space Y at the top of the viewport, leaving X alone.

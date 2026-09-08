@@ -72,7 +72,12 @@ enum Tool {
 
   /// OneNote's "Insert Space": drag down to push everything below the line
   /// you started on further down, making room in a page you already filled.
-  space
+  space,
+
+  /// A straight line with a head on the end you finish at. Same colour and
+  /// width as the pen, because it is the pen — the tool only changes what
+  /// shape the drag makes.
+  arrow
 }
 
 /// What the drawing cursor looks like (INK-11).
