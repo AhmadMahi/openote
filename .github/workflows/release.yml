@@ -162,7 +162,7 @@ jobs:
             Copy-Item $found.FullName $stage
           }
           Compress-Archive -Path "$($stage.FullName)/*" `
-            -DestinationPath "openote-$env:VERSION-video-engine-windows-x64.zip"
+            -DestinationPath "slate-$env:VERSION-video-engine-windows-x64.zip"
 
       # And the shipped bundle must NOT contain them, or the split saved
       # nothing and the release notes are wrong about the download size.
@@ -178,12 +178,12 @@ jobs:
           }
 
       # The FFI loader (app/lib/core/onote_ffi.dart) looks next to the exe
-      # first — the DLL must sit beside openote.exe in the zip. The CMake hook
+      # first — the DLL must sit beside Slate.exe in the zip. The CMake hook
       # already bundles it; the explicit copy is belt-and-braces.
       - name: Package zip (DLL next to the exe)
         shell: pwsh
         run: |
-          $stage = "openote-$env:VERSION-windows-x64"
+          $stage = "slate-$env:VERSION-windows-x64"
           Copy-Item -Recurse app/build/windows/x64/runner/Release $stage
           Copy-Item rust/onote_core/target/release/onote_core.dll $stage/ -Force
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
@@ -273,7 +273,7 @@ jobs:
             Write-Host "ISCC at $iscc (the binary reports no usable version)"
           }
 
-          $stage = "openote-$env:VERSION-windows-x64"
+          $stage = "slate-$env:VERSION-windows-x64"
           & $iscc `
             "/DAppVersion=$env:VERSION" `
             "/DStageDir=$(Resolve-Path $stage)" `
@@ -284,16 +284,16 @@ jobs:
               "mentions ArchitecturesAllowed, openote.iss needs Inno Setup 6.3+ " +
               "for x64compatible and this compiler reports $reported."
           }
-          Move-Item packaging/windows/openote-*-setup.exe . -Force
+          Move-Item packaging/windows/slate-*-setup.exe . -Force
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
           path: |
-            openote-*.zip
-            openote-*-setup.exe
+            slate-*.zip
+            slate-*-setup.exe
           if-no-files-found: error
-      # `openote-*.zip` above already picks up the video-player archive; it is
+      # `slate-*.zip` above already picks up the video-player archive; it is
       # named so that it can never end with `-setup.exe`, which is the exact
       # string the in-app updater matches on to find the installer
       # (app/lib/update/app_update.dart, and video_engine_test.dart pins it).
@@ -658,12 +658,12 @@ jobs:
           cp -R "$APP" dmg-staging/
           ln -s /Applications dmg-staging/Applications
           hdiutil create -volname "Slate" -srcfolder dmg-staging -ov \
-            -format UDZO "openote-${VERSION}-macos-universal.dmg"
+            -format UDZO "slate-${VERSION}-macos-universal.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-universal
-          path: openote-*.dmg
+          path: slate-*.dmg
           if-no-files-found: error
 
   release:
@@ -799,7 +799,7 @@ jobs:
             test suite grew from 1,272 to 1,564 over the cycle.
 
             ## Downloads
-            - **Windows**: `openote-*-windows-x64-setup.exe` — the installer.
+            - **Windows**: `slate-*-windows-x64-setup.exe` — the installer.
               Installs for your user only, so it never asks for an
               administrator password. (Prefer no installer? The
               `…-windows-x64.zip` is the same build — unzip it anywhere and run
@@ -816,7 +816,7 @@ jobs:
               for libmpv, so if you want video to play in the page, install
               `mpv-libs` on Fedora or `libmpv2` on Ubuntu/Debian yourself —
               the app says so too.)
-            - **macOS**: `openote-*-macos-universal.dmg` — drag Openote to Applications.
+            - **macOS**: `slate-*-macos-universal.dmg` — drag Slate to Applications.
 
             ---
 

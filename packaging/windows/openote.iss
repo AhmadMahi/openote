@@ -20,11 +20,19 @@
   #define StageDir "..\..\app\build\windows\x64\runner\Release"
 #endif
 
-#define AppName "Openote"
-#define AppPublisher "Openote"
+#define AppName "Slate"
+#define AppPublisher "Slate"
 #define AppUrl "https://github.com/icmric/openote"
-#define AppExe "openote.exe"
-; The ProgID is the registry name for "a thing Openote opens". Versioned-looking
+#define AppExe "Slate.exe"
+; RENAMED ABOVE, DELIBERATELY NOT BELOW. The display name, the publisher, the
+; exe and the installer's filename are what a user sees, and they now say
+; Slate. Everything under this line is an IDENTIFIER Windows has already
+; written down on somebody's machine — the AppId, the ProgIDs, the file
+; extension — and renaming one of those does not rename a thing, it creates a
+; second thing beside the first: a duplicate entry in Add/Remove Programs, or
+; a file association pointing at a key nothing registers any more.
+;
+; The ProgID is the registry name for "a thing this app opens". Versioned-looking
 ; on purpose (this is the convention Windows expects) and, like AppId, never
 ; changed once shipped: it is what an existing association points at.
 ;
@@ -77,7 +85,7 @@ UninstallDisplayIcon={app}\{#AppExe}
 
 LicenseFile=..\..\LICENSE
 OutputDir=.
-OutputBaseFilename=openote-{#AppVersion}-windows-x64-setup
+OutputBaseFilename=slate-{#AppVersion}-windows-x64-setup
 ; The app's own Windows icon, so the setup exe, the Start-menu entry and
 ; the running app are all visibly the same program.
 SetupIconFile=..\..\app\windows\runner\resources\app_icon.ico
