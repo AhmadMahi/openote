@@ -44,6 +44,7 @@ import '../update/app_update.dart';
 import '../sync/github_api.dart';
 import '../store/repository.dart';
 import '../math/math_editor.dart';
+import '../theme/ink_palettes.dart';
 import '../theme/onote_theme.dart';
 import '../theme/tokens.dart';
 import 'page_protection.dart';
@@ -3996,8 +3997,18 @@ class AppState extends ChangeNotifier
   // and what `setSetting` can round-trip; one convention, no second parser.
   static List<String> _hexes(List<Color> cs) => [for (final c in cs) onoteHexOf(c)];
 
-  List<String> penPalette = _hexes(OnoteColors.penColors);
-  List<String> highlighterPalette = _hexes(OnoteColors.highlighterColors);
+  /// AT MOST FOUR, and as few as one.
+  ///
+  /// Four because that is how many colours anyone actually keeps to hand
+  /// while writing, and because a row you can step round with one key stops
+  /// being a shortcut once it is longer than the fingers of one hand. Adding
+  /// and removing them is what makes the row yours; the ceiling is what keeps
+  /// [cycleInkColor] worth pressing.
+  static const int maxPaletteColours = 4;
+
+  List<String> penPalette = InkPalettes.presets.first.colours.toList();
+  List<String> highlighterPalette =
+      _hexes(OnoteColors.highlighterColors).take(maxPaletteColours).toList();
 
   /// The wells for whichever drawing tool is armed. The highlighter keeps its
   /// own row on purpose: a highlighter loaded with graphite is a black bar
@@ -4017,6 +4028,116 @@ class AppState extends ChangeNotifier
   void setPenColor(int i) {
     penColor = i % inkPalette.length;
     notifyListeners();
+  }
+
+  // ── Placing a block while a drawing tool is up ───────────────────────
+  //
+  // Pasting a picture with the pen armed used to leave you looking at an
+  // image you could not move: the block was selected, but blocks are inert
+  // while an ink tool is active (they have to be, or the pen would drag them
+  // instead of drawing on them), so every attempt to grab it drew a line
+  // across it instead.
+  //
+  // So placing something switches to Select for exactly as long as it stays
+  // selected, and clicking off it puts the pen back. The tool is remembered
+  // rather than assumed, because "back to the pen" is wrong for someone who
+  // was using the highlighter.
+
+  Tool? _toolBeforePlacement;
+
+  /// Select [id] and, if a drawing tool is up, borrow Select until it is
+  /// deselected.
+  void selectPlaced(String id) {
+    if (tool != Tool.select) {
+      _toolBeforePlacement = tool;
+      tool = Tool.select;
+    }
+    select(id);
+  }
+
+  void _restoreToolAfterPlacement() {
+    final back = _toolBeforePlacement;
+    if (back == null) return;
+    _toolBeforePlacement = null;
+    tool = back;
+  }
+
+  /// Add a colour to the current tool's row, and arm it.
+  ///
+  /// Silently does nothing at the ceiling rather than throwing or growing:
+  /// the button that calls this is disabled there, and a state method that
+  /// disagrees with its own button is how the two get out of step.
+  void addInkColor(String hex) {
+    final list = tool == Tool.highlighter ? highlighterPalette : penPalette;
+    if (list.length >= maxPaletteColours) return;
+    final k = sanitiseShortcut('');
+    list.add(hex);
+    (tool == Tool.highlighter ? highlighterShortcuts : penShortcuts).add(k);
+    penColor = list.length - 1;
+    _savePalette();
+    notifyListeners();
+  }
+
+  /// Remove well [i]. The last colour cannot go — a pen with no colour is not
+  /// a state anything downstream is written to handle.
+  void removeInkColor(int i) {
+    final list = tool == Tool.highlighter ? highlighterPalette : penPalette;
+    if (list.length <= 1 || i < 0 || i >= list.length) return;
+    list.removeAt(i);
+    final keys = tool == Tool.highlighter ? highlighterShortcuts : penShortcuts;
+    if (i < keys.length) keys.removeAt(i);
+    // Keep something armed, and keep it near where the eye already was.
+    penColor = penColor.clamp(0, list.length - 1);
+    _savePalette();
+    notifyListeners();
+  }
+
+  /// Replace the current tool's row with a ready-made palette.
+  void applyInkPalette(InkPalette p) {
+    final colours = p.colours.take(maxPaletteColours).toList();
+    if (tool == Tool.highlighter) {
+      highlighterPalette = colours;
+      highlighterShortcuts = List.filled(colours.length, '');
+    } else {
+      penPalette = colours;
+      penShortcuts = List.filled(colours.length, '');
+    }
+    penColor = 0;
+    activePaletteName = p.name;
+    _repo.setSetting('activePalette', p.name);
+    _savePalette();
+    notifyListeners();
+  }
+
+  /// The name of the palette last chosen, for the picker's tick. Empty once a
+  /// colour has been edited by hand — the row is then nobody's preset.
+  String activePaletteName = InkPalettes.presets.first.name;
+
+  /// Palettes the user made, on top of the built-in ones.
+  List<InkPalette> customPalettes = [];
+
+  void addCustomPalette(String name, List<String> colours) {
+    customPalettes.add(InkPalette(
+        name, colours.take(maxPaletteColours).toList(growable: false)));
+    _repo.setSetting('customPalettes', [
+      for (final p in customPalettes) {'name': p.name, 'colours': p.colours}
+    ]);
+    notifyListeners();
+  }
+
+  /// Every palette on offer: the built-ins, then anything the user made.
+  List<InkPalette> get allPalettes => [
+        ...InkPalettes.presets,
+        ...customPalettes,
+      ];
+
+  void _savePalette() {
+    _repo.setSetting(
+        tool == Tool.highlighter ? 'highlighterPalette' : 'penPalette',
+        tool == Tool.highlighter ? highlighterPalette : penPalette);
+    _repo.setSetting(
+        tool == Tool.highlighter ? 'highlighterShortcuts' : 'penShortcuts',
+        tool == Tool.highlighter ? highlighterShortcuts : penShortcuts);
   }
 
   /// Step the armed well by [delta] (+1 next, -1 previous).
@@ -4043,8 +4164,11 @@ class AppState extends ChangeNotifier
   /// people whose hand does not want to leave the letters to reach the number
   /// row, and they are per tool for the same reason the palettes are — the
   /// key that means yellow highlighter should not mean yellow pen.
-  List<String> penShortcuts = List.filled(6, '');
-  List<String> highlighterShortcuts = List.filled(4, '');
+  /// Sized to the palette, and RESIZED with it. A fixed-length list beside a
+  /// variable-length one is a pair that drifts, and the drift shows up as a
+  /// key that arms a colour which is no longer there.
+  List<String> penShortcuts = List.filled(maxPaletteColours, '');
+  List<String> highlighterShortcuts = List.filled(maxPaletteColours, '');
 
   /// A shortcut is one PRINTABLE character, or nothing.
   ///
@@ -6049,19 +6173,20 @@ class AppState extends ChangeNotifier
     // for every future build to re-clean, and leaves a settings file that
     // says something the app does not believe — the next tool to read it
     // (an export, a sync, a person) would still see the invisible byte.
+    // Sized to the palette that was just loaded, not to a constant: the two
+    // are indexed together, and a shortcut list longer than the row it
+    // belongs to would bind a key to a colour that is not there.
     final psc = _repo.getSetting('penShortcuts');
-    if (psc is List) {
-      penShortcuts = _sanitisedList(psc, penShortcuts.length);
-      if (!_sameStrings(psc, penShortcuts)) {
-        _repo.setSetting('penShortcuts', penShortcuts);
-      }
+    penShortcuts =
+        _sanitisedList(psc is List ? psc : const [], penPalette.length);
+    if (psc is List && !_sameStrings(psc, penShortcuts)) {
+      _repo.setSetting('penShortcuts', penShortcuts);
     }
     final hsc = _repo.getSetting('highlighterShortcuts');
-    if (hsc is List) {
-      highlighterShortcuts = _sanitisedList(hsc, highlighterShortcuts.length);
-      if (!_sameStrings(hsc, highlighterShortcuts)) {
-        _repo.setSetting('highlighterShortcuts', highlighterShortcuts);
-      }
+    highlighterShortcuts = _sanitisedList(
+        hsc is List ? hsc : const [], highlighterPalette.length);
+    if (hsc is List && !_sameStrings(hsc, highlighterShortcuts)) {
+      _repo.setSetting('highlighterShortcuts', highlighterShortcuts);
     }
     final tsc = _repo.getSetting('toolShortcuts');
     if (tsc is Map) {
@@ -7237,9 +7362,12 @@ class AppState extends ChangeNotifier
       // A sheet does not grow sideways, ever — that is what makes it a sheet.
       // It grows DOWNWARD by whole sheets, so the surface is always a whole
       // number of pages and a page break never lands in the middle of nothing.
+      //
+      // The surface uses the SCROLLABLE count, which includes blank paper you
+      // have not written on: room to keep going is the point, and you cannot
+      // be asked to fill page 1 before page 2 exists.
       final paper = pageProps.paper;
-      final sheets = math.max(1, (e.bottom / paper.height).ceil());
-      return Size(paper.width, paper.height * sheets);
+      return Size(paper.width, paper.height * scrollableSheetCount);
     }
     return Size(
       math.max(pageProps.pageWidth, e.right + pageGrowMargin),
@@ -7254,6 +7382,23 @@ class AppState extends ChangeNotifier
     return math.max(
         1, (contentExtent().bottom / pageProps.paper.height).ceil());
   }
+
+  /// How many sheets are room enough to keep writing — the ones that hold
+  /// content, plus [spareSheets] of blank paper, plus any explicitly added.
+  ///
+  /// Distinct from [sheetCount], which is what the document IS. You could not
+  /// reach page 2 until something had been drawn near the bottom of page 1,
+  /// because the surface stopped where the content did: to get room you had
+  /// to first put something in the room you did not have. Paper on a desk
+  /// does not work that way, and neither does any word processor.
+  ///
+  /// Kept separate rather than folded into [sheetCount] so nothing DOWNSTREAM
+  /// inherits the blanks — an export or a page count that gained two empty
+  /// pages because you scrolled would be a worse bug than the one this fixes.
+  static const int spareSheets = 2;
+
+  int get scrollableSheetCount =>
+      pageProps.isPaged ? sheetCount + spareSheets + pageProps.addedSheets : 1;
 
   /// The writing area of a sheet: the paper minus its margins.
   ///
@@ -7417,6 +7562,92 @@ class AppState extends ChangeNotifier
     canvas.fillWidth(pageProps.isPaged
         ? pageProps.paper.width
         : (canvas.pageSize?.width ?? pageSize().width));
+  }
+
+  /// Append a blank sheet to the end of the document.
+  void addSheet() {
+    if (!pageProps.isPaged) return;
+    pushUndo();
+    pageProps.addedSheets++;
+    docRevision++;
+    markDirty();
+    notifyListeners();
+  }
+
+  /// Insert a blank sheet BEFORE sheet [i], pushing everything from there
+  /// down by one page.
+  ///
+  /// This is [insertSpace] with the drag already measured: a page's worth of
+  /// room at a page boundary. Doing it that way rather than writing a second
+  /// mover means ink still moves by its POINTS, which is the part that is
+  /// easy to get wrong and was got wrong once already.
+  void insertSheet(int i) {
+    if (!pageProps.isPaged) return;
+    final h = pageProps.paper.height;
+    insertSpace(i * h, h);
+  }
+
+  /// Move the content of sheet [from] to sheet [to], sliding the sheets
+  /// between them along to fill the gap.
+  ///
+  /// Everything is decided by the TOP of a thing — a block's y, a stroke's
+  /// highest point — and the whole thing then moves by one delta. Deciding
+  /// per point would tear a stroke that crosses a page break in half and
+  /// leave the halves a page apart.
+  void moveSheet(int from, int to) {
+    if (!pageProps.isPaged || from == to) return;
+    final n = scrollableSheetCount;
+    if (from < 0 || to < 0 || from >= n || to >= n) return;
+    final h = pageProps.paper.height;
+
+    /// Where a thing whose top sits on sheet [s] ends up.
+    int landing(int s) {
+      if (s == from) return to;
+      if (from < to && s > from && s <= to) return s - 1;
+      if (to < from && s >= to && s < from) return s + 1;
+      return s;
+    }
+
+    double shiftFor(double top) {
+      final s = (top / h).floor();
+      return (landing(s) - s) * h;
+    }
+
+    pushUndo();
+    for (final b in blocks) {
+      if (b.type == BlockType.ink) {
+        final strokes = b.content['strokes'];
+        if (strokes is! List) continue;
+        var touched = false;
+        for (final raw in strokes) {
+          if (raw is! Map) continue;
+          final ys = raw['y'];
+          if (ys is! List || ys.isEmpty) continue;
+          var top = double.infinity;
+          for (final v in ys) {
+            top = math.min(top, (v as num).toDouble());
+          }
+          final d = shiftFor(top);
+          if (d == 0) continue;
+          for (var k = 0; k < ys.length; k++) {
+            ys[k] = (ys[k] as num).toDouble() + d;
+          }
+          touched = true;
+        }
+        if (touched) {
+          b.updatedAt = nowMs();
+          _refitInkBoundsOf(b);
+        }
+        continue;
+      }
+      final d = shiftFor(b.y);
+      if (d == 0) continue;
+      b.y += d;
+      b.updatedAt = nowMs();
+    }
+    docRevision++;
+    markDirty();
+    notifyListeners();
   }
 
   /// Scroll sheet [i] (0-based) to the top of the viewport.
@@ -8592,6 +8823,8 @@ class AppState extends ChangeNotifier
     // one — which showed up as a caret landing at a point on another block.
     if (!edit) pendingCaretGlobal = null;
     if (id == null) {
+      // Clicking off a freshly placed block hands the tool back.
+      _restoreToolAfterPlacement();
       selectedIds.clear();
       selectedBlockId = null;
       editingBlockId = null;

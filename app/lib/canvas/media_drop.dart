@@ -62,7 +62,9 @@ Block? insertImageBytes(AppState app, Uint8List bytes, String mime, Offset at,
     w: width,
     content: {'blob': 'sha256:$hash', 'mime': mime},
   ));
-  app.select(b.id);
+  // Selected AND handed the Select tool, so it can be moved and resized the
+  // moment it lands — see `AppState.selectPlaced`.
+  app.selectPlaced(b.id);
   return b;
 }
 
@@ -254,7 +256,9 @@ Block? insertFileBytes(
       'size': bytes.length,
     },
   ));
-  app.select(b.id);
+  // Selected AND handed the Select tool, so it can be moved and resized the
+  // moment it lands — see `AppState.selectPlaced`.
+  app.selectPlaced(b.id);
   return b;
 }
 

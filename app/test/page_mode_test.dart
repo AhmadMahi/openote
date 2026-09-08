@@ -151,16 +151,27 @@ void main() {
       expect(PaperSize.byName(null).name, 'A4');
     });
 
-    test('the surface is a whole number of sheets', () {
+    test('the surface is a whole number of sheets, with paper to spare', () {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       app.setPageLayout('paged');
       final paper = app.pageProps.paper;
       expect(app.pageSize().width, paper.width,
           reason: 'a sheet never grows sideways — that is what makes it one');
-      expect(app.pageSize().height, paper.height);
-      expect(app.sheetCount, 1);
 
-      // Content past the bottom of sheet one earns a second sheet, whole.
+      // WHOLE sheets, still: a page break never lands in the middle of
+      // nothing. That is what this test is named for and it is unchanged.
+      expect(app.pageSize().height % paper.height, 0);
+
+      // The DOCUMENT is one page; the SURFACE has blank paper under it, so
+      // page 2 can be scrolled onto before page 1 is full. Before this you
+      // had to draw at the bottom of page 1 to earn the room to draw at the
+      // bottom of page 1.
+      expect(app.sheetCount, 1);
+      expect(app.pageSize().height,
+          paper.height * (1 + AppState.spareSheets));
+
+      // Content past the bottom of sheet one earns a second sheet, whole —
+      // and the spare paper follows it down.
       app.blocks = [
         Block(
             type: BlockType.text,
@@ -170,8 +181,9 @@ void main() {
             h: 100,
             content: {'text': 'overflow'})
       ];
-      expect(app.sheetCount, 2);
-      expect(app.pageSize().height, paper.height * 2);
+      expect(app.sheetCount, 2, reason: 'the document is two pages');
+      expect(app.pageSize().height,
+          paper.height * (2 + AppState.spareSheets));
     });
 
     test('canvas mode is untouched by any of it', () {

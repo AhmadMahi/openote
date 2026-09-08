@@ -580,10 +580,18 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return true;
       }
       if (k == LogicalKeyboardKey.keyP) {
-        // Muscle memory, and the reason P13 was worth doing at all: a student
-        // printing a revision sheet reaches for Ctrl+P, not a menu. Unawaited
-        // because the OS dialog owns the interaction from here.
-        unawaited(printCurrentPage(app));
+        // Ctrl+P now STEPS THE INK COLOUR, and Ctrl+Shift+P prints.
+        //
+        // Giving up the platform chord for printing is a real cost and it was
+        // the owner's call: colour is changed dozens of times in a drawing
+        // session and printing perhaps once, so the cheaper key goes to the
+        // commoner act. Print keeps a chord, and keeps it next door.
+        if (shift) {
+          // Unawaited: the OS dialog owns the interaction from here.
+          unawaited(printCurrentPage(app));
+          return true;
+        }
+        app.cycleInkColor(1);
         return true;
       }
       if (k == LogicalKeyboardKey.keyZ && !shift) {

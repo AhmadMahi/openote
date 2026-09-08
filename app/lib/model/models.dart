@@ -188,6 +188,7 @@ class PageProps {
     this.background = 'blank',
     this.gridSize = 24,
     this.bgSpacing = defaultBgSpacing,
+    this.addedSheets = 0,
     this.pageWidth = 1100,
     this.layout = 'canvas',
     this.paperSize = 'A4',
@@ -208,6 +209,14 @@ class PageProps {
   /// other page property, because the lecture you scribble on and the essay
   /// you hand in do not want the same paper.
   double bgSpacing;
+
+  /// Blank sheets the user asked for beyond what the content needs.
+  ///
+  /// Scrolling already offers a couple of spare pages
+  /// (`AppState.spareSheets`); this is for saying "this document is five
+  /// pages" before writing them, which is a different act from scrolling into
+  /// space. Per page, and written only when it is not zero.
+  int addedSheets;
   double pageWidth; // presented page-surface width (CANVAS-1 v0.3)
 
   /// `canvas` (the default, and what Openote has always been) or `paged`.
@@ -244,6 +253,7 @@ class PageProps {
     'background',
     'gridSize',
     'bgSpacing',
+    'addedSheets',
     'pageWidth',
     'layout',
     'paperSize',
@@ -259,6 +269,7 @@ class PageProps {
         // page in every notebook on the next save, and hand the sync log a
         // diff for all of them.
         if (bgSpacing != defaultBgSpacing) 'bgSpacing': bgSpacing,
+        if (addedSheets > 0) 'addedSheets': addedSheets,
         // Written only when they say something. A canvas page is the
         // overwhelming majority and its JSON is byte-identical to what every
         // previous build wrote — which matters beyond tidiness: emitting three
@@ -276,6 +287,7 @@ class PageProps {
         // newer-build value of 0 would be an infinite paint loop below.
         bgSpacing: ((j?['bgSpacing'] as num?)?.toDouble() ?? defaultBgSpacing)
             .clamp(minBgSpacing, maxBgSpacing),
+        addedSheets: ((j?['addedSheets'] as num?)?.toInt() ?? 0).clamp(0, 200),
         pageWidth: (j?['pageWidth'] as num?)?.toDouble() ?? 1100,
         // Additive, and defaulted: a page written by any earlier build has no
         // `layout` key and must open exactly as it always did.

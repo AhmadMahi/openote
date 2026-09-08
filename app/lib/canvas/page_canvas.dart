@@ -947,8 +947,14 @@ class _PageCanvasState extends State<PageCanvas>
     final ext = app.contentExtent();
     final pw =
         math.max(app.pageProps.pageWidth, ext.right + AppState.pageGrowMargin);
-    final ph = math.max(
-        AppState.defaultPageHeight, ext.bottom + AppState.pageGrowMargin);
+    // In page mode the surface is a whole number of SHEETS, including the
+    // blank ones you can scroll onto — otherwise page 2 does not exist until
+    // something has been drawn at the bottom of page 1, which is the wrong
+    // way round.
+    final ph = app.pageProps.isPaged
+        ? app.pageProps.paper.height * app.scrollableSheetCount
+        : math.max(
+            AppState.defaultPageHeight, ext.bottom + AppState.pageGrowMargin);
     final pageSize = Size(pw, ph);
     controller.pageSize = pageSize;
 
@@ -1003,7 +1009,7 @@ class _PageCanvasState extends State<PageCanvas>
                           ? Size(app.pageProps.paper.width,
                               app.pageProps.paper.height)
                           : null,
-                      sheets: app.sheetCount,
+                      sheets: app.scrollableSheetCount,
                     ),
                   ),
                 ),
@@ -1958,10 +1964,38 @@ class _SheetRail extends StatelessWidget {
   final AppState app;
   final bool dark;
 
+  /// Insert or add, anchored on the page that was right-clicked.
+  Future<void> _sheetMenu(BuildContext context, int i, Offset at) async {
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        PopupMenuItem(
+            value: 'before',
+            height: 36,
+            child: Text('Insert a page before ${i + 1}')),
+        PopupMenuItem(
+            value: 'after',
+            height: 36,
+            child: Text('Insert a page after ${i + 1}')),
+        const PopupMenuItem(
+            value: 'end', height: 36, child: Text('Add a page at the end')),
+      ],
+    );
+    switch (choice) {
+      case 'before':
+        app.insertSheet(i);
+      case 'after':
+        app.insertSheet(i + 1);
+      case 'end':
+        app.addSheet();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final n = app.sheetCount;
+    final n = app.scrollableSheetCount;
     final h = app.pageProps.paper.height;
     // Which sheet the top of the viewport is sitting in.
     final current =
@@ -1975,46 +2009,76 @@ class _SheetRail extends StatelessWidget {
             left: BorderSide(
                 color: dark ? OnoteColors.night300 : OnoteColors.paper300)),
       ),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        itemCount: n,
-        itemBuilder: (context, i) {
-          final on = i == current;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            child: Tooltip(
-              message: 'Go to page ${i + 1}',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => app.goToSheet(i),
-                child: Container(
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    color: on
-                        ? scheme.primary.withValues(alpha: .16)
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: on
-                          ? scheme.primary
-                          : (dark
-                              ? OnoteColors.night300
-                              : OnoteColors.paper300),
+      child: Column(children: [
+        Expanded(
+          // REORDERABLE, and the reorder moves the CONTENT. A list of page
+          // numbers you can drag but which does not take the writing with it
+          // would be a lie told in the most convincing possible way.
+          child: ReorderableListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            buildDefaultDragHandles: false,
+            itemCount: n,
+            onReorder: (from, to) {
+              // Flutter reports the destination as an index in the list
+              // BEFORE the removal, so a downward move is one too far.
+              app.moveSheet(from, to > from ? to - 1 : to);
+            },
+            itemBuilder: (context, i) {
+              final on = i == current;
+              return Padding(
+                key: ValueKey('sheet-$i'),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                child: ReorderableDragStartListener(
+                  index: i,
+                  child: Tooltip(
+                    message: 'Page ${i + 1} — click to go there, drag to '
+                        'reorder, right-click for more',
+                    child: GestureDetector(
+                      onSecondaryTapDown: (d) =>
+                          _sheetMenu(context, i, d.globalPosition),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => app.goToSheet(i),
+                        child: Container(
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            color: on
+                                ? scheme.primary.withValues(alpha: .16)
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: on
+                                  ? scheme.primary
+                                  : (dark
+                                      ? OnoteColors.night300
+                                      : OnoteColors.paper300),
+                            ),
+                          ),
+                          child: Text('${i + 1}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    on ? FontWeight.w700 : FontWeight.w400,
+                                color: on ? scheme.primary : null,
+                              )),
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text('${i + 1}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: on ? FontWeight.w700 : FontWeight.w400,
-                        color: on ? scheme.primary : null,
-                      )),
                 ),
-              ),
-            ),
-          );
-        },
-      ),
+              );
+            },
+          ),
+        ),
+        const Divider(height: 1),
+        IconButton(
+          icon: const Icon(Icons.add, size: 18),
+          tooltip: 'Add a page at the end',
+          visualDensity: VisualDensity.compact,
+          onPressed: app.addSheet,
+        ),
+      ]),
     );
   }
 }

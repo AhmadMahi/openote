@@ -18,6 +18,7 @@ import '../model/tags.dart';
 import '../planner/agenda.dart';
 import '../state/app_state.dart';
 import '../study/study_stats.dart';
+import '../theme/ink_palettes.dart';
 import '../theme/onote_theme.dart';
 import 'color_picker.dart';
 import 'command_button.dart';
@@ -783,6 +784,17 @@ class _CommandBarState extends State<CommandBar> {
             ),
         ],
       );
+  /// Pick a colour, and add it to the row.
+  Future<void> _addColour(BuildContext context) async {
+    final picked = await showOnoteColorPicker(context, app,
+        initial: '#2F6FB3',
+        title: app.tool == Tool.highlighter
+            ? 'New highlighter colour'
+            : 'New pen colour');
+    if (picked == null) return;
+    app.addInkColor(picked.startsWith('#') ? picked : '#$picked');
+  }
+
   /// Ask for one key, and bind it to [t].
   Future<void> _setToolShortcut(
       BuildContext context, Tool t, String label) async {
@@ -1054,6 +1066,17 @@ class _CommandBarState extends State<CommandBar> {
             selected: app.penColor == i,
             app: app,
           ),
+        // Add a colour, until the row is full. Hidden rather than disabled at
+        // the ceiling: a control that is permanently greyed out is furniture.
+        if (colors.length < AppState.maxPaletteColours)
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 16),
+            tooltip: 'Add a colour to this palette',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _addColour(context),
+          ),
+        // The ready-made palettes, and a way to keep your own.
+        _PalettePicker(app: app),
         const SizedBox(width: 6),
         SizedBox(
           width: 110,
@@ -1866,7 +1889,8 @@ class _ColorWellState extends State<_ColorWell> {
       // spot rather than on Apply: a shortcut is not part of the colour, and
       // cancelling out of a colour you decided against should not also throw
       // away the key you just chose.
-      shortcut: app.inkShortcuts[index],
+      shortcut:
+          index < app.inkShortcuts.length ? app.inkShortcuts[index] : '',
       onShortcut: (k) => app.setInkShortcut(index, k),
     );
     if (picked == null) return;
@@ -1883,6 +1907,41 @@ class _ColorWellState extends State<_ColorWell> {
     // rather than only arming the next stroke — recolouring after the fact is
     // most of why you lasso a diagram (INK-7).
     if (app.hasInkSelection) app.recolorSelectedInk(app.inkPalette[index]);
+  }
+
+  /// Where this well is on screen, for anchoring its menu.
+  Offset _wellCentre(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return Offset.zero;
+    return box.localToGlobal(box.size.bottomLeft(Offset.zero));
+  }
+
+  /// Right-click / long-press a well: edit it, or take it out of the row.
+  Future<void> _wellMenu(BuildContext context, Offset at) async {
+    final canRemove = app.inkPalette.length > 1;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        const PopupMenuItem(value: 'edit', height: 36, child: Text('Change colour…')),
+        PopupMenuItem(
+          value: 'remove',
+          height: 36,
+          // The last colour cannot go: a pen with no colour is not a state
+          // anything downstream is written to handle.
+          enabled: canRemove,
+          child: Text(canRemove
+              ? 'Remove from palette'
+              : 'Remove — the last colour has to stay'),
+        ),
+      ],
+    );
+    if (!context.mounted || choice == null) return;
+    if (choice == 'edit') {
+      await _edit(context);
+    } else if (choice == 'remove') {
+      app.removeInkColor(index);
+    }
   }
 
   void _tap(BuildContext context) {
@@ -1904,7 +1963,8 @@ class _ColorWellState extends State<_ColorWell> {
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Tooltip(
         message: () {
-          final k = app.inkShortcuts[index];
+          final k =
+              index < app.inkShortcuts.length ? app.inkShortcuts[index] : '';
           return 'Ink colour ${index + 1}'
               '${k.isEmpty ? '' : '  ·  ${k.toUpperCase()}'}'
               '\nDouble-click to change its colour and key';
@@ -1912,8 +1972,10 @@ class _ColorWellState extends State<_ColorWell> {
         child: InkWell(
           borderRadius: BorderRadius.circular(99),
           onTap: () => _tap(context),
-          onLongPress: () => _edit(context),
-          onSecondaryTap: () => _edit(context),
+          // `onLongPress` carries no position, so the menu is anchored on the
+          // well itself — which is where it should open anyway.
+          onLongPress: () => _wellMenu(context, _wellCentre(context)),
+          onSecondaryTapDown: (d) => _wellMenu(context, d.globalPosition),
           child: Padding(
             // The ring sits OUTSIDE the colour rather than on it, so a well
             // reads as the same colour armed or not. A border drawn over the
@@ -1944,5 +2006,83 @@ class _ColorWellState extends State<_ColorWell> {
         ),
       ),
     );
+  }
+}
+
+/// The palette picker: five ready-made rows, plus whatever you have saved.
+///
+/// A drop-down rather than more swatches in the bar. The bar's job is the
+/// four colours you are using; choosing a different four is a decision you
+/// make occasionally, and occasional decisions belong behind one click rather
+/// than in the row you are aiming at all day.
+class _PalettePicker extends StatelessWidget {
+  const _PalettePicker({required this.app});
+
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<Object>(
+      tooltip: 'Colour palettes',
+      icon: const Icon(Icons.palette_outlined, size: 18),
+      position: PopupMenuPosition.under,
+      onSelected: (v) {
+        if (v is InkPalette) {
+          app.applyInkPalette(v);
+        } else if (v == 'save') {
+          _savePalette(context);
+        }
+      },
+      itemBuilder: (_) => [
+        for (final p in app.allPalettes)
+          PopupMenuItem<Object>(
+            value: p,
+            height: 40,
+            child: Row(children: [
+              // The colours themselves, because the NAME of a palette is not
+              // what anyone chooses on.
+              for (final hex in p.colours)
+                Container(
+                  width: 16,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 5),
+                  decoration: BoxDecoration(
+                    color: onoteColorFromHex(hex),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.black.withValues(alpha: .22), width: 1),
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(p.name, style: const TextStyle(fontSize: 13))),
+              if (app.activePaletteName == p.name)
+                const Icon(Icons.check, size: 16),
+            ]),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<Object>(
+          value: 'save',
+          height: 36,
+          child: Row(children: [
+            Icon(Icons.bookmark_add_outlined, size: 16),
+            SizedBox(width: 10),
+            Text('Save these colours as a palette…',
+                style: TextStyle(fontSize: 13)),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _savePalette(BuildContext context) async {
+    final name = await promptForText(
+      context,
+      title: 'Name this palette',
+      okLabel: 'Save',
+      hintText: 'Revision, Marking, Diagrams…',
+    );
+    if (name == null || name.isEmpty) return;
+    app.addCustomPalette(name, List<String>.from(app.inkPalette));
   }
 }
