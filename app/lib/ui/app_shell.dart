@@ -591,8 +591,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       }
       // The palette-cycling key, whatever the user set it to. Checked here,
       // among the Ctrl chords, because it is one.
-      if (app.cycleColorKey.isNotEmpty &&
-          e.character?.toLowerCase() == app.cycleColorKey) {
+      if (app.matchesCycleKey(k.keyLabel)) {
         app.cycleInkColor(shift ? -1 : 1);
         return true;
       }

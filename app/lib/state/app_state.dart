@@ -4231,6 +4231,31 @@ class AppState extends ChangeNotifier
   /// Customisable in Settings; empty means no cycling key at all.
   String cycleColorKey = 'k';
 
+  /// Whether [keyLabel] is the cycling key — matched against the KEY, never
+  /// against the character it typed.
+  ///
+  /// This is where the shortcut silently did nothing. The handler compared
+  /// `event.character`, and with Ctrl held a letter key does not report its
+  /// letter: it reports a control code (Ctrl+K is U+000B) or nothing at all,
+  /// and which of those you get differs by platform. So the comparison never
+  /// matched anywhere — it looked like a Windows problem only because that is
+  /// where it was noticed.
+  ///
+  /// It is the same mistake as the one that stored U+0001 as a binding,
+  /// made on the other side of the same feature: the field that CAPTURES a
+  /// key was taught that a Ctrl chord is not a character, and the code that
+  /// MATCHES one was not.
+  ///
+  /// `keyLabel` is the key's own name — 'K', '5', '/' — independent of
+  /// modifiers and of platform, which is exactly what a shortcut is about.
+  /// Pure and static so the rule can be tested without an AppState — it is
+  /// the rule that shipped broken.
+  static bool cycleKeyMatches(String binding, String keyLabel) =>
+      binding.isNotEmpty && keyLabel.toLowerCase() == binding.toLowerCase();
+
+  bool matchesCycleKey(String keyLabel) =>
+      cycleKeyMatches(cycleColorKey, keyLabel);
+
   void setCycleColorKey(String key) {
     cycleColorKey = sanitiseShortcut(key);
     _repo.setSetting('cycleColorKey', cycleColorKey);

@@ -18,6 +18,51 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openote/state/app_state.dart';
 
 void main() {
+  group('the cycling key matches the KEY, not the character', () {
+    // WHERE THE SHORTCUT SILENTLY DID NOTHING. The handler compared
+    // `event.character`, and with Ctrl held a letter key does not report its
+    // letter — it reports a control code (Ctrl+K is U+000B) or nothing, and
+    // which of those differs by platform. So it never matched anywhere; it
+    // was reported as a Windows problem only because that is where it was
+    // noticed after the Mac had been used without trying it.
+    //
+    // The same mistake as storing U+0001 as a binding, made on the other side
+    // of the same feature: the field that CAPTURES a key learned that a Ctrl
+    // chord is not a character; the code that MATCHES one had not.
+    bool matches(String binding, String label) =>
+        AppState.cycleKeyMatches(binding, label);
+
+    test('the bound key matches by its label', () {
+      const binding = 'k';
+      expect(matches(binding, 'K'), isTrue, reason: 'LogicalKeyboardKey.keyK.keyLabel');
+      expect(matches(binding, 'k'), isTrue);
+    });
+
+    test('the CONTROL CODE a Ctrl chord produces does not match', () {
+      const binding = 'k';
+      expect(matches(binding, '\u000b'), isFalse,
+          reason: 'Ctrl+K types a vertical tab, and that is what broke it');
+      expect(matches(binding, ''), isFalse);
+    });
+
+    test('another key does not match', () {
+      const binding = 'k';
+      expect(matches(binding, 'J'), isFalse);
+      expect(matches(binding, 'Escape'), isFalse);
+    });
+
+    test('no binding matches nothing, including an empty label', () {
+      const binding = '';
+      expect(matches(binding, 'K'), isFalse);
+      expect(matches(binding, ''), isFalse);
+    });
+
+    test('a digit or a punctuation key works too', () {
+      expect(matches('5', '5'), isTrue);
+      expect(matches('/', '/'), isTrue);
+    });
+  });
+
   group('what counts as a shortcut', () {
     test('a printable character does, folded to lower case', () {
       expect(AppState.sanitiseShortcut('q'), 'q');
