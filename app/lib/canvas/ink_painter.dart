@@ -2,9 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:perfect_freehand/perfect_freehand.dart';
 
 import '../model/models.dart';
+import '../theme/onote_theme.dart';
 
-Color colorFromHex(String hex) =>
-    Color(0xFF000000 | (int.tryParse(hex.replaceFirst('#', ''), radix: 16) ?? 0));
+Color colorFromHex(String hex) => Color(
+    0xFF000000 | (int.tryParse(hex.replaceFirst('#', ''), radix: 16) ?? 0));
+
+/// The colour a stroke is SHOWN in, given the theme it is shown on.
+///
+/// Black ink on a dark page and white ink on a light page are both invisible,
+/// and both happen: the app has always written white when you drew "black"
+/// in dark mode, so a notebook kept in dark mode is full of white strokes
+/// that vanish the moment the theme is light. The stored colour is left
+/// alone — exports, sync and the other theme all still see what was written —
+/// and only the display swaps: near-black is drawn white on a dark page,
+/// near-white is drawn black on a light one. Everything with a hue keeps it.
+///
+/// Thresholds are on relative luminance: `.06` catches every "black" a pen
+/// palette ships (#000000, the warm #211F1B) and no navy; `.85` catches
+/// white and the light greys and no highlighter yellow.
+Color themedInk(Color c, {required bool dark}) {
+  final l = c.computeLuminance();
+  if (dark && l < .06) return OnoteColors.moon0;
+  if (!dark && l > .85) return OnoteColors.graphite900;
+  return c;
+}
 
 /// Renders strokes as pressure-responsive variable-width outlines
 /// (Ink Data Spec §4 — the perfect-freehand pipeline).
@@ -16,10 +37,18 @@ Color colorFromHex(String hex) =>
 /// their colour.
 class InkPainter extends CustomPainter {
   InkPainter(this.strokes,
-      {this.wet, this.autoColor = const Color(0xFF211F1B), super.repaint});
+      {this.wet,
+      this.autoColor = const Color(0xFF211F1B),
+      this.themeDark,
+      super.repaint});
   final List<Stroke> strokes;
-  final Stroke? wet; // in-progress stroke, drawn last (mutated between repaints)
+  final Stroke?
+      wet; // in-progress stroke, drawn last (mutated between repaints)
   final Color autoColor;
+
+  /// The theme the ink is shown on, for [themedInk]. Null leaves every
+  /// stroke exactly its stored colour (exports, tests).
+  final bool? themeDark;
 
   /// Tessellated outlines, attached to the **Stroke object itself**.
   ///
@@ -54,7 +83,11 @@ class InkPainter extends CustomPainter {
       if (path == null) return;
       if (cache) _outlines[s] = path;
     }
-    final base = s.colorHex == 'auto' ? autoColor : colorFromHex(s.colorHex);
+    var base = s.colorHex == 'auto' ? autoColor : colorFromHex(s.colorHex);
+    // Pen only: a highlighter multiplies, and a white one is already nothing.
+    if (themeDark != null && s.tool != 'highlighter') {
+      base = themedInk(base, dark: themeDark!);
+    }
     final paint = Paint()
       ..color = base.withValues(alpha: s.opacity)
       ..style = PaintingStyle.fill
@@ -97,6 +130,7 @@ class InkPainter extends CustomPainter {
   bool shouldRepaint(covariant InkPainter old) =>
       old.wet != wet ||
       old.autoColor != autoColor ||
+      old.themeDark != themeDark ||
       old.strokes.length != strokes.length ||
       (strokes.isNotEmpty &&
           (!identical(old.strokes.first, strokes.first) ||

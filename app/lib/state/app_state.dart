@@ -245,8 +245,7 @@ class OpenNotebookResult {
 /// [toString] deliberately returns [message], so that any surface which
 /// interpolates a problem into a string still cannot leak an exception.
 class SaveProblem {
-  const SaveProblem(
-      {required this.short, required this.message, this.details});
+  const SaveProblem({required this.short, required this.message, this.details});
 
   /// A few words for the status bar. No path, no exception.
   final String short;
@@ -382,7 +381,10 @@ class AppState extends ChangeNotifier
     if (notebookId == null) return const [];
     final hits = _repo.searchPageContent(notebookId!, query);
     if (!_anyProtection) return hits;
-    return [for (final h in hits) if (!isLocked(h.pageId)) h];
+    return [
+      for (final h in hits)
+        if (!isLocked(h.pageId)) h
+    ];
   }
 
   /// Re-read the tree from storage into [nodes], bumping [nodesRevision].
@@ -519,9 +521,10 @@ class AppState extends ChangeNotifier
     _gateRevision++;
   }
 
-  ProtectionRecord? protectionFor(String nodeId) => _protectedIds.contains(nodeId)
-      ? ProtectionRecord.fromJson(_repo.getSetting(_protectKey(nodeId)))
-      : null;
+  ProtectionRecord? protectionFor(String nodeId) =>
+      _protectedIds.contains(nodeId)
+          ? ProtectionRecord.fromJson(_repo.getSetting(_protectKey(nodeId)))
+          : null;
 
   /// The nearest protected ancestor of [nodeId], itself included — the node
   /// whose passcode actually governs it. Null when nothing above it is
@@ -685,9 +688,13 @@ class AppState extends ChangeNotifier
   Future<void> setGitEnabled(bool on, {String? remote}) async {
     if (notebookId == null) return;
     _gitEnabled = on;
-    if (remote != null) _gitRemote = remote.trim().isEmpty ? null : remote.trim();
-    _repo.setSetting(_gitKey(notebookId!),
-        on || _gitRemote != null ? {'enabled': on, 'remote': _gitRemote} : null);
+    if (remote != null)
+      _gitRemote = remote.trim().isEmpty ? null : remote.trim();
+    _repo.setSetting(
+        _gitKey(notebookId!),
+        on || _gitRemote != null
+            ? {'enabled': on, 'remote': _gitRemote}
+            : null);
     if (on) {
       final git = _git;
       await git.init();
@@ -868,8 +875,7 @@ class AppState extends ChangeNotifier
     // to exist before the manifest inside it can be read.
     final name = repoNameFor(_repoNameFromUrl(trimmed));
     final into = _repo.freeLogDirPath(name);
-    final cloned =
-        await GitSync.clone(trimmed, into, token: _githubToken);
+    final cloned = await GitSync.clone(trimmed, into, token: _githubToken);
     if (!cloned.ok) {
       try {
         final d = Directory(into);
@@ -1002,11 +1008,11 @@ class AppState extends ChangeNotifier
     try {
       final made = await GitHubApi(_githubToken!, baseUrl: debugGitHubBase)
           .createRepo(
-          name?.trim().isNotEmpty == true
-              ? repoNameFor(name!)
-              : repoNameFor(currentNotebook.title),
-          private: private,
-          description: 'Slate notebook — ${currentNotebook.title}');
+              name?.trim().isNotEmpty == true
+                  ? repoNameFor(name!)
+                  : repoNameFor(currentNotebook.title),
+              private: private,
+              description: 'Slate notebook — ${currentNotebook.title}');
       if (!made.ok) {
         gitStatus = made.error;
         return made.error;
@@ -1026,7 +1032,8 @@ class AppState extends ChangeNotifier
       gitStatus = 'Pushing to ${made.fullName}…';
       notifyListeners();
       await flushSave();
-      final pushed = await git.syncOnce(message: 'Slate: ${currentNotebook.title}');
+      final pushed =
+          await git.syncOnce(message: 'Slate: ${currentNotebook.title}');
       if (!pushed.ok) {
         // The repository is real and the remote is set, so this is recoverable
         // by pressing Sync now — say so rather than leaving them wondering
@@ -2967,7 +2974,10 @@ class AppState extends ChangeNotifier
       // edits that page, `flushSave` converts its ink through `persistAll`
       // like any other save, and a page never edited again is caught by the
       // next weekly pass, by then no longer open.
-      candidates = [for (final p in candidates) if (p != pageId) p];
+      candidates = [
+        for (final p in candidates)
+          if (p != pageId) p
+      ];
     }
     if (candidates.isEmpty) {
       return const InkConversionResult(
@@ -3917,6 +3927,7 @@ class AppState extends ChangeNotifier
   /// Every drag-time decision reads THIS, never [snapToGrid] directly.
   bool get effectiveSnap => snapOverride ? !snapToGrid : snapToGrid;
   int penColor = 0;
+
   /// Stroke width, and it OUTLIVES the session.
   ///
   /// It used to reset to 2.5 on every launch, which meant the first stroke of
@@ -4000,7 +4011,8 @@ class AppState extends ChangeNotifier
   //
   // Stored as hex strings, not `Color`, because that is what a stroke stores
   // and what `setSetting` can round-trip; one convention, no second parser.
-  static List<String> _hexes(List<Color> cs) => [for (final c in cs) onoteHexOf(c)];
+  static List<String> _hexes(List<Color> cs) =>
+      [for (final c in cs) onoteHexOf(c)];
 
   /// AT MOST FOUR, and as few as one.
   ///
@@ -4122,8 +4134,7 @@ class AppState extends ChangeNotifier
     final outgoing = List<String>.from(inkPalette);
     if (outgoing.isNotEmpty && !_sameStrings(outgoing, p.colours)) {
       customPalettes.removeWhere((e) => e.name == _previousPaletteName);
-      customPalettes.insert(
-          0, InkPalette(_previousPaletteName, outgoing));
+      customPalettes.insert(0, InkPalette(_previousPaletteName, outgoing));
       _saveCustomPalettes();
     }
     final colours = p.colours.take(maxPaletteColours).toList();
@@ -4298,8 +4309,6 @@ class AppState extends ChangeNotifier
           sanitiseShortcut(i < raw.length ? raw[i] as String? : null)
       ];
 
-
-
   /// A user-chosen key for a TOOL, as a printable character. Keyed by
   /// [Tool.name] so a new tool cannot silently inherit somebody's binding.
   ///
@@ -4335,8 +4344,6 @@ class AppState extends ChangeNotifier
     }
     return null;
   }
-
-
 
   // ── Tags (TEXT-5) ────────────────────────────────────────────────────
 
@@ -5079,6 +5086,16 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// The accent, and the tint of the chrome that carries it — see
+  /// [OnoteAccent]. App-wide, persisted with the theme mode.
+  OnoteAccent accent = OnoteAccent.blue;
+  void setAccent(OnoteAccent a) {
+    if (a == accent) return;
+    accent = a;
+    _repo.setSetting('accent', a.name);
+    notifyListeners();
+  }
+
   /// The text/code editor currently mounted & editing, registered by its view
   /// so command-bar formatting can act on the live selection.
   ({
@@ -5438,8 +5455,7 @@ class AppState extends ChangeNotifier
       final atCaret = _runAround(t, s, s, mark);
       if (atCaret != null) {
         pushUndo();
-        final inner =
-            t.substring(atCaret.open + atCaret.strip, atCaret.close);
+        final inner = t.substring(atCaret.open + atCaret.strip, atCaret.close);
         c.value = TextEditingValue(
           text: t.replaceRange(
               atCaret.open, atCaret.close + atCaret.strip, inner),
@@ -5588,11 +5604,10 @@ class AppState extends ChangeNotifier
   /// `~hello world~`, which no renderer matches — permanently visible tildes,
   /// exactly the bug class this command exists to avoid. `~hello~ ~world~`
   /// looks identical on the page and actually renders.
-  static String _wrapRun(String s, String mark, String close) =>
-      _noSpaceMarks.contains(mark)
-          ? s.replaceAllMapped(
-              RegExp(r'\S+'), (m) => '$mark${m.group(0)}$close')
-          : '$mark$s$close';
+  static String _wrapRun(String s, String mark, String close) => _noSpaceMarks
+          .contains(mark)
+      ? s.replaceAllMapped(RegExp(r'\S+'), (m) => '$mark${m.group(0)}$close')
+      : '$mark$s$close';
 
   /// The run of [mark]'s kind enclosing [s]..[e], with how many characters to
   /// strip from each end to remove exactly that mark.
@@ -5864,7 +5879,8 @@ class AppState extends ChangeNotifier
     final sel = ae.controller.selection;
     if (!sel.isValid) return const {};
     final t = ae.controller.text;
-    final lineStart = t.lastIndexOf('\n', sel.start > 0 ? sel.start - 1 : 0) + 1;
+    final lineStart =
+        t.lastIndexOf('\n', sel.start > 0 ? sel.start - 1 : 0) + 1;
     var lineEnd = t.indexOf('\n', sel.end);
     if (lineEnd < 0) lineEnd = t.length;
     if (lineStart > lineEnd) return const {};
@@ -5894,7 +5910,9 @@ class AppState extends ChangeNotifier
     // Bold+italic lights BOTH buttons — it is both, and a student pressing
     // Ctrl+B on it expects the bold to come off.
     if (out.contains(MdInline.boldItalic)) {
-      out..add(MdInline.bold)..add(MdInline.italic);
+      out
+        ..add(MdInline.bold)
+        ..add(MdInline.italic);
     }
     return out;
   }
@@ -6160,6 +6178,19 @@ class AppState extends ChangeNotifier
     // Session restore (§7a.5): theme, custom colours, per-page views, last loc.
     final tm = _repo.getSetting('themeMode') as String?;
     if (tm != null) themeMode = ThemeMode.values.asNameMap()[tm] ?? themeMode;
+    final ac = _repo.getSetting('accent') as String?;
+    if (ac != null) accent = OnoteAccent.values.asNameMap()[ac] ?? accent;
+    final dbg = _repo.getSetting('defaultBackground') as String?;
+    if (dbg != null) defaultBackground = dbg;
+    final dsp = _repo.getSetting('defaultBgSpacing');
+    if (dsp is num) {
+      defaultBgSpacing =
+          dsp.toDouble().clamp(PageProps.minBgSpacing, PageProps.maxBgSpacing);
+    }
+    final dpp = _repo.getSetting('defaultPaper') as String?;
+    if (dpp != null) defaultPaper = dpp;
+    final dps = _repo.getSetting('defaultPageSize') as String?;
+    if (dps != null) defaultPageSize = dps;
     final nsw = _repo.getSetting('navSectionsW');
     if (nsw is num) navSectionsW = nsw.toDouble().clamp(96, 220);
     final npw = _repo.getSetting('navPagesW');
@@ -6220,8 +6251,7 @@ class AppState extends ChangeNotifier
     }
     final pcs = _repo.getSetting('penCursorStyle') as String?;
     if (pcs != null) {
-      penCursorStyle =
-          PenCursorStyle.values.asNameMap()[pcs] ?? penCursorStyle;
+      penCursorStyle = PenCursorStyle.values.asNameMap()[pcs] ?? penCursorStyle;
     }
     // Detached: binding a port must never gate the app opening.
     unawaited(_restoreMcp());
@@ -6252,8 +6282,7 @@ class AppState extends ChangeNotifier
     }
 
     penPalette = loadPalette('penPalette', penPalette);
-    highlighterPalette =
-        loadPalette('highlighterPalette', highlighterPalette);
+    highlighterPalette = loadPalette('highlighterPalette', highlighterPalette);
     final activeName = _repo.getSetting('activePalette');
     if (activeName is String) activePaletteName = activeName;
     final custom = _repo.getSetting('customPalettes');
@@ -6285,7 +6314,8 @@ class AppState extends ChangeNotifier
     if (tsc is Map) {
       toolShortcuts = {
         for (final e in tsc.entries)
-          if (e.value is String && sanitiseShortcut(e.value as String).isNotEmpty)
+          if (e.value is String &&
+              sanitiseShortcut(e.value as String).isNotEmpty)
             '${e.key}': sanitiseShortcut(e.value as String),
       };
       if (toolShortcuts.length != tsc.length) {
@@ -6534,8 +6564,8 @@ class AppState extends ChangeNotifier
         // than cloned. Nothing is ever `copiedIn` here — the folder they
         // double-clicked IS the notebook and goes on receiving their edits,
         // which is the whole reason the association moved onto it.
-        final ref =
-            await _repo.adoptLogDirectory(folder, title: _titleOfLogDir(folder));
+        final ref = await _repo.adoptLogDirectory(folder,
+            title: _titleOfLogDir(folder));
         // Joining a notebook from a folder is a moment the user tells us
         // where their sync lives — this device's logs go into that folder, so
         // it is a sync root by definition.
@@ -6549,8 +6579,8 @@ class AppState extends ChangeNotifier
       } catch (e) {
         return (
           ref: null,
-          problem: OpenNotebookResult(OpenNotebookOutcome.failed,
-              "Slate couldn't open that notebook.",
+          problem: OpenNotebookResult(
+              OpenNotebookOutcome.failed, "Slate couldn't open that notebook.",
               details: '$folder\n\n$e'),
           copied: false
         );
@@ -6609,7 +6639,11 @@ class AppState extends ChangeNotifier
 
     final problem = notebookFileProblem(abs);
     if (problem != null) {
-      return (ref: null, problem: _describeProblem(problem, abs), copied: false);
+      return (
+        ref: null,
+        problem: _describeProblem(problem, abs),
+        copied: false
+      );
     }
 
     try {
@@ -6635,8 +6669,8 @@ class AppState extends ChangeNotifier
     } catch (e) {
       return (
         ref: null,
-        problem: OpenNotebookResult(OpenNotebookOutcome.failed,
-            "Slate couldn't open that notebook.",
+        problem: OpenNotebookResult(
+            OpenNotebookOutcome.failed, "Slate couldn't open that notebook.",
             details: '$abs\n\n$e'),
         copied: false
       );
@@ -6644,7 +6678,8 @@ class AppState extends ChangeNotifier
   }
 
   /// One sentence per way this can go wrong, in the words the app will say.
-  OpenNotebookResult _describeProblem(NotebookFileProblem problem, String path) {
+  OpenNotebookResult _describeProblem(
+      NotebookFileProblem problem, String path) {
     final (outcome, message) = switch (problem) {
       NotebookFileProblem.missing => (
           OpenNotebookOutcome.notFound,
@@ -7048,7 +7083,8 @@ class AppState extends ChangeNotifier
         store: store,
         history: h,
         offsetOf: (dev) =>
-            (_repo.getSetting(_historyOffsetKey(nb, dev)) as num?)?.toInt() ?? 0,
+            (_repo.getSetting(_historyOffsetKey(nb, dev)) as num?)?.toInt() ??
+            0,
         remember: (dev, at) => _repo.setSetting(_historyOffsetKey(nb, dev), at),
       );
       if (h.hasPendingWrites) _repo.flushHistory(nb, h);
@@ -7092,8 +7128,9 @@ class AppState extends ChangeNotifier
   }
 
   /// The last ten notable deletions, newest first.
-  List<NotableDeletion> recentDeletions() =>
-      notebookId == null ? const [] : (_histories[notebookId]?.deletions ?? const []);
+  List<NotableDeletion> recentDeletions() => notebookId == null
+      ? const []
+      : (_histories[notebookId]?.deletions ?? const []);
 
   /// The name each device goes by in [nb]'s manifest. Absent means unnamed,
   /// which the interface renders as *"another computer"* and never as an id.
@@ -7330,8 +7367,8 @@ class AppState extends ChangeNotifier
       // nothing". A template is a PROTOTYPE, and an id is the one field a
       // prototype has no business carrying — so one is supplied here rather
       // than written into the data. A real id in the JSON still wins.
-      final src =
-          Block.fromJson({'id': newId(), ...(bj as Map).cast<String, dynamic>()});
+      final src = Block.fromJson(
+          {'id': newId(), ...(bj as Map).cast<String, dynamic>()});
       final fresh = Block(
         id: newId(),
         type: src.type,
@@ -7566,13 +7603,32 @@ class AppState extends ChangeNotifier
         for (final raw in strokes) {
           if (raw is! Map) continue;
           final ys = raw['y'];
-          if (ys is! List) continue;
-          for (var i = 0; i < ys.length; i++) {
-            final v = (ys[i] as num).toDouble();
-            if (v < atY) continue;
-            ys[i] = math.max(atY, v + dy);
-            touched = true;
+          if (ys is! List || ys.isEmpty) continue;
+          // A stroke moves WHOLE or stays whole, decided by where most of it
+          // is. Moving its points one by one — everything under the line
+          // down, everything over it left alone — stretched any stroke that
+          // crossed the line: the top of a letter stayed put, its bottom went
+          // down with the page, and what had been a curve between them became
+          // a tall vertical smear. A stroke is one gesture; it goes where the
+          // greater part of it was. Ties stay, because staying is the change
+          // nobody has to undo.
+          var under = 0;
+          var minUnder = double.infinity;
+          for (final v in ys) {
+            final y = (v as num).toDouble();
+            if (y < atY) continue;
+            under++;
+            minUnder = math.min(minUnder, y);
           }
+          if (under * 2 <= ys.length) continue;
+          // Closing space: the stroke stops AT the line rather than being
+          // dragged through it, the same clamp the blocks get.
+          final shift = dy < 0 ? math.max(dy, atY - minUnder) : dy;
+          if (shift == 0) continue;
+          for (var i = 0; i < ys.length; i++) {
+            ys[i] = (ys[i] as num).toDouble() + shift;
+          }
+          touched = true;
         }
         if (touched) {
           b.updatedAt = nowMs();
@@ -8024,6 +8080,9 @@ class AppState extends ChangeNotifier
         : null;
     reloadNodes();
     await selectPage(n.id);
+    // Settings' defaults first; the inherited sheet, when there is one, wins
+    // over the default page size because it is the more specific wish.
+    _applyNewPageDefaults(layoutToo: inherit == null);
     if (inherit != null) {
       setPageLayout('paged',
           paper: inherit.paper, landscape: inherit.landscape);
@@ -8064,6 +8123,7 @@ class AppState extends ChangeNotifier
     }
     reloadNodes();
     await selectPage(n.id);
+    _applyNewPageDefaults();
     pendingTitleEdit = n.id;
     notifyListeners();
   }
@@ -8468,7 +8528,8 @@ class AppState extends ChangeNotifier
   // Snap step comes from the page's own grid (Data Model Spec §3), so a page's
   // stored gridSize actually drives placement instead of being dead state.
   double get gridSize => pageProps.gridSize;
-  double snap(double v) => effectiveSnap ? (v / gridSize).round() * gridSize : v;
+  double snap(double v) =>
+      effectiveSnap ? (v / gridSize).round() * gridSize : v;
 
   /// The equation editor that has the keyboard, so the toolbar's **Maths** tab
   /// can drive it (v0.18 §5.2, revised).
@@ -8492,7 +8553,11 @@ class AppState extends ChangeNotifier
   /// would put a new key in the workspace file for something nobody misses
   /// across a restart. Seeded with what a student reaches for first.
   final List<String> recentMathIds = [
-    'pi', 'degree', 'pm', 'leq', 'theta',
+    'pi',
+    'degree',
+    'pm',
+    'leq',
+    'theta',
   ];
 
   void noteMathUse(String id) {
@@ -8577,15 +8642,14 @@ class AppState extends ChangeNotifier
   /// keystroke in the paragraph moves. See [pushInlineEquationToGraphs].
   Block insertGraph(
       {required String latex, String? from, String? fromLatex, Offset? at}) {
-    final near = from == null
-        ? null
-        : blocks.where((b) => b.id == from).firstOrNull;
+    final near =
+        from == null ? null : blocks.where((b) => b.id == from).firstOrNull;
     // Beside the equation, not on top of it: to its right if there is room on
     // the page, underneath it otherwise.
     final where = at ??
         (near == null
-            ? canvas.screenToPage(Offset(
-                canvas.viewport.width / 2, canvas.viewport.height / 2))
+            ? canvas.screenToPage(
+                Offset(canvas.viewport.width / 2, canvas.viewport.height / 2))
             : Offset(near.x + near.w + 24, near.y));
     final b = addBlock(Block(
       type: BlockType.graph,
@@ -8751,13 +8815,12 @@ class AppState extends ChangeNotifier
   /// the same way a graph does.
   Block insertSubstitute(
       {required String latex, String? from, String? fromLatex, Offset? at}) {
-    final near = from == null
-        ? null
-        : blocks.where((b) => b.id == from).firstOrNull;
+    final near =
+        from == null ? null : blocks.where((b) => b.id == from).firstOrNull;
     final where = at ??
         (near == null
-            ? canvas.screenToPage(Offset(
-                canvas.viewport.width / 2, canvas.viewport.height / 2))
+            ? canvas.screenToPage(
+                Offset(canvas.viewport.width / 2, canvas.viewport.height / 2))
             : Offset(near.x + near.w + 24, near.y));
     final b = addBlock(Block(
       type: BlockType.substitute,
@@ -9011,6 +9074,80 @@ class AppState extends ChangeNotifier
     pageProps.background = bg;
     markDirty();
     notifyListeners();
+  }
+
+  /// The sheet itself — white, grey, cream, a paper grain, or a picture of the
+  /// user's own ([image] is its blob hash). Per page, undoable, like the
+  /// pattern drawn on it.
+  void setPaper(String paper, {String? image}) {
+    final img = paper == 'image' ? image : null;
+    if (paper == pageProps.paperKind && img == pageProps.paperImage) return;
+    pushUndo();
+    pageProps.paperKind = paper;
+    pageProps.paperImage = img;
+    markDirty();
+    notifyListeners();
+  }
+
+  // ── Defaults for NEW pages (Settings ▸ New pages) ──────────────────────
+  //
+  // What a page is born with. Each is also settable per page from the View
+  // tab; these only decide the starting point, and a page that was never
+  // changed from them serialises exactly as it always did.
+
+  String defaultBackground = 'blank';
+  double defaultBgSpacing = PageProps.defaultBgSpacing;
+  String defaultPaper = 'white';
+
+  /// `canvas`, or the name of a [PaperSize] for a paged sheet.
+  String defaultPageSize = 'canvas';
+
+  void setDefaultBackground(String v) {
+    defaultBackground = v;
+    _repo.setSetting('defaultBackground', v);
+    notifyListeners();
+  }
+
+  void setDefaultBgSpacing(double v) {
+    defaultBgSpacing = v.clamp(PageProps.minBgSpacing, PageProps.maxBgSpacing);
+    _repo.setSetting('defaultBgSpacing', defaultBgSpacing);
+    notifyListeners();
+  }
+
+  void setDefaultPaper(String v) {
+    defaultPaper = v;
+    _repo.setSetting('defaultPaper', v);
+    notifyListeners();
+  }
+
+  void setDefaultPageSize(String v) {
+    defaultPageSize = v;
+    _repo.setSetting('defaultPageSize', v);
+    notifyListeners();
+  }
+
+  /// Give a page that was just created, and is still empty, the defaults
+  /// chosen in Settings. Dirties the page only when a default differs from
+  /// what a page is born with anyway, so a user who never opened Settings
+  /// gets pages byte-identical to every earlier build's.
+  void _applyNewPageDefaults({bool layoutToo = true}) {
+    final paged = layoutToo && defaultPageSize != 'canvas';
+    final changed = pageProps.background != defaultBackground ||
+        pageProps.bgSpacing != defaultBgSpacing ||
+        pageProps.paperKind != defaultPaper ||
+        pageProps.paperImage != null ||
+        (paged &&
+            (!pageProps.isPaged || pageProps.paperSize != defaultPageSize));
+    if (!changed) return;
+    pageProps.background = defaultBackground;
+    pageProps.bgSpacing = defaultBgSpacing;
+    pageProps.paperKind = defaultPaper;
+    pageProps.paperImage = null;
+    if (paged) {
+      pageProps.layout = 'paged';
+      pageProps.paperSize = defaultPageSize;
+    }
+    markDirty();
   }
 
   /// How far apart the background pattern is drawn on THIS page — dot gap,
@@ -9597,8 +9734,7 @@ class DuplicateGroup {
   /// The largest, not the oldest or the open one: an import interrupted part
   /// way through is smaller than a complete one, and keeping the biggest is
   /// the choice that cannot lose pages.
-  int get reclaimable =>
-      members.skip(1).fold(0, (sum, m) => sum + m.bytes);
+  int get reclaimable => members.skip(1).fold(0, (sum, m) => sum + m.bytes);
 }
 
 class OrphanFile {

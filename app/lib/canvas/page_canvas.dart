@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
@@ -19,6 +20,7 @@ import 'canvas_controller.dart';
 import 'ink_ops.dart';
 import 'media_drop.dart';
 import 'ink_painter.dart';
+import 'paper.dart';
 import 'page_title_view.dart';
 
 /// The page canvas (CANVAS-1 v0.3): an auto-growing page surface on a neutral
@@ -185,9 +187,8 @@ class _PageCanvasState extends State<PageCanvas>
     if (app.tool == Tool.eraser) {
       return dark ? OnoteColors.moon300 : OnoteColors.graphite900;
     }
-    final c = app.inkColor;
-    // Same substitution the stroke makes: graphite on a dark page is invisible.
-    return dark && c == OnoteColors.graphite900 ? OnoteColors.moon0 : c;
+    // Same substitution the stroke makes on screen — see `themedInk`.
+    return themedInk(app.inkColor, dark: dark);
   }
 
   /// When a stylus was last seen, so palm rejection can be *conditional*
@@ -293,8 +294,39 @@ class _PageCanvasState extends State<PageCanvas>
     return decoded;
   }
 
+  /// The page's paper picture, decoded once per hash — see [_syncPaperImage].
+  ui.Image? _paperImage;
+  String? _paperImageHash;
+  int _paperLoad = 0;
+
+  /// Decode the paper picture when the page's choice changes, off the build.
+  /// Until it lands the painter shows the flat paper colour, which is what a
+  /// picture that fails to decode shows for good.
+  void _syncPaperImage() {
+    final want =
+        app.pageProps.paperKind == 'image' ? app.pageProps.paperImage : null;
+    if (want == _paperImageHash) return;
+    _paperImageHash = want;
+    _paperImage?.dispose();
+    _paperImage = null;
+    if (want == null) return;
+    final bytes = app.blob(want);
+    if (bytes == null) return;
+    final ticket = ++_paperLoad;
+    ui.instantiateImageCodec(bytes).then((codec) async {
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      if (!mounted || ticket != _paperLoad) {
+        frame.image.dispose();
+        return;
+      }
+      setState(() => _paperImage = frame.image);
+    }).catchError((_) {});
+  }
+
   @override
   void dispose() {
+    _paperImage?.dispose();
     _wetTick.dispose();
     _penCursor.dispose();
     _glideArm?.cancel();
@@ -1086,6 +1118,7 @@ class _PageCanvasState extends State<PageCanvas>
     final pageSize = Size(pw, ph);
     controller.pageSize = pageSize;
     controller.insets = widget.insets;
+    _syncPaperImage();
 
     Widget canvas = LayoutBuilder(builder: (context, constraints) {
       controller.viewport = Size(constraints.maxWidth, constraints.maxHeight);
@@ -1129,6 +1162,8 @@ class _PageCanvasState extends State<PageCanvas>
                         controller: controller,
                         pageSize: pageSize,
                         background: app.pageProps.background,
+                        paper: app.pageProps.paperKind,
+                        paperImage: _paperImage,
                         // The PATTERN's spacing, not the SNAP grid's — see
                         // PageProps.bgSpacing for why those stopped being one
                         // number.
@@ -1233,6 +1268,9 @@ class _PageCanvasState extends State<PageCanvas>
                                     size: Size.zero,
                                     painter: InkPainter(visibleStrokes,
                                         wet: _wetForPaint,
+                                        // Black shown white on a dark page,
+                                        // white shown black on a light one.
+                                        themeDark: dark,
                                         // Per-point repaint without widget rebuild.
                                         repaint: _wetTick,
                                         // Theme default for "auto" strokes: dark
@@ -1712,12 +1750,18 @@ class _PagePainter extends CustomPainter {
     required this.background,
     required this.spacing,
     required this.dark,
+    this.paper = 'white',
+    this.paperImage,
     this.sheet,
     this.sheets = 1,
   });
   final CanvasController controller;
   final Size pageSize;
   final String background;
+
+  /// The sheet — see `paper.dart` — and its picture, when it has one.
+  final String paper;
+  final ui.Image? paperImage;
 
   /// Gap between dots / height of a ruled line / side of a grid square.
   final double spacing;
@@ -1731,9 +1775,9 @@ class _PagePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final pageColor = dark ? OnoteColors.night0 : OnoteColors.paper0;
-    final paper = sheet;
-    if (paper != null) {
+    final pageColor = paperColor(paper, dark: dark);
+    final paperSheet = sheet;
+    if (paperSheet != null) {
       // A SHEET has edges, and edges are the whole point of page mode: the
       // desk around it is darker so the paper reads as an object you could
       // pick up, and where one sheet ends the next begins. Canvas mode paints
@@ -1741,8 +1785,8 @@ class _PagePainter extends CustomPainter {
       canvas.drawRect(Offset.zero & size,
           Paint()..color = dark ? OnoteColors.night200 : OnoteColors.paper200);
       final topLeft = controller.pageToScreen(Offset.zero);
-      final w = paper.width * controller.scale;
-      final h = paper.height * controller.scale;
+      final w = paperSheet.width * controller.scale;
+      final h = paperSheet.height * controller.scale;
       final shadow = Paint()
         ..color = Colors.black.withValues(alpha: dark ? .35 : .12)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
@@ -1753,6 +1797,7 @@ class _PagePainter extends CustomPainter {
         if (r.bottom < -h || r.top > size.height + h) continue;
         canvas.drawRect(r.deflate(1).shift(const Offset(0, 2)), shadow);
         canvas.drawRect(r, Paint()..color = pageColor);
+        paintPaperDetail(canvas, r, paper, dark: dark, image: paperImage);
       }
       _paintPattern(canvas, size);
       // The break between sheets, drawn last so it sits over the pattern.
@@ -1769,6 +1814,17 @@ class _PagePainter extends CustomPainter {
     // Seamless: the whole viewport is the page colour — one consistent
     // surface at every zoom (the backdrop and page are the same thing).
     canvas.drawRect(Offset.zero & size, Paint()..color = pageColor);
+    // Grain covers the whole surface; a picture is fitted to the page's
+    // width and repeated down it, since a canvas has no bottom.
+    if (paper == 'texture') {
+      paintPaperDetail(canvas, Offset.zero & size, paper, dark: dark);
+    } else if (paper == 'image') {
+      final left = controller.pageToScreen(Offset.zero);
+      final w = pageSize.width * controller.scale;
+      paintPaperDetail(canvas,
+          Rect.fromLTWH(left.dx, left.dy, w, size.height - left.dy), paper,
+          dark: dark, image: paperImage, cover: false);
+    }
     _paintPattern(canvas, size);
   }
 
@@ -1783,7 +1839,7 @@ class _PagePainter extends CustomPainter {
         controller.pageToScreen(const Offset(0, AppState.contentTop)).dy;
     final right = size.width, bottom = size.height;
     final paint = Paint()
-      ..color = dark ? OnoteColors.night200 : OnoteColors.paper200
+      ..color = paperRuleColor(paper, dark: dark)
       ..strokeWidth = 1;
     switch (background) {
       case 'grid':
@@ -1816,6 +1872,8 @@ class _PagePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PagePainter old) =>
       old.background != background ||
+      old.paper != paper ||
+      old.paperImage != paperImage ||
       // Was missing, and had to be added for the spacing control to do
       // anything at all: with `gridSize` absent from this list, changing it
       // repainted only if some *other* property happened to change too.

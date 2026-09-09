@@ -6,10 +6,13 @@
 //  * Content ABOVE the line does not move. That is the whole promise — you
 //    are making room *between* two things, and if the thing above drifts too
 //    you have moved the page instead of opening it.
-//  * INK moves by its POINTS. An ink block's x/y is a derived bounding box
-//    (page_canvas._refitInkBounds) and its stroke coordinates are absolute
-//    page space, so shifting the block alone moves the box and leaves the
-//    strokes behind — the bug this test exists to prevent.
+//  * INK moves by its STROKES, each one whole. An ink block's x/y is a derived
+//    bounding box (page_canvas._refitInkBounds) and its stroke coordinates are
+//    absolute page space, so shifting the block alone moves the box and
+//    leaves the strokes behind — the first bug this file exists to prevent.
+//    And a stroke that crosses the line goes where the greater part of it
+//    was, rather than having its points split above and below — the second:
+//    splitting stretched every crossing stroke into a tall vertical smear.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -58,10 +61,19 @@ void main() {
           tool: 'pen',
           colorHex: '#000000',
           size: 2,
-          // One point above the cut, one below it.
+          // One point above the cut, one below it: a tie.
           x: [310, 320],
           y: [150, 600],
           p: [0.5, 0.5],
+        ).toJson(),
+        Stroke(
+          tool: 'pen',
+          colorHex: '#000000',
+          size: 2,
+          // One point above the cut, two below it: mostly under.
+          x: [400, 410, 420],
+          y: [380, 600, 620],
+          p: [0.5, 0.5, 0.5],
         ).toJson(),
       ],
     });
@@ -78,8 +90,8 @@ void main() {
     } catch (_) {}
   });
 
-  List<double> inkYs() {
-    final ys = ((ink.content['strokes'] as List).first as Map)['y'] as List;
+  List<double> inkYs([int stroke = 0]) {
+    final ys = ((ink.content['strokes'] as List)[stroke] as Map)['y'] as List;
     return [for (final v in ys) (v as num).toDouble()];
   }
 
@@ -90,18 +102,36 @@ void main() {
     expect(below.y, 620);
   });
 
-  test('ink moves by its points, not by its bounding box', () {
+  test('a stroke moves WHOLE, and goes where most of it was', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.insertSpace(400, 120);
-    expect(inkYs(), [150, 720],
-        reason: 'the point above the cut is untouched, the one below moved');
+    expect(inkYs(1), [500, 720, 740],
+        reason: 'two of three points were under the line, so the whole '
+            'stroke — its top point included — comes down, unstretched');
+    expect(inkYs(0), [150, 600],
+        reason: 'half and half is a tie, and a tie stays: nothing is '
+            'stretched and nothing has to be undone');
+  });
+
+  test('a stroke is never split across the line', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.insertSpace(400, 120);
+    for (final stroke in [inkYs(0), inkYs(1)]) {
+      final span = stroke.reduce((a, b) => a > b ? a : b) -
+          stroke.reduce((a, b) => a < b ? a : b);
+      expect(span, lessThanOrEqualTo(450),
+          reason: 'the stroke is as tall as it was drawn, not taller');
+    }
   });
 
   test('closing space back up never pulls content above the line', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.insertSpace(400, -500); // far more than the gap
     expect(below.y, 400, reason: 'clamped at the line, not dragged past it');
-    expect(inkYs(), [150, 400]);
+    expect(inkYs(1), [180, 400, 420],
+        reason: 'the stroke stops with its lowest under-the-line point AT '
+            'the line — moved as one piece, by 200 not 500');
+    expect(inkYs(0), [150, 600], reason: 'the tie stays put');
     expect(above.y, 100);
   });
 

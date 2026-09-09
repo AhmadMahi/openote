@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
 import '../theme/tokens.dart';
+import '../canvas/ink_painter.dart' show themedInk;
 import 'color_picker.dart';
 import 'glass.dart';
 
@@ -135,11 +136,9 @@ class _FocusPaletteState extends State<FocusPalette> {
                   SizedBox(
                     width: 26,
                     child: Text(
-                      app.penSize
-                          .toStringAsFixed(app.penSize % 1 == 0 ? 0 : 2),
+                      app.penSize.toStringAsFixed(app.penSize % 1 == 0 ? 0 : 2),
                       textAlign: TextAlign.right,
-                      style: TextStyle(
-                          fontSize: 11, color: s.textSecondary),
+                      style: TextStyle(fontSize: 11, color: s.textSecondary),
                     ),
                   ),
                 ]),
@@ -225,7 +224,10 @@ class _FocusPaletteState extends State<FocusPalette> {
   /// Same behaviour as the Draw row's wells, including double-click to edit,
   /// so the two places you can pick a colour do not disagree about how.
   Widget _well(ColorScheme scheme, int i) {
-    final c = onoteColorFromHex(app.inkPalette[i]) ?? OnoteColors.graphite900;
+    // Shown as it will draw on this theme — see `themedInk`.
+    final c = themedInk(
+        onoteColorFromHex(app.inkPalette[i]) ?? OnoteColors.graphite900,
+        dark: Theme.of(context).brightness == Brightness.dark);
     final on = app.penColor == i;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),

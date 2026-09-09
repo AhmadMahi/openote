@@ -140,7 +140,8 @@ class GlassSheet extends StatelessWidget {
     final s = context.surfaces;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final side = BorderSide(color: s.border.withValues(alpha: dark ? .9 : .8));
-    final tint = dark ? OnoteColors.night50 : OnoteColors.paper50;
+    // The chrome role, so the accent's wash reaches the glass too.
+    final tint = s.chrome;
     return ClipRect(
       child: BackdropFilter(
         filter: ui.ImageFilter.compose(

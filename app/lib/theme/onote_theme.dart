@@ -146,6 +146,44 @@ String onoteHexOf(Color c) =>
 /// (`OnoteAlpha`) carry the same information without the animation, so the
 /// theme installs `NoSplash.splashFactory` app-wide and on every button.
 
+/// The accent the user chose, and the tint of the chrome that carries it.
+///
+/// Seven, OneNote-style: each is a pair — a light-mode colour dark enough to
+/// hold white text, a dark-mode colour bright enough to read on night — and a
+/// name. [tinted] is what makes it a THEME rather than a button colour: the
+/// toolbar glass and the sidebar take a faint wash of it, so a green notebook
+/// feels green everywhere and not only where something is selected. The wash
+/// is deliberately slight (5–9%); chrome that shouts its colour tires the eye
+/// and competes with the page.
+enum OnoteAccent {
+  blue('Blue', Color(0xFF0A7AFF), Color(0xFF4DA1FF)),
+  graphite('Graphite', Color(0xFF5E5E64), Color(0xFFB4B4BC)),
+  green('Green', Color(0xFF2DA44E), Color(0xFF4CC26A)),
+  teal('Teal', Color(0xFF0E8A8A), Color(0xFF3FBFBF)),
+  purple('Purple', Color(0xFF7A4DE0), Color(0xFFA98BFF)),
+  rose('Rose', Color(0xFFD6336C), Color(0xFFFF6B9E)),
+  orange('Orange', Color(0xFFE0740B), Color(0xFFFFA033));
+
+  const OnoteAccent(this.label, this.light, this.dark);
+  final String label;
+  final Color light;
+  final Color dark;
+
+  Color color(bool isDark) => isDark ? dark : light;
+
+  /// The surface roles with this accent washed through the chrome.
+  OnoteSurfaces tinted(OnoteSurfaces s, bool isDark) {
+    final c = color(isDark);
+    final a = isDark ? .07 : .05;
+    return s.copyWith(
+      chrome: Color.lerp(s.chrome, c, a),
+      chrome2: Color.lerp(s.chrome2, c, a + .02),
+      border: Color.lerp(s.border, c, a),
+      well: Color.lerp(s.well, c, isDark ? .04 : .0),
+    );
+  }
+}
+
 /// The app theme.
 ///
 /// **Everything Material renders is themed here** (v0.6 stage 2). Before this
@@ -159,10 +197,12 @@ String onoteHexOf(Color c) =>
 /// The rule for anything added later: if a Material component can appear in
 /// the app, it gets a theme here. A component that inherits M3 defaults is a
 /// component that will look like a different product.
-ThemeData onoteTheme(Brightness brightness) {
+ThemeData onoteTheme(Brightness brightness,
+    {OnoteAccent accent = OnoteAccent.blue}) {
   final dark = brightness == Brightness.dark;
-  final surfaces = dark ? OnoteSurfaces.dark : OnoteSurfaces.light;
-  final primary = dark ? OnoteColors.ink400 : OnoteColors.ink500;
+  final surfaces =
+      accent.tinted(dark ? OnoteSurfaces.dark : OnoteSurfaces.light, dark);
+  final primary = accent.color(dark);
   final scheme = ColorScheme(
     brightness: brightness,
     primary: primary,

@@ -13,6 +13,7 @@ import 'package:openote/state/app_state.dart';
 import 'package:openote/store/repository.dart';
 import 'package:openote/theme/onote_theme.dart';
 import 'package:openote/ui/app_shell.dart';
+import 'package:openote/ui/settings_dialog.dart';
 
 import '../support/sqlite.dart';
 
@@ -112,4 +113,36 @@ void main() {
       app.cancelPendingSave();
     });
   }
+
+  // A themed variant: green accent, cream ruled paper, the Settings dialog
+  // open on its new sections.
+  testWidgets('preview themed', (t) async {
+    if (!haveSqlite || out == null) return markTestSkipped('preview only');
+    await t.runAsync(loadFonts);
+    t.view.physicalSize = const Size(1280, 780);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    app.setAccent(OnoteAccent.green);
+    app.setPaper('cream');
+    app.setBackground('ruled');
+    await t.pumpWidget(MaterialApp(
+      theme: onoteTheme(Brightness.light, accent: app.accent),
+      home: RepaintBoundary(
+          key: const ValueKey('shot'), child: AppShell(app: app)),
+    ));
+    await t.pump(const Duration(milliseconds: 900));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.text('View'));
+    await t.pump(const Duration(milliseconds: 300));
+    await shoot(t, 'themed-green-cream');
+    app.setPaper('texture');
+    await t.pump(const Duration(milliseconds: 300));
+    await shoot(t, 'themed-texture');
+    showSettingsDialog(t.element(find.byType(AppShell)), app);
+    await t.pump(const Duration(milliseconds: 400));
+    await t.pump(const Duration(milliseconds: 400));
+    await shoot(t, 'themed-settings');
+    app.setAccent(OnoteAccent.blue);
+    app.cancelPendingSave();
+  });
 }

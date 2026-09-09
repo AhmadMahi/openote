@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../canvas/paper.dart';
 import '../core/platform_open.dart';
+import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
 import '../update/app_update.dart';
@@ -107,12 +109,30 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         onSelectionChanged: (s) => onChanged(s.first),
       );
 
+  /// A short list of named choices, as a dense dropdown.
+  Widget _pick(String value, Map<String, String> options,
+          ValueChanged<String> onChanged) =>
+      DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: options.containsKey(value) ? value : options.keys.first,
+          isDense: true,
+          style: TextStyle(
+              fontSize: 12, color: Theme.of(context).colorScheme.onSurface),
+          items: [
+            for (final e in options.entries)
+              DropdownMenuItem(value: e.key, child: Text(e.value)),
+          ],
+          onChanged: (v) => v == null ? null : onChanged(v),
+        ),
+      );
+
   Widget _door(IconData icon, String label, String hint, VoidCallback open) =>
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(children: [
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label, style: const TextStyle(fontSize: 13)),
               Text(hint,
                   style: const TextStyle(
@@ -157,6 +177,46 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   onSelectionChanged: (s) => app.setThemeMode(s.first),
                 ),
               ),
+              // Seven accents, as dots of the colour itself — the one thing a
+              // label could not say better. The chrome takes a wash of the
+              // choice, so this is the app's theme, not only its buttons.
+              _rowStacked(
+                'Accent',
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final a in OnoteAccent.values)
+                      Tooltip(
+                        message: a.label,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(99),
+                          onTap: () => app.setAccent(a),
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: a.color(Theme.of(context).brightness ==
+                                  Brightness.dark),
+                              border: a == app.accent
+                                  ? Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
+                                      width: 2)
+                                  : null,
+                            ),
+                            child: a == app.accent
+                                ? const Icon(Icons.check,
+                                    size: 14, color: Colors.white)
+                                : null,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               _section('Writing and drawing'),
               // The drawing cursor. A preference rather than a decision the
               // app makes, because the right answer depends on how somebody
@@ -174,9 +234,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   segments: [
                     for (final v in PenCursorStyle.values)
                       ButtonSegment(
-                          value: v,
-                          label: Text(v.label),
-                          tooltip: v.describe),
+                          value: v, label: Text(v.label), tooltip: v.describe),
                   ],
                   selected: {app.penCursorStyle},
                   onSelectionChanged: (s) => app.setPenCursorStyle(s.first),
@@ -195,11 +253,79 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   ),
                 ),
               ),
-              _row('Spell check', _toggle(app.spellCheckEnabled, app.setSpellCheck)),
+              _row('Spell check',
+                  _toggle(app.spellCheckEnabled, app.setSpellCheck)),
               _row('Pen near the page switches to inking',
                   _toggle(app.penProximitySwitch, app.setPenProximitySwitch)),
+              // What a page is born with. Each is settable per page on the
+              // View tab; this is the starting point, and a page never moved
+              // from it is exactly what every earlier build made.
+              _section('New pages'),
+              _rowStacked(
+                'Background',
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      textStyle:
+                          WidgetStatePropertyAll(TextStyle(fontSize: 11))),
+                  segments: const [
+                    ButtonSegment(value: 'blank', label: Text('Blank')),
+                    ButtonSegment(value: 'grid', label: Text('Grid')),
+                    ButtonSegment(value: 'dotted', label: Text('Dots')),
+                    ButtonSegment(value: 'ruled', label: Text('Ruled')),
+                  ],
+                  selected: {app.defaultBackground},
+                  onSelectionChanged: (s) => app.setDefaultBackground(s.first),
+                ),
+              ),
+              _row(
+                'Pattern spacing',
+                SizedBox(
+                  width: 200,
+                  child: Row(children: [
+                    Expanded(
+                      child: Slider(
+                        value: app.defaultBgSpacing,
+                        min: PageProps.minBgSpacing,
+                        max: PageProps.maxBgSpacing,
+                        divisions: 28,
+                        onChanged: app.setDefaultBgSpacing,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 30,
+                      child: Text('${app.defaultBgSpacing.round()}',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 11)),
+                    ),
+                  ]),
+                ),
+              ),
+              _row(
+                'Paper',
+                _pick(
+                    app.defaultPaper,
+                    {
+                      for (final p in kPapers.where((p) => p != 'image'))
+                        p: paperLabel(p)
+                    },
+                    app.setDefaultPaper),
+              ),
+              _row(
+                'Page size',
+                _pick(
+                    app.defaultPageSize,
+                    {
+                      'canvas': 'Canvas (boundless)',
+                      for (final p in PaperSize.all) p.name: p.name,
+                    },
+                    app.setDefaultPageSize),
+              ),
               _section('Connections'),
-              _door(Icons.sync, 'Sync',
+              _door(
+                  Icons.sync,
+                  'Sync',
                   'Back up and share this notebook — GitHub or a folder.',
                   () => showSyncDialog(context, app)),
               _door(
@@ -210,7 +336,9 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                       : 'Off — connect Claude or other AI helpers.',
                   () => showMcpDialog(context, app)),
               _section('Keyboard'),
-              _door(Icons.keyboard_outlined, 'Keyboard shortcuts',
+              _door(
+                  Icons.keyboard_outlined,
+                  'Keyboard shortcuts',
                   'Everything has a key — the full list.  (Ctrl+/)',
                   () => showShortcutOverlay(context)),
               _section('About'),
@@ -227,6 +355,18 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                             style: TextStyle(fontSize: 12)),
                       ),
               ),
+              // The release notice, moved here from the toolbar: it leads
+              // with the version so the row answers "to what?" before the
+              // click, and the button opens the same dialog it always did.
+              if (app.updateAvailable != null)
+                _row(
+                  'Version ${app.updateAvailable!.version} is available',
+                  TextButton(
+                    onPressed: () => showUpdateDialog(context, app),
+                    child:
+                        const Text('Update…', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
               if (_updateNote != null)
                 Text(_updateNote!,
                     style: const TextStyle(
@@ -236,8 +376,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 child: TextButton(
                   onPressed: () => PlatformOpen.url(
                       'https://github.com/icmric/openote/releases'),
-                  child: const Text("What's new",
-                      style: TextStyle(fontSize: 12)),
+                  child:
+                      const Text("What's new", style: TextStyle(fontSize: 12)),
                 ),
               ),
             ],

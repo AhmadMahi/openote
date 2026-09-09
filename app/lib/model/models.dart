@@ -193,10 +193,22 @@ class PageProps {
     this.layout = 'canvas',
     this.paperSize = 'A4',
     this.landscape = false,
+    this.paperKind = 'white',
+    this.paperImage,
     Map<String, dynamic>? unknownFields,
   }) : unknownFields = unknownFields ?? {};
   String background; // blank | grid | dotted | ruled
   double gridSize;
+
+  /// The sheet: `white` (the default, and what every page has always been),
+  /// `grey`, `cream`, `texture` (paper grain) or `image`. Per page, like the
+  /// pattern drawn on it — see `lib/canvas/paper.dart`. Named `paperKind`
+  /// because [paper] is already the sheet SIZE; the JSON key is `paper`.
+  String paperKind;
+
+  /// The blob hash of the picture, when [paperKind] is `image`. Content-addressed
+  /// like every other blob, so a picture used on ten pages is stored once.
+  String? paperImage;
 
   /// How far apart the background pattern is drawn: the gap between dots, the
   /// height of a ruled line, the side of a grid square.
@@ -258,6 +270,8 @@ class PageProps {
     'layout',
     'paperSize',
     'landscape',
+    'paper',
+    'paperImage',
   };
 
   Map<String, dynamic> toJson() => {
@@ -278,6 +292,9 @@ class PageProps {
         if (isPaged) 'layout': layout,
         if (isPaged) 'paperSize': paperSize,
         if (isPaged && landscape) 'landscape': landscape,
+        // White is the paper every page has always had, so it says nothing.
+        if (paperKind != 'white') 'paper': paperKind,
+        if (paperImage != null) 'paperImage': paperImage,
         ...unknownFields,
       };
   factory PageProps.fromJson(Map<String, dynamic>? j) => PageProps(
@@ -294,6 +311,8 @@ class PageProps {
         layout: j?['layout'] as String? ?? 'canvas',
         paperSize: j?['paperSize'] as String? ?? 'A4',
         landscape: j?['landscape'] as bool? ?? false,
+        paperKind: j?['paper'] as String? ?? 'white',
+        paperImage: j?['paperImage'] as String?,
         unknownFields: {
           for (final e in (j ?? const {}).entries)
             if (!_known.contains(e.key)) e.key: e.value,
@@ -407,8 +426,21 @@ class Block {
   int updatedAt;
 
   static const _known = {
-    'id', 'type', 'x', 'y', 'w', 'h', 'rotation', 'z', 'placement', 'frameId',
-    'absorbedIds', 'access', 'createdAt', 'updatedAt', 'content',
+    'id',
+    'type',
+    'x',
+    'y',
+    'w',
+    'h',
+    'rotation',
+    'z',
+    'placement',
+    'frameId',
+    'absorbedIds',
+    'access',
+    'createdAt',
+    'updatedAt',
+    'content',
   };
 
   Map<String, dynamic> toJson() => {
@@ -508,9 +540,19 @@ class Stroke {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'brush': {'tool': tool, 'color': colorHex, 'size': size, 'opacity': opacity},
-        'x': x, 'y': y, 'p': p, 'tx': tx, 'ty': ty,
-        't': t, 'strokeStart': strokeStart,
+        'brush': {
+          'tool': tool,
+          'color': colorHex,
+          'size': size,
+          'opacity': opacity
+        },
+        'x': x,
+        'y': y,
+        'p': p,
+        'tx': tx,
+        'ty': ty,
+        't': t,
+        'strokeStart': strokeStart,
       };
 
   factory Stroke.fromJson(Map<String, dynamic> j) {
@@ -523,10 +565,18 @@ class Stroke {
       opacity: (b['opacity'] as num?)?.toDouble() ?? 1.0,
       x: (j['x'] as List).map((e) => (e as num).toDouble()).toList(),
       y: (j['y'] as List).map((e) => (e as num).toDouble()).toList(),
-      p: ((j['p'] as List?) ?? const []).map((e) => (e as num).toDouble()).toList(),
-      tx: ((j['tx'] as List?) ?? const []).map((e) => (e as num).toDouble()).toList(),
-      ty: ((j['ty'] as List?) ?? const []).map((e) => (e as num).toDouble()).toList(),
-      t: ((j['t'] as List?) ?? const []).map((e) => (e as num).toInt()).toList(),
+      p: ((j['p'] as List?) ?? const [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      tx: ((j['tx'] as List?) ?? const [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      ty: ((j['ty'] as List?) ?? const [])
+          .map((e) => (e as num).toDouble())
+          .toList(),
+      t: ((j['t'] as List?) ?? const [])
+          .map((e) => (e as num).toInt())
+          .toList(),
       strokeStart: (j['strokeStart'] as num?)?.toInt(),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_selector/file_selector.dart';
 
 import '../export/markdown_export.dart';
 import '../export/open_export.dart';
@@ -26,8 +27,9 @@ import 'font_picker.dart';
 import 'insert_catalog.dart';
 import 'object_face.dart';
 import 'settings_dialog.dart';
-import 'update_dialog.dart';
 import '../theme/tokens.dart';
+import '../canvas/ink_painter.dart' show themedInk;
+import '../canvas/paper.dart';
 import 'glass.dart';
 import 'onote_dialog.dart';
 import 'object_row.dart' show BackgroundSpacingButton, WordCount;
@@ -130,25 +132,10 @@ class _CommandBarState extends State<CommandBar> {
                     alignment: MainAxisAlignment.end,
                     fillAvailable: true,
                     controls: [
-                      // Update-through-app: the "little update button" of
-                      // PLANNING.md. Exists only when launch found a newer
-                      // release, and leads with the version so the tooltip
-                      // answers "to what?" before the click.
-                      if (app.updateAvailable != null)
-                        ToolbarControl(
-                          width: 40,
-                          icon: Icons.system_update_alt,
-                          label: 'Update to ${app.updateAvailable!.version}…',
-                          onPressed: () => showUpdateDialog(context, app),
-                          inline: IconButton(
-                            icon: Icon(Icons.system_update_alt,
-                                size: 18, color: scheme.primary),
-                            tooltip:
-                                'Update to ${app.updateAvailable!.version}…',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => showUpdateDialog(context, app),
-                          ),
-                        ),
+                      // The "update to x.y" button used to sit here. It
+                      // lives in Settings ▸ About now, at the owner's request:
+                      // a toolbar is for the page, and a release notice is
+                      // not about the page.
                       // Current-tool escape hatch: visible whenever not in Select.
                       if (app.tool != Tool.select)
                         ToolbarControl(
@@ -851,7 +838,39 @@ class _CommandBarState extends State<CommandBar> {
           onPressed: () => app.setBackground(v),
         );
     final paged = app.pageProps.isPaged;
+    // The row reads left to right in the order you decide things: the
+    // paper, then the sheet, then how close you are to it, then the room
+    // it is in. Each group behind its own hairline.
     return Row(children: [
+      // ── The paper ──────────────────────────────────────────────────────
+      // The sheet itself first, then what is printed on it. White, grey,
+      // cream, a paper grain, or a picture of your own; per page, like the
+      // pattern beside it. Lit in the accent when it is anything but white,
+      // so a page on odd paper says so from the bar.
+      PopupMenuButton<String>(
+        tooltip: 'Paper: ${paperLabel(app.pageProps.paperKind)}',
+        icon: Icon(Icons.layers_outlined,
+            size: 18,
+            color: app.pageProps.paperKind != 'white' ? scheme.primary : null),
+        onSelected: (v) =>
+            v == 'image' ? _pickPaperImage(context) : app.setPaper(v),
+        itemBuilder: (_) => [
+          for (final p in kPapers.where((p) => p != 'image'))
+            CheckedPopupMenuItem(
+              value: p,
+              checked: app.pageProps.paperKind == p,
+              child: Text(paperLabel(p)),
+            ),
+          const PopupMenuDivider(),
+          CheckedPopupMenuItem(
+            value: 'image',
+            checked: app.pageProps.paperKind == 'image',
+            child: Text(app.pageProps.paperKind == 'image'
+                ? 'Choose another picture…'
+                : 'Picture…'),
+          ),
+        ],
+      ),
       bg('blank', Icons.crop_din, 'blank'),
       bg('grid', Icons.grid_4x4, 'grid'),
       bg('dotted', Icons.apps, 'dotted'),
@@ -862,6 +881,7 @@ class _CommandBarState extends State<CommandBar> {
       if (app.pageProps.background != 'blank')
         BackgroundSpacingButton(app: app),
       const _Div(),
+      // ── The sheet: open canvas, or pages of a size ──────────────────
       // Canvas or paper. Per page, not per notebook: one notebook holds the
       // lecture you scribble on and the essay you hand in, and making you
       // choose once for both is why people keep two apps.
@@ -900,19 +920,19 @@ class _CommandBarState extends State<CommandBar> {
             ),
           ],
         ),
+      if (paged)
+        IconButton(
+          icon: const Icon(Icons.vertical_split_outlined, size: 18),
+          tooltip: app.sheetRailOpen
+              ? 'Hide the page list'
+              : 'Show the page list down the right-hand edge',
+          isSelected: app.sheetRailOpen,
+          visualDensity: VisualDensity.compact,
+          color: app.sheetRailOpen ? scheme.primary : null,
+          onPressed: app.toggleSheetRail,
+        ),
       const _Div(),
-      IconButton(
-        icon: Icon(app.snapToGrid ? Icons.grid_goldenratio : Icons.grid_off,
-            size: 18),
-        tooltip: app.snapToGrid
-            ? 'Snap to grid: ON (grid shows while dragging)'
-            : 'Snap to grid: OFF — free placement',
-        isSelected: app.snapToGrid,
-        visualDensity: VisualDensity.compact,
-        color: app.snapToGrid ? scheme.primary : null,
-        onPressed: app.toggleSnap,
-      ),
-      const _Div(),
+      // ── Zoom ─────────────────────────────────────────────────────────
       IconButton(
         icon: const Icon(Icons.remove, size: 18),
         tooltip: 'Zoom out  (Ctrl+-)',
@@ -959,18 +979,34 @@ class _CommandBarState extends State<CommandBar> {
         visualDensity: VisualDensity.compact,
         onPressed: app.fitPageToWidth,
       ),
-      if (paged)
-        IconButton(
-          icon: const Icon(Icons.vertical_split_outlined, size: 18),
-          tooltip: app.sheetRailOpen
-              ? 'Hide the page list'
-              : 'Show the page list down the right-hand edge',
-          isSelected: app.sheetRailOpen,
-          visualDensity: VisualDensity.compact,
-          color: app.sheetRailOpen ? scheme.primary : null,
-          onPressed: app.toggleSheetRail,
-        ),
       const _Div(),
+      // ── Helpers while you work ─────────────────────────────────────────
+      IconButton(
+        icon: Icon(app.snapToGrid ? Icons.grid_goldenratio : Icons.grid_off,
+            size: 18),
+        tooltip: app.snapToGrid
+            ? 'Snap to grid: ON (grid shows while dragging)'
+            : 'Snap to grid: OFF — free placement',
+        isSelected: app.snapToGrid,
+        visualDensity: VisualDensity.compact,
+        color: app.snapToGrid ? scheme.primary : null,
+        onPressed: app.toggleSnap,
+      ),
+      // Spell check (TEXT-11). English-only in this release; the toggle exists
+      // because a wordlist checker WILL flag jargon and proper nouns, and the
+      // answer to that has to be one click away.
+      Tooltip(
+        message: 'Underline misspelled words while editing (English)',
+        child: IconButton(
+          icon: const Icon(Icons.spellcheck, size: 18),
+          isSelected: app.spellCheckEnabled,
+          visualDensity: VisualDensity.compact,
+          color: app.spellCheckEnabled ? scheme.primary : null,
+          onPressed: () => app.setSpellCheck(!app.spellCheckEnabled),
+        ),
+      ),
+      const _Div(),
+      // ── The room: light or dark ────────────────────────────────────
       // Light / dark. The reason this tab is back: it is the first thing
       // anyone looks for and it had no visible home at all.
       SegmentedButton<ThemeMode>(
@@ -987,24 +1023,32 @@ class _CommandBarState extends State<CommandBar> {
         onSelectionChanged: (s) => app.setThemeMode(s.first),
       ),
       const _Div(),
-      // Spell check (TEXT-11). English-only in this release; the toggle exists
-      // because a wordlist checker WILL flag jargon and proper nouns, and the
-      // answer to that has to be one click away.
-      Tooltip(
-        message: 'Underline misspelled words while editing (English)',
-        child: IconButton(
-          icon: const Icon(Icons.spellcheck, size: 18),
-          isSelected: app.spellCheckEnabled,
-          visualDensity: VisualDensity.compact,
-          color: app.spellCheckEnabled ? scheme.primary : null,
-          onPressed: () => app.setSpellCheck(!app.spellCheckEnabled),
-        ),
-      ),
-      const _Div(),
       // Followed the page controls here when the object row emptied out, so
       // that emptying the row did not quietly delete a feature.
       WordCount(app: app),
     ]);
+  }
+
+  /// Pick a picture for the paper, store it as a blob, and set it.
+  Future<void> _pickPaperImage(BuildContext context) async {
+    final f = await openFile(acceptedTypeGroups: const [
+      XTypeGroup(
+          label: 'Pictures',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'])
+    ]);
+    if (f == null) return;
+    final bytes = await f.readAsBytes();
+    final ext = f.name.split('.').last.toLowerCase();
+    final mime = f.mimeType ??
+        switch (ext) {
+          'png' => 'image/png',
+          'webp' => 'image/webp',
+          'gif' => 'image/gif',
+          'bmp' => 'image/bmp',
+          _ => 'image/jpeg',
+        };
+    final hash = app.addBlob(bytes, mime);
+    app.setPaper('image', image: hash);
   }
 
   Widget _drawRow(BuildContext context) {
@@ -1066,20 +1110,6 @@ class _CommandBarState extends State<CommandBar> {
           Icons.unfold_more,
           'Insert space — drag to push '
           'everything below down'),
-      const _Div(),
-      // Focus mode. In the Draw row because that is when you want it: the
-      // chrome is worth its space while you are formatting, and in the way
-      // while you are drawing.
-      Tooltip(
-        message: 'Focus mode: hide everything but the page, and float the '
-            'drawing tools.\nEsc comes back. Full screen does this on its own '
-            'while a drawing tool is up.',
-        child: IconButton(
-          icon: const Icon(Icons.open_in_full, size: 18),
-          visualDensity: VisualDensity.compact,
-          onPressed: () => app.setFocusMode(true),
-        ),
-      ),
       const _Div(),
       // Auto shapes (INK-10). A toggle rather than a mode: you keep drawing
       // with the pen you already have, and a circle comes out round.
@@ -1222,6 +1252,20 @@ class _CommandBarState extends State<CommandBar> {
         onPressed: () => app.setPenProximitySwitch(!app.penProximitySwitch),
       ),
       const SizedBox(width: 4),
+      const _Div(),
+      // Focus mode, at the end of the row: the last thing you do before
+      // you draw is take the chrome away, and the last thing in the row is
+      // where a hand finds it without reading.
+      Tooltip(
+        message: 'Focus mode: hide everything but the page, and float the '
+            'drawing tools.\nEsc comes back. Full screen does this on its own '
+            'while a drawing tool is up.',
+        child: IconButton(
+          icon: const Icon(Icons.open_in_full, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => app.setFocusMode(true),
+        ),
+      ),
     ]);
   }
 }
@@ -2014,7 +2058,11 @@ class _ColorWellState extends State<_ColorWell> {
               width: 18,
               height: 18,
               decoration: BoxDecoration(
-                color: color,
+                // The well shows the colour the stroke will be DRAWN in on
+                // this theme, so a white well on a light page reads as the
+                // black it will produce.
+                color: themedInk(color,
+                    dark: Theme.of(context).brightness == Brightness.dark),
                 shape: BoxShape.circle,
                 border: Border.all(
                   width: 1,

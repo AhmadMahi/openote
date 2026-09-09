@@ -186,14 +186,18 @@ class _StartupError extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text("Slate couldn't start",
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   const Text(
                       'Something failed while opening your workspace. Your notes '
                       'are not affected. Details below — please report this.'),
                   const SizedBox(height: 16),
                   SelectableText('$error\n\n$stack',
-                      style: const TextStyle(fontFamily: 'JetBrains Mono', fontFamilyFallback: onoteFontFallback, fontSize: 12)),
+                      style: const TextStyle(
+                          fontFamily: 'JetBrains Mono',
+                          fontFamilyFallback: onoteFontFallback,
+                          fontSize: 12)),
                 ],
               ),
             ),
@@ -214,6 +218,7 @@ class OpenoteApp extends StatefulWidget {
 
 class _OpenoteAppState extends State<OpenoteApp> {
   ThemeMode? _builtMode;
+  OnoteAccent? _builtAccent;
   Widget? _built;
 
   @override
@@ -225,15 +230,18 @@ class _OpenoteAppState extends State<OpenoteApp> {
         // Content updates ride AppShell's own listener — rebuilding the whole
         // tree from the root on every notify (each keystroke, drag frame)
         // doubled per-frame build work.
-        if (_built != null && _builtMode == widget.app.themeMode) {
+        if (_built != null &&
+            _builtMode == widget.app.themeMode &&
+            _builtAccent == widget.app.accent) {
           return _built!;
         }
         _builtMode = widget.app.themeMode;
+        _builtAccent = widget.app.accent;
         return _built = MaterialApp(
           title: 'Slate',
           debugShowCheckedModeBanner: false,
-          theme: onoteTheme(Brightness.light),
-          darkTheme: onoteTheme(Brightness.dark),
+          theme: onoteTheme(Brightness.light, accent: widget.app.accent),
+          darkTheme: onoteTheme(Brightness.dark, accent: widget.app.accent),
           themeMode: widget.app.themeMode, // Settings: Auto / Light / Dark
           home: AppShell(app: widget.app),
         );
