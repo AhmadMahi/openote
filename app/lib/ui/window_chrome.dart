@@ -43,6 +43,11 @@ abstract final class WindowChrome {
       await _channel.invokeMethod<void>(method);
     } on MissingPluginException {
       // Tests, or a host without the channel: nothing to do.
+    } catch (e) {
+      // Said out loud rather than swallowed: a light that does nothing is a
+      // bug someone has to be able to see in the log.
+      // ignore: avoid_print
+      print('window chrome: $method failed: $e');
     }
   }
 }
