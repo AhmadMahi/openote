@@ -292,73 +292,78 @@ class _CommandBarState extends State<CommandBar> {
           // horizontal `Scrollable` reads `scrollDelta.dx`, which a mouse
           // wheel does not produce — `_ToolbarScroll` is what makes a wheel
           // move it.
-          Container(
-            height: 44,
-            alignment: Alignment.centerLeft,
-            child: ScrollConfiguration(
-              behavior: const _ToolbarScroll(),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  ..._undoRedo(context),
-                  const _Div(),
-                  // The other three families, one click away each, and
-                  // FIRST so they are reachable on any window width — the
-                  // tools after them are the row that may scroll. Labelled,
-                  // because a popover is a place and a place has a name; the
-                  // tools are actions and keep their icons.
-                  _Popover(
-                    icon: Icons.text_format,
-                    label: 'Format',
-                    tooltip: 'Text formatting — bold, headings, lists, '
-                        'tags, colour, font',
-                    app: app,
-                    maxWidth: 640,
-                    builder: (context) => Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      runSpacing: OnoteSpace.x3,
-                      children: _formatTools(context),
+          //
+          // Not on Home or a notebook overview: there is no page under the
+          // pointer for a pen to draw on, and a row of greyed tools over a
+          // dashboard is noise. The header row stays, so the doors do.
+          if (!app.navHome && !app.navNotebook)
+            Container(
+              height: 44,
+              alignment: Alignment.centerLeft,
+              child: ScrollConfiguration(
+                behavior: const _ToolbarScroll(),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: [
+                    ..._undoRedo(context),
+                    const _Div(),
+                    // The other three families, one click away each, and
+                    // FIRST so they are reachable on any window width — the
+                    // tools after them are the row that may scroll. Labelled,
+                    // because a popover is a place and a place has a name; the
+                    // tools are actions and keep their icons.
+                    _Popover(
+                      icon: Icons.text_format,
+                      label: 'Format',
+                      tooltip: 'Text formatting — bold, headings, lists, '
+                          'tags, colour, font',
+                      app: app,
+                      maxWidth: 640,
+                      builder: (context) => Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        runSpacing: OnoteSpace.x3,
+                        children: _formatTools(context),
+                      ),
                     ),
-                  ),
-                  // The catalogue WRAPS onto rows rather than compacting into
-                  // a "More" menu: a popover is a place with room, and every
-                  // item with its word is the shape the owner asked for.
-                  _Popover(
-                    icon: Icons.add_box_outlined,
-                    label: 'Insert',
-                    tooltip: 'Insert — text box, image, table, code, '
-                        'equation and more',
-                    app: app,
-                    maxWidth: 720,
-                    builder: (context) => Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: OnoteSpace.x1,
-                      runSpacing: OnoteSpace.x3,
-                      children: [
-                        for (final item in kInsertRibbon)
-                          _InsertButton(app: app, item: item),
-                      ],
+                    // The catalogue WRAPS onto rows rather than compacting into
+                    // a "More" menu: a popover is a place with room, and every
+                    // item with its word is the shape the owner asked for.
+                    _Popover(
+                      icon: Icons.add_box_outlined,
+                      label: 'Insert',
+                      tooltip: 'Insert — text box, image, table, code, '
+                          'equation and more',
+                      app: app,
+                      maxWidth: 720,
+                      builder: (context) => Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: OnoteSpace.x1,
+                        runSpacing: OnoteSpace.x3,
+                        children: [
+                          for (final item in kInsertRibbon)
+                            _InsertButton(app: app, item: item),
+                        ],
+                      ),
                     ),
-                  ),
-                  _Popover(
-                    icon: Icons.tune,
-                    label: 'View',
-                    tooltip: 'View — paper, pattern, page size, zoom, '
-                        'light or dark',
-                    app: app,
-                    maxWidth: 620,
-                    builder: (context) => Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      runSpacing: OnoteSpace.x3,
-                      children: _viewTools(context),
+                    _Popover(
+                      icon: Icons.tune,
+                      label: 'View',
+                      tooltip: 'View — paper, pattern, page size, zoom, '
+                          'light or dark',
+                      app: app,
+                      maxWidth: 620,
+                      builder: (context) => Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        runSpacing: OnoteSpace.x3,
+                        children: _viewTools(context),
+                      ),
                     ),
-                  ),
-                  const _Div(),
-                  ..._drawTools(context),
-                ]),
+                    const _Div(),
+                    ..._drawTools(context),
+                  ]),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -377,16 +382,27 @@ class _CommandBarState extends State<CommandBar> {
       padding: const EdgeInsets.symmetric(horizontal: OnoteSpace.x3),
       child: Icon(Icons.chevron_right, size: 14, color: s.textDisabled),
     );
+    final here = OnoteType.small
+        .copyWith(color: s.textPrimary, fontWeight: FontWeight.w600);
+    // Home and the notebook overview are places too, and the crumb says so.
+    if (app.navHome) {
+      return Padding(
+        padding: const EdgeInsets.only(left: OnoteSpace.x5),
+        child: Text('Home', style: here),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(left: OnoteSpace.x5),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (notebook != null) Text(notebook.title, style: dim),
-        if (section != null) ...[sep, Text(section.title, style: dim)],
-        if (page != null) ...[
-          sep,
-          Text(page.title.isEmpty ? 'Untitled page' : page.title,
-              style: OnoteType.small
-                  .copyWith(color: s.textPrimary, fontWeight: FontWeight.w600)),
+        if (notebook != null)
+          Text(notebook.title, style: app.navNotebook ? here : dim),
+        if (!app.navNotebook) ...[
+          if (section != null) ...[sep, Text(section.title, style: dim)],
+          if (page != null) ...[
+            sep,
+            Text(page.title.isEmpty ? 'Untitled page' : page.title,
+                style: here),
+          ],
         ],
       ]),
     );
@@ -833,54 +849,8 @@ class _CommandBarState extends State<CommandBar> {
           color: app.sheetRailOpen ? scheme.primary : null,
           onPressed: app.toggleSheetRail,
         ),
-      const _Div(),
-      // ── Zoom ─────────────────────────────────────────────────────────
-      IconButton(
-        icon: const Icon(Icons.remove, size: 18),
-        tooltip: 'Zoom out  (Ctrl+-)',
-        visualDensity: VisualDensity.compact,
-        onPressed: () => app.canvas.setZoom(app.canvas.scale / 1.2),
-      ),
-      AnimatedBuilder(
-        animation: app.canvas,
-        builder: (context, _) => TextButton(
-          onPressed: app.canvas.reset,
-          child: Text('${(app.canvas.scale * 100).round()}%',
-              style: const TextStyle(fontSize: 12)),
-        ),
-      ),
-      IconButton(
-        icon: const Icon(Icons.add, size: 18),
-        tooltip: 'Zoom in  (Ctrl+=)',
-        visualDensity: VisualDensity.compact,
-        onPressed: () => app.canvas.setZoom(app.canvas.scale * 1.2),
-      ),
-      // ONE fit button, and it fits the WIDTH.
-      //
-      // There were two — "fit content" and "fit the sheet to the width" — and
-      // the pair was the problem rather than either one. They looked alike,
-      // sat next to each other, and only one did the thing people want from a
-      // fit: make the page the width of the window. Fit-to-content also
-      // magnified a single paragraph to fill the screen on a page you had
-      // only started, and left slack to scroll sideways because it framed a
-      // rectangle rather than matching an edge.
-      IconButton(
-        icon: const Icon(Icons.fit_screen_outlined, size: 18),
-        tooltip: app.canvas.fitLocked
-            ? 'Fitted to the window width — horizontal scrolling is off.\n'
-                'Zoom by hand to release it.'
-            : (paged
-                ? 'Zoom to fit — the ${app.pageProps.paper.name} sheet, '
-                    'exactly the window width, no sideways scrolling'
-                : 'Zoom to fit — the page, exactly the window width, no '
-                    'sideways scrolling'),
-        // Shown as ON while it is latched: a mode you cannot see is a mode
-        // you blame the app for.
-        isSelected: app.canvas.fitLocked,
-        color: app.canvas.fitLocked ? scheme.primary : null,
-        visualDensity: VisualDensity.compact,
-        onPressed: app.fitPageToWidth,
-      ),
+      // Zoom, fit and focus live on the canvas itself now — see
+      // `CanvasControls` — where the page they act on is in view.
       const _Div(),
       // ── Helpers while you work ─────────────────────────────────────────
       IconButton(

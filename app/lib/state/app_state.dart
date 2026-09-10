@@ -3811,9 +3811,32 @@ class AppState extends ChangeNotifier
 
   void openHome() {
     navHome = true;
+    navNotebook = false;
     navRevision++;
     notifyListeners();
   }
+
+  /// The level between Home and a page: the current notebook's sections and
+  /// pages laid out in the main area. Transient like [navHome] — selecting
+  /// any page leaves it. UI state only; nothing downstream reads it.
+  bool navNotebook = false;
+
+  void openNotebookOverview() {
+    navNotebook = true;
+    navHome = false;
+    navRevision++;
+    notifyListeners();
+  }
+
+  /// The nodes of any notebook in the workspace — the current one's without a
+  /// read, another's from its container. For Home's cards, which say how many
+  /// pages a notebook has without opening it.
+  List<TreeNode> nodesOf(String notebookId) =>
+      notebookId == this.notebookId ? nodes : _repo.loadNodes(notebookId);
+
+  /// The recent-page keys, `<notebookId>:<pageId>`, most recent first, across
+  /// every notebook. [recentPages] is the current notebook's slice of this.
+  List<String> get recentKeys => List.unmodifiable(_recents);
 
   /// Which page each section was last on, so browsing sections never loses
   /// your place. Keys are '<notebookId>:<sectionId>' because settings are
@@ -3849,6 +3872,7 @@ class AppState extends ChangeNotifier
   /// their page loads and land on the loser's page.
   Future<void> activateSection(String id) async {
     navHome = false;
+    navNotebook = false;
     activeSectionId = id;
     final cur = node(pageId);
     if (cur == null || cur.parentId != id) {
@@ -6876,6 +6900,7 @@ class AppState extends ChangeNotifier
       // here. Selecting a page also leaves Home — the pane shows the
       // destination's siblings, which is what "I went somewhere" looks like.
       navHome = false;
+      navNotebook = false;
       final parent = nodes.where((n) => n.id == id).firstOrNull?.parentId;
       if (parent != null) {
         activeSectionId = parent;

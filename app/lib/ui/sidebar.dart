@@ -17,6 +17,10 @@ import 'planner_format.dart';
 import '../theme/tokens.dart';
 import 'onote_dialog.dart';
 
+/// A section's colour token resolved — shared with the notebook overview, so
+/// a section is the same colour wherever it is named.
+Color sectionColorOf(String? token, bool dark) => _sectionColor(token, dark);
+
 Color _sectionColor(String? token, bool dark) => switch (token) {
       'brass-400' => OnoteColors.brass400,
       'green' => OnoteColors.success,

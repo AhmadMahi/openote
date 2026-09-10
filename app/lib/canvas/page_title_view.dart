@@ -89,9 +89,9 @@ class _PageTitleViewState extends State<PageTitleView> {
 
     final titleColor = dark ? OnoteColors.moon0 : OnoteColors.graphite900;
     final titleStyle = TextStyle(
-      fontSize: 34,
+      fontSize: 38,
       fontWeight: FontWeight.w700,
-      letterSpacing: -.6,
+      letterSpacing: -.8,
       height: 1.1,
       color: titleColor,
     );
@@ -148,7 +148,7 @@ class _PageTitleViewState extends State<PageTitleView> {
           Text(
             _dateLine(page.createdAt),
             style:
-                const TextStyle(fontSize: 14, color: OnoteColors.graphite500),
+                const TextStyle(fontSize: 15, color: OnoteColors.graphite500),
           ),
           const SizedBox(height: 6),
           Container(

@@ -154,6 +154,16 @@ void main() {
     app.setBackground('dotted');
     await t.pump(const Duration(milliseconds: 300));
     await shoot(t, 'dotted-ambient');
+    // Home and the notebook overview, the two levels above the page.
+    app.openHome();
+    await t.pump(const Duration(milliseconds: 400));
+    await shoot(t, 'home-dashboard');
+    app.openNotebookOverview();
+    await t.pump(const Duration(milliseconds: 400));
+    await shoot(t, 'notebook-overview');
+    await app
+        .selectPage(app.nodes.firstWhere((n) => n.kind == NodeKind.page).id);
+    await t.pump(const Duration(milliseconds: 400));
     // Full screen: the canvas edge to edge, one floating palette.
     app.setTool(Tool.pen);
     app.setFocusMode(true);

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderProxyBox;
@@ -33,7 +35,9 @@ import 'study_panel.dart';
 import 'sync_dialog.dart';
 import 'sync_dot.dart';
 import '../theme/tokens.dart';
+import 'canvas_controls.dart';
 import 'glass.dart';
+import 'home_dashboard.dart';
 
 /// Layout per style guide §5.4: navigator | (toolbar / canvas-as-hero / status).
 ///
@@ -946,7 +950,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Widget _regionWrap(_Region r, Widget child) {
     final marked = r == _Region.page
         ? child // the canvas already owns _canvasFocus, one node one Focus
-        : Focus(focusNode: _regionNode(r), skipTraversal: true, child: child);
+        // A traversal group of its own, so Tab walks THIS region and F6 is
+        // the way between regions. Without it Tab follows reading order
+        // across the whole window — and reading order is a property of the
+        // layout, which the sidebar's macOS title-bar inset just changed: a
+        // Tab from the navigator's header landed on the toolbar, and
+        // Shift+F6 from there went "back" to the sidebar rather than to the
+        // page. Regions are places; Tab should not leave one by accident.
+        : Focus(
+            focusNode: _regionNode(r),
+            skipTraversal: true,
+            child: FocusTraversalGroup(child: child));
     return Stack(
         // `passthrough`, so wrapping a region cannot change its size. The
         // default `loose` would hand the canvas — which arrives with TIGHT
@@ -1379,7 +1393,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                           OnoteSpace.x5, OnoteSpace.x5, 0, OnoteSpace.x5),
                       child: GlassCard(
                         radius: OnoteRadius.xl,
-                        child: _regionWrap(_Region.sidebar, _navigator()),
+                        // On macOS the window's traffic lights sit over this
+                        // card's top-left corner (the title bar is
+                        // transparent and the content full-size), so the
+                        // navigator starts below them.
+                        child: Padding(
+                          padding:
+                              EdgeInsets.only(top: Platform.isMacOS ? 22 : 0),
+                          child: _regionWrap(_Region.sidebar, _navigator()),
+                        ),
                       ),
                     ),
                   // The chrome FLOATS over the page. The canvas takes the
@@ -1441,22 +1463,39 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                         // of it, since they have nothing to scroll.
                                         child: _regionWrap(
                                             _Region.page,
-                                            page == null
+                                            // Home and the notebook overview
+                                            // take the main area; a page is
+                                            // the level below them.
+                                            app.navHome
                                                 ? Padding(
                                                     padding: insets,
                                                     child:
-                                                        _EmptyState(app: app))
-                                                : app.isLocked(page.id)
+                                                        HomeDashboard(app: app))
+                                                : app.navNotebook
                                                     ? Padding(
                                                         padding: insets,
-                                                        child: _LockedPage(
-                                                            app: app,
-                                                            page: page))
-                                                    : _canvasKeys(PageCanvas(
-                                                        key: ValueKey(
-                                                            app.pageId),
-                                                        state: app,
-                                                        insets: insets))),
+                                                        child: NotebookOverview(
+                                                            app: app))
+                                                    : page == null
+                                                        ? Padding(
+                                                            padding: insets,
+                                                            child: _EmptyState(
+                                                                app: app))
+                                                        : app.isLocked(page.id)
+                                                            ? Padding(
+                                                                padding: insets,
+                                                                child:
+                                                                    _LockedPage(
+                                                                        app:
+                                                                            app,
+                                                                        page:
+                                                                            page))
+                                                            : _canvasKeys(PageCanvas(
+                                                                key: ValueKey(
+                                                                    app.pageId),
+                                                                state: app,
+                                                                insets:
+                                                                    insets))),
                                       ),
                                       if (panel != null) ...[
                                         const VerticalDivider(width: 1),
@@ -1509,6 +1548,28 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                         ),
                                       ),
                                     ),
+                                  ),
+                                // The canvas's own controls — zoom, fit,
+                                // focus, the sheet rail — float in its
+                                // top-right corner, clear of a side panel.
+                                if (!app.focusMode &&
+                                    !app.navHome &&
+                                    !app.navNotebook &&
+                                    page != null &&
+                                    !app.isLocked(page.id))
+                                  Positioned(
+                                    top: chromeTop + OnoteSpace.x5,
+                                    right: OnoteSpace.x5 +
+                                        (panel == null
+                                            ? 0
+                                            : OnoteSize.panelWidth + 1),
+                                    // Out of the Tab order: Tab on the page
+                                    // selects blocks (see `_onKey`), and a
+                                    // row of buttons floating over the page
+                                    // must not catch it first. The mouse
+                                    // still reaches every one of them.
+                                    child: ExcludeFocus(
+                                        child: CanvasControls(app: app)),
                                   ),
                                 if (!app.focusMode)
                                   Positioned(
@@ -2094,9 +2155,48 @@ class _StatusBar extends StatelessWidget {
                 ),
               ),
             ),
+            _PageNav(app: app),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "Page 2 of 5" and a step either way, within the open page's section — the
+/// same `selectPage` the navigator calls, from the bar you are already looking
+/// at. Nothing when there is no page or the section has only the one.
+class _PageNav extends StatelessWidget {
+  const _PageNav({required this.app});
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    final page = app.pageId == null ? null : app.node(app.pageId!);
+    if (page == null || page.parentId == null) return const SizedBox.shrink();
+    final siblings = app.pagesOf(page.parentId!);
+    final i = siblings.indexWhere((p) => p.id == page.id);
+    if (i < 0 || siblings.length < 2) return const SizedBox.shrink();
+    Widget step(IconData icon, String tip, int to) => IconButton(
+          icon: Icon(icon, size: OnoteIcon.sm),
+          tooltip: tip,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          onPressed: to < 0 || to >= siblings.length
+              ? null
+              : () => app.selectPage(siblings[to].id),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(left: OnoteSpace.x5),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('Page ${i + 1} of ${siblings.length}',
+            style: OnoteType.caption.copyWith(color: s.textSecondary)),
+        const SizedBox(width: OnoteSpace.x2),
+        step(Icons.chevron_left, 'Previous page in this section', i - 1),
+        step(Icons.chevron_right, 'Next page in this section', i + 1),
+      ]),
     );
   }
 }
