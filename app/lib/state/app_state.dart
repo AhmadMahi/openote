@@ -6409,6 +6409,12 @@ class AppState extends ChangeNotifier
         ? lastPage
         : nodes.where((n) => n.kind == NodeKind.page).firstOrNull?.id;
     await selectPage(target);
+    // The app opens on Home. The last page is loaded and one click away —
+    // the navigator and Home's recents both lead to it — but the first thing
+    // on screen is the workspace, at the owner's request.
+    navHome = true;
+    navNotebook = false;
+    notifyListeners();
   }
 
   // ── Per-page view memory (§7a.5) ───────────────────────────────────────

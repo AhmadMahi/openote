@@ -32,6 +32,7 @@ import '../theme/tokens.dart';
 import '../canvas/ink_painter.dart' show themedInk;
 import '../canvas/paper.dart';
 import 'glass.dart';
+import 'window_chrome.dart';
 import 'onote_dialog.dart';
 import 'object_row.dart' show BackgroundSpacingButton, WordCount;
 
@@ -66,7 +67,10 @@ class _CommandBarState extends State<CommandBar> {
       child: Column(
         children: [
           // ── Header row: where you are, and the doors ──
-          SizedBox(
+          // Also the window's handle on macOS: drag it to move, double-click
+          // to zoom, as the title bar it stands in for.
+          WindowDragArea(
+              child: SizedBox(
             height: 36,
             child: Row(
               children: [
@@ -285,7 +289,7 @@ class _CommandBarState extends State<CommandBar> {
                 ),
               ],
             ),
-          ),
+          )),
           // ── The toolbar ──
           // Horizontally scrollable so a narrow window scrolls the controls
           // instead of throwing a RenderFlex overflow (style guide §7). A
