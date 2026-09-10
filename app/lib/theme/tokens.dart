@@ -163,10 +163,10 @@ abstract final class OnoteRadius {
   static const md = 8.0;
 
   /// Menus, popovers, cards, inline banners.
-  static const lg = 12.0;
+  static const lg = 14.0;
 
   /// Dialogs, large floating surfaces, canvas text containers.
-  static const xl = 16.0;
+  static const xl = 20.0;
 
   /// Pills only — badges, avatars.
   static const full = 999.0;

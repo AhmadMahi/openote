@@ -31,7 +31,8 @@ class _PageTitleViewState extends State<PageTitleView> {
 
   /// Write the in-flight title back to the page it belongs to.
   void _commitTo(String pageId) {
-    if (widget.app.node(pageId) == null) return; // page gone — nothing to rename
+    if (widget.app.node(pageId) == null)
+      return; // page gone — nothing to rename
     final t = _controller.text.trim();
     widget.app.renameNode(pageId, t.isEmpty ? 'Untitled page' : t);
   }
@@ -60,8 +61,8 @@ class _PageTitleViewState extends State<PageTitleView> {
     setState(() => _editing = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focus.requestFocus();
-      _controller.selection = TextSelection(
-          baseOffset: 0, extentOffset: _controller.text.length);
+      _controller.selection =
+          TextSelection(baseOffset: 0, extentOffset: _controller.text.length);
     });
   }
 
@@ -88,8 +89,9 @@ class _PageTitleViewState extends State<PageTitleView> {
 
     final titleColor = dark ? OnoteColors.moon0 : OnoteColors.graphite900;
     final titleStyle = TextStyle(
-      fontSize: 26,
-      fontWeight: FontWeight.w600,
+      fontSize: 34,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -.6,
       height: 1.1,
       color: titleColor,
     );
@@ -145,7 +147,8 @@ class _PageTitleViewState extends State<PageTitleView> {
           const SizedBox(height: 2),
           Text(
             _dateLine(page.createdAt),
-            style: const TextStyle(fontSize: 12, color: OnoteColors.graphite400),
+            style:
+                const TextStyle(fontSize: 14, color: OnoteColors.graphite500),
           ),
           const SizedBox(height: 6),
           Container(
@@ -157,8 +160,18 @@ class _PageTitleViewState extends State<PageTitleView> {
   }
 
   static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June', 'July',
-    'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
   ];
   static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 

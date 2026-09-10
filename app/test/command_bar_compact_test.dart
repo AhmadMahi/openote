@@ -91,9 +91,9 @@ void main() {
       'a narrow window folds the lowest-priority controls into More, '
       'not off screen', (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-    // Narrow enough to force a fold, wide enough that this is a realistic
-    // "laptop with the navigator open" window, not a pathological one.
-    await pump(tester, const Size(700, 900));
+    // The header row no longer carries tabs, so the cluster has the whole
+    // width to itself and only a genuinely narrow window makes it fold.
+    await pump(tester, const Size(300, 900));
 
     expect(find.byTooltip('More'), findsOneWidget,
         reason: 'the trailing cluster does not fit at 700px — something '
@@ -110,7 +110,7 @@ void main() {
   testWidgets('a folded Settings still opens the real settings dialog',
       (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-    await pump(tester, const Size(700, 900));
+    await pump(tester, const Size(300, 900));
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
 
@@ -134,18 +134,19 @@ void main() {
         reason: 'the SAME dialog the inline button opens');
   });
 
-  testWidgets('folding the trailing cluster leaves the tabs and Home row '
-      'exactly where they were', (tester) async {
+  testWidgets(
+      'folding the trailing cluster leaves the toolbar '
+      'exactly where it was', (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     await pump(tester, const Size(2600, 1200));
-    final wideTabLeft = tester.getTopLeft(find.text('Home')).dx;
+    final wideLeft = tester.getTopLeft(find.byTooltip('Undo  (Ctrl+Z)')).dx;
 
-    await pump(tester, const Size(700, 900));
-    final narrowTabLeft = tester.getTopLeft(find.text('Home')).dx;
+    await pump(tester, const Size(300, 900));
+    final narrowLeft = tester.getTopLeft(find.byTooltip('Undo  (Ctrl+Z)')).dx;
 
-    expect(narrowTabLeft, wideTabLeft,
-        reason: 'folding the trailing cluster must not shove the tabs, '
-            'which sit at the OPPOSITE end of the same row');
+    expect(narrowLeft, wideLeft,
+        reason: 'folding the trailing cluster must not shove the toolbar, '
+            'which sits at the OPPOSITE end of the bar');
     app.cancelPendingSave();
   });
 }

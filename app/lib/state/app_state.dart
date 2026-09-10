@@ -9097,7 +9097,7 @@ class AppState extends ChangeNotifier
 
   String defaultBackground = 'blank';
   double defaultBgSpacing = PageProps.defaultBgSpacing;
-  String defaultPaper = 'white';
+  String defaultPaper = 'ambient';
 
   /// `canvas`, or the name of a [PaperSize] for a paged sheet.
   String defaultPageSize = 'canvas';

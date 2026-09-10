@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
@@ -46,74 +47,35 @@ class CommandBar extends StatefulWidget {
 }
 
 class _CommandBarState extends State<CommandBar> {
-  /// The tab the user last chose among the permanent ones.
-  int _tab = 0;
-
-  /// Home is write and format, Insert is add, Draw is ink, View is how the
-  /// page and the app look. Nothing but a tap on one of them ever changes
-  /// which is showing.
+  /// ONE toolbar, not four tabs. The drawing tools are inline — they are the
+  /// things a hand reaches for a hundred times an hour — and the three other
+  /// families each open from a labelled popover: **Format** (write), **Insert**
+  /// (add), **View** (how the page and the app look). Nothing that was on a
+  /// tab is gone; it is one click away instead of one tab away, and the row
+  /// under your pointer never changes shape as you work.
   ///
-  /// There was briefly a fifth that appeared while an equation was open and
-  /// dragged the student onto it; the equation's palette is on the object row
-  /// now, where it arrives without moving anybody.
-  ///
-  /// View was removed upstream on the argument that its page controls had
-  /// moved to the object row and "the four preferences it also held were
-  /// already in Settings". That is true of where the settings LIVE and false
-  /// of whether anyone can find them: light/dark, spell check, snap and AI
-  /// access went from one visible click to a dialog nobody opens, and the
-  /// object row only shows its half when nothing at all is selected. It is
-  /// back, deliberately, at the owner's request. The duplication with the
-  /// object row is intentional — the row is contextual, this is always here.
-  static const _tabs = ['Home', 'Insert', 'Draw', 'View'];
+  /// There was briefly a Maths tab that appeared while an equation was open
+  /// and dragged the student onto it; the equation's palette is on the object
+  /// row, where it arrives without moving anybody.
 
   AppState get app => widget.app;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return ChromeBar(
       child: Column(
         children: [
-          // ── Tab row ──
+          // ── Header row: where you are, and the doors ──
           SizedBox(
-            height: 32,
+            height: 36,
             child: Row(
               children: [
-                // **No leading gutter.** A fixed chrome region runs to the edge
-                // of the region it owns (§7d); the first control's own padding
-                // is the optical margin. An extra 6px here made the toolbar
-                // look inset from the window — a floating strip rather than
-                // part of the frame — and cost hit area at the screen edge,
-                // which is the one place a pointer can be thrown at infinitely
-                // fast (Fitts's law) and always land.
-                // The four tabs are one segmented control: a sunk track with
-                // the chosen tab lifted off it as a bright pill. One shape,
-                // read at a glance as "pick one of these", against the old
-                // row of underlined words that read as a web page.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      OnoteSpace.x3, OnoteSpace.x2, 0, OnoteSpace.x2),
-                  child: Container(
-                    padding: const EdgeInsets.all(OnoteSpace.x1),
-                    decoration: BoxDecoration(
-                      color: context.surfaces.chrome2,
-                      borderRadius: BorderRadius.circular(OnoteRadius.full),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      for (var i = 0; i < _tabs.length; i++)
-                        _tabButton(scheme, i, _tabs[i]),
-                    ]),
-                  ),
-                ),
-                // **A badge, not a tab.** It says what the row below is
+                _breadcrumb(context),
+                // **A badge, not a tab.** It says what the toolbar is
                 // about and it cannot be pressed, so there is nothing here to
-                // be moved onto and nothing to be moved back from. It sits
-                // where the old Maths tab sat, deliberately: same place,
-                // opposite kind.
+                // be moved onto and nothing to be moved back from.
                 if (objectFaceOf(app) == ObjectFace.equation)
                   const _SubjectBadge(icon: Icons.functions, label: 'Equation'),
-                const Spacer(),
                 // The trailing cluster COMPACTS rather than scrolling.
                 //
                 // Reported: "it doesnt handle resizing well (menus should
@@ -324,73 +286,112 @@ class _CommandBarState extends State<CommandBar> {
               ],
             ),
           ),
-          // ── Command row ──
+          // ── The toolbar ──
           // Horizontally scrollable so a narrow window scrolls the controls
-          // instead of throwing a RenderFlex overflow (style guide §7).
+          // instead of throwing a RenderFlex overflow (style guide §7). A
+          // horizontal `Scrollable` reads `scrollDelta.dx`, which a mouse
+          // wheel does not produce — `_ToolbarScroll` is what makes a wheel
+          // move it.
           Container(
             height: 44,
-            // Flush left for the same reason as the tab row above it, so the
-            // two rows share an edge instead of being inset by different
-            // amounts. `IconButton` brings its own 8px, which is the margin.
             alignment: Alignment.centerLeft,
-            // Tab switches animate (PLANNING "Consistency/UX": "animation
-            // switching between menus"): the outgoing row fades as the new
-            // one fades in with a small upward drift — same 150ms register
-            // as the dialog transition, so the app has ONE sense of motion.
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 150),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                          begin: const Offset(0, 0.15), end: Offset.zero)
-                      .animate(anim),
-                  child: child,
-                ),
-              ),
-              layoutBuilder: (current, previous) => Stack(
-                alignment: Alignment.centerLeft,
-                children: [...previous, if (current != null) current],
-              ),
-              // Insert COMPACTS (`CompactingToolbar` needs the real, bounded
-              // window width to decide what folds, which a `Scrollable`
-              // never offers its child — that axis is unbounded on
-              // purpose, it's what lets content wider than the viewport
-              // scroll). Home and Draw still scroll: both mix dividers,
-              // split buttons and a live text field with no single "this
-              // control folds into a menu item" shape the way Insert's
-              // uniform ribbon of commands does — see the doc comment on
-              // `CompactingToolbar` itself for why Insert was the tractable
-              // one to convert first.
-              //
-              // A horizontal `Scrollable` reads `scrollDelta.dx`, which a
-              // mouse wheel does not produce, and there was no scrollbar
-              // anywhere in the subtree — so a row wider than the window was
-              // simply unreachable. Measured on Insert too (1217 px against
-              // 965) before it compacted instead.
-              child: _tab == 1
-                  ? KeyedSubtree(
-                      key: const ValueKey(1), child: _insertRow(context))
-                  : ScrollConfiguration(
-                      behavior: const _ToolbarScroll(),
-                      child: SingleChildScrollView(
-                        key: ValueKey(_tab),
-                        scrollDirection: Axis.horizontal,
-                        child: switch (_tab) {
-                          2 => _drawRow(context),
-                          3 => _viewRow(context),
-                          _ => _homeRow(context),
-                        },
-                      ),
+            child: ScrollConfiguration(
+              behavior: const _ToolbarScroll(),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  ..._undoRedo(context),
+                  const _Div(),
+                  // The other three families, one click away each, and
+                  // FIRST so they are reachable on any window width — the
+                  // tools after them are the row that may scroll. Labelled,
+                  // because a popover is a place and a place has a name; the
+                  // tools are actions and keep their icons.
+                  _Popover(
+                    icon: Icons.text_format,
+                    label: 'Format',
+                    tooltip: 'Text formatting — bold, headings, lists, '
+                        'tags, colour, font',
+                    app: app,
+                    builder: (context) => Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      runSpacing: OnoteSpace.x2,
+                      children: _formatTools(context),
                     ),
+                  ),
+                  _Popover(
+                    icon: Icons.add_box_outlined,
+                    label: 'Insert',
+                    tooltip: 'Insert — text box, image, table, code, '
+                        'equation and more',
+                    app: app,
+                    builder: _insertRow,
+                  ),
+                  _Popover(
+                    icon: Icons.tune,
+                    label: 'View',
+                    tooltip: 'View — paper, pattern, page size, zoom, '
+                        'light or dark',
+                    app: app,
+                    builder: (context) => Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      runSpacing: OnoteSpace.x2,
+                      children: _viewTools(context),
+                    ),
+                  ),
+                  const _Div(),
+                  ..._drawTools(context),
+                ]),
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  /// Where you are: notebook › section › page. Context, not a second
+  /// navigator — one line that names the place, the way a window title does.
+  Widget _breadcrumb(BuildContext context) {
+    final s = context.surfaces;
+    final page = app.pageId == null ? null : app.node(app.pageId!);
+    final section = page == null ? null : app.node(page.parentId ?? '');
+    final notebook =
+        app.notebooks.where((n) => n.id == app.notebookId).firstOrNull;
+    final dim = OnoteType.small.copyWith(color: s.textSecondary);
+    final sep = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: OnoteSpace.x3),
+      child: Icon(Icons.chevron_right, size: 14, color: s.textDisabled),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: OnoteSpace.x5),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (notebook != null) Text(notebook.title, style: dim),
+        if (section != null) ...[sep, Text(section.title, style: dim)],
+        if (page != null) ...[
+          sep,
+          Text(page.title.isEmpty ? 'Untitled page' : page.title,
+              style: OnoteType.small
+                  .copyWith(color: s.textPrimary, fontWeight: FontWeight.w600)),
+        ],
+      ]),
+    );
+  }
+
+  List<Widget> _undoRedo(BuildContext context) => [
+        IconButton(
+          icon: const Icon(Icons.undo, size: 18),
+          tooltip: 'Undo  (Ctrl+Z)',
+          visualDensity: VisualDensity.compact,
+          onPressed: app.canUndo ? app.undo : null,
+        ),
+        IconButton(
+          icon: const Icon(Icons.redo, size: 18),
+          tooltip: 'Redo  (Ctrl+Y)',
+          visualDensity: VisualDensity.compact,
+          onPressed: app.canRedo ? app.redo : null,
+        ),
+      ];
 
   static IconData _toolIcon(Tool t) => switch (t) {
         Tool.pen => Icons.edit_outlined,
@@ -540,7 +541,7 @@ class _CommandBarState extends State<CommandBar> {
 
   // ── HOME: history + text formatting ──────────────────────────────────
 
-  Widget _homeRow(BuildContext context) {
+  List<Widget> _formatTools(BuildContext context) {
     // Enable from state, not child build order (fixes the greyed-out bug).
     final canFormat = app.canFormatText;
     // What is switched ON at the caret. With the markers collapsed to nothing
@@ -560,20 +561,7 @@ class _CommandBarState extends State<CommandBar> {
     final curColor = app.lastColor.length == 8
         ? Color(((lcv & 0xFF) << 24) | (lcv >> 8))
         : Color(0xFF000000 | lcv);
-    return Row(children: [
-      IconButton(
-        icon: const Icon(Icons.undo, size: 18),
-        tooltip: 'Undo  (Ctrl+Z)',
-        visualDensity: VisualDensity.compact,
-        onPressed: app.canUndo ? app.undo : null,
-      ),
-      IconButton(
-        icon: const Icon(Icons.redo, size: 18),
-        tooltip: 'Redo  (Ctrl+Y)',
-        visualDensity: VisualDensity.compact,
-        onPressed: app.canRedo ? app.redo : null,
-      ),
-      const _Div(),
+    return [
       // **The row never changes shape.** An earlier revision collapsed the
       // formatting commands to three group heads when nothing was focused, on
       // the reasoning that a wall of greyed glyphs reads as broken. That traded
@@ -675,47 +663,10 @@ class _CommandBarState extends State<CommandBar> {
             style:
                 TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
       ],
-    ]);
+    ];
   }
 
   // ── INSERT ────────────────────────────────────────────────────────────
-
-  Widget _tabButton(ColorScheme scheme, int i, String label) {
-    final on = _tab == i;
-    final s = context.surfaces;
-    return InkWell(
-      borderRadius: BorderRadius.circular(OnoteRadius.full),
-      // **The one thing that writes `_tab`.** Nothing else in the app may,
-      // which is the whole of the answer to "don't force any navigation".
-      onTap: () => setState(() => _tab = i),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: OnoteSpace.x5),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          // The chosen tab is the lifted pill; the accent is not spent here
-          // because the tab is a *place*, not a state (§3.5).
-          color: on ? s.lift : Colors.transparent,
-          borderRadius: BorderRadius.circular(OnoteRadius.full),
-          boxShadow: on
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: .12),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ]
-              : null,
-        ),
-        child: Text(
-          label,
-          style: OnoteType.small.copyWith(
-            fontWeight: on ? FontWeight.w600 : FontWeight.w500,
-            color: on ? s.textPrimary : s.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
 
   /// **Insert renders the catalog** — the same list the canvas's right-click
   /// menu renders, so the two cannot say different things.
@@ -761,39 +712,41 @@ class _CommandBarState extends State<CommandBar> {
         run();
       };
 
-  Widget _insertRow(BuildContext context) => CompactingToolbar(
-        controls: [
-          for (final item in kInsertRibbon)
-            ToolbarControl(
-              width: _insertItemWidth(item),
-              icon: item.icon,
-              label: item.label,
-              inline: _InsertButton(app: app, item: item),
-              onPressed: _insert(
-                  () => item.run(context, app, insertAnchor(app, item))),
-              submenu: item.extras.isEmpty
-                  ? null
-                  : [
-                      // The split button's own MAIN half, first — folding
-                      // must not cost the item the one action it already
-                      // had before it grew a dropdown arrow.
+  Widget _insertRow(BuildContext context) {
+    return CompactingToolbar(
+      controls: [
+        for (final item in kInsertRibbon)
+          ToolbarControl(
+            width: _insertItemWidth(item),
+            icon: item.icon,
+            label: item.label,
+            inline: _InsertButton(app: app, item: item),
+            onPressed:
+                _insert(() => item.run(context, app, insertAnchor(app, item))),
+            submenu: item.extras.isEmpty
+                ? null
+                : [
+                    // The split button's own MAIN half, first — folding
+                    // must not cost the item the one action it already
+                    // had before it grew a dropdown arrow.
+                    ToolbarSubmenuItem(
+                      icon: item.icon,
+                      label: item.label,
+                      onPressed: _insert(() =>
+                          item.run(context, app, insertAnchor(app, item))),
+                    ),
+                    for (final extra in item.extras)
                       ToolbarSubmenuItem(
-                        icon: item.icon,
-                        label: item.label,
+                        icon: extra.icon,
+                        label: extra.label,
                         onPressed: _insert(() =>
-                            item.run(context, app, insertAnchor(app, item))),
+                            extra.run(context, app, insertAnchor(app, extra))),
                       ),
-                      for (final extra in item.extras)
-                        ToolbarSubmenuItem(
-                          icon: extra.icon,
-                          label: extra.label,
-                          onPressed: _insert(() => extra.run(
-                              context, app, insertAnchor(app, extra))),
-                        ),
-                    ],
-            ),
-        ],
-      );
+                  ],
+          ),
+      ],
+    );
+  }
 
   /// Pick a colour, and add it to the row.
   Future<void> _addColour(BuildContext context) async {
@@ -827,7 +780,7 @@ class _CommandBarState extends State<CommandBar> {
   /// contents are otherwise the same set of things a student actually reaches
   /// for — including the light/dark switch, which is the one people hunt for
   /// first and the one burying it in Settings hid hardest.
-  Widget _viewRow(BuildContext context) {
+  List<Widget> _viewTools(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget bg(String v, IconData icon, String tip) => IconButton(
           icon: Icon(icon, size: 18),
@@ -841,7 +794,7 @@ class _CommandBarState extends State<CommandBar> {
     // The row reads left to right in the order you decide things: the
     // paper, then the sheet, then how close you are to it, then the room
     // it is in. Each group behind its own hairline.
-    return Row(children: [
+    return [
       // ── The paper ──────────────────────────────────────────────────────
       // The sheet itself first, then what is printed on it. White, grey,
       // cream, a paper grain, or a picture of your own; per page, like the
@@ -1026,7 +979,7 @@ class _CommandBarState extends State<CommandBar> {
       // Followed the page controls here when the object row emptied out, so
       // that emptying the row did not quietly delete a feature.
       WordCount(app: app),
-    ]);
+    ];
   }
 
   /// Pick a picture for the paper, store it as a blob, and set it.
@@ -1051,7 +1004,7 @@ class _CommandBarState extends State<CommandBar> {
     app.setPaper('image', image: hash);
   }
 
-  Widget _drawRow(BuildContext context) {
+  List<Widget> _drawTools(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // Right-click any tool to give it a key of your own. The eraser is the
     // one that prompted this — E is taken by nothing else, but a hand that
@@ -1095,7 +1048,7 @@ class _CommandBarState extends State<CommandBar> {
       for (final h in app.inkPalette)
         onoteColorFromHex(h) ?? OnoteColors.graphite900
     ];
-    return Row(children: [
+    return [
       toolButton(Tool.select, Icons.near_me_outlined, 'Select / move  (V)'),
       toolButton(Tool.text, Icons.text_fields, 'Text  (T)'),
       toolButton(Tool.pen, Icons.edit_outlined, 'Pen  (P)'),
@@ -1266,7 +1219,7 @@ class _CommandBarState extends State<CommandBar> {
           onPressed: () => app.setFocusMode(true),
         ),
       ),
-    ]);
+    ];
   }
 }
 
@@ -2214,5 +2167,128 @@ class _PalettePicker extends StatelessWidget {
     );
     if (name == null || name.isEmpty) return;
     app.addCustomPalette(name, List<String>.from(app.inkPalette));
+  }
+}
+
+/// A labelled button that opens one family of controls on a floating glass
+/// panel under itself.
+///
+/// Its own overlay rather than a `MenuAnchor`: a menu is a list of items,
+/// and what opens here is a toolbar — split buttons, a text field, a
+/// compacting ribbon — that needs a real bounded width and no scroll view
+/// wrapped around it (the Insert ribbon folds into "More" by measuring the
+/// width it is given, and a `Scrollable` gives it infinity). Clicking
+/// anywhere outside closes it; the panel rebuilds with the app so a control
+/// that greys out when the caret leaves a box does so here too.
+class _Popover extends StatefulWidget {
+  const _Popover({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.app,
+    required this.builder,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final AppState app;
+  final WidgetBuilder builder;
+
+  @override
+  State<_Popover> createState() => _PopoverState();
+}
+
+class _PopoverState extends State<_Popover> {
+  final _ctl = OverlayPortalController();
+
+  // The controller is not a Listenable in this Flutter, so the button's own
+  // open/closed look is kept in sync by hand.
+  void _toggle() => setState(() => _ctl.isShowing ? _ctl.hide() : _ctl.show());
+  void _close() {
+    if (_ctl.isShowing) setState(_ctl.hide);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return OverlayPortal(
+      controller: _ctl,
+      overlayChildBuilder: (context) {
+        final screen = MediaQuery.sizeOf(context);
+        // The window's width less a margin: wide enough for the whole Insert
+        // ribbon on a wide window, so it folds only when the window itself
+        // is what is narrow.
+        final width = math.max(320.0, screen.width - 48);
+        // Placed by plain arithmetic from the button's own rectangle, NOT a
+        // `CompositedTransformFollower`: a follower layer makes the paint
+        // transform of everything inside it "unreliable", which is exactly
+        // what a `MenuAnchor` or a dropdown inside the panel needs to open
+        // — so the Insert ribbon's own "More" menu could not appear at all.
+        final box = this.context.findRenderObject() as RenderBox?;
+        final anchor = box == null || !box.hasSize
+            ? Rect.zero
+            : box.localToGlobal(Offset.zero) & box.size;
+        final left = anchor.left
+            .clamp(0.0, math.max(0.0, screen.width - 24 - width))
+            .toDouble();
+        return Stack(children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _close,
+              onSecondaryTap: _close,
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: anchor.bottom + OnoteSpace.x3,
+            child: Material(
+              color: Colors.transparent,
+              child: GlassPanel(
+                dark: dark,
+                radius: OnoteRadius.xl,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: OnoteSpace.x4, vertical: OnoteSpace.x3),
+                child: SizedBox(
+                  width: width,
+                  child: ListenableBuilder(
+                    listenable: widget.app,
+                    builder: (context, _) => widget.builder(context),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ]);
+      },
+      child: Tooltip(
+        message: widget.tooltip,
+        child: TextButton.icon(
+          onPressed: _toggle,
+          style: TextButton.styleFrom(
+            foregroundColor: _ctl.isShowing
+                ? Theme.of(context).colorScheme.primary
+                : context.surfaces.textPrimary,
+            backgroundColor: _ctl.isShowing
+                ? Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: OnoteAlpha.selected)
+                : null,
+            textStyle: OnoteType.small,
+            visualDensity: VisualDensity.compact,
+            minimumSize: const Size(0, OnoteSize.button),
+            padding: const EdgeInsets.symmetric(horizontal: OnoteSpace.x4),
+          ),
+          icon: Icon(widget.icon, size: OnoteIcon.sm),
+          label: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(widget.label),
+            Icon(Icons.expand_more,
+                size: 14, color: context.surfaces.textSecondary),
+          ]),
+        ),
+      ),
+    );
   }
 }

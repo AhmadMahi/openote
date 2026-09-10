@@ -19,6 +19,7 @@ import 'package:openote/state/app_state.dart';
 import 'package:openote/store/repository.dart';
 import 'package:openote/ui/command_bar.dart';
 import 'package:openote/ui/context_menus.dart';
+import 'package:openote/ui/glass.dart';
 import 'package:openote/ui/insert_catalog.dart';
 
 import 'support/sqlite.dart';
@@ -71,8 +72,19 @@ void main() {
       // the words off four of them: "i dont love the new menu stuff though, i
       // think we go back to what we had before."
       expect(kInsertRibbon.map((i) => i.id).toList(), [
-        'text', 'equation', 'code', 'table', 'board', 'image', 'pdf',
-        'file', 'video', 'flashcard', 'pagelink', 'portal', 'template',
+        'text',
+        'equation',
+        'code',
+        'table',
+        'board',
+        'image',
+        'pdf',
+        'file',
+        'video',
+        'flashcard',
+        'pagelink',
+        'portal',
+        'template',
       ]);
     });
 
@@ -204,9 +216,8 @@ void main() {
           // one hover away.
           expect(find.byIcon(i.icon), findsOneWidget, reason: i.id);
           expect(
-              find.byTooltip(i.tooltip == null
-                  ? i.label
-                  : '${i.label} — ${i.tooltip}'),
+              find.byTooltip(
+                  i.tooltip == null ? i.label : '${i.label} — ${i.tooltip}'),
               findsOneWidget,
               reason: i.id);
         }
@@ -218,7 +229,8 @@ void main() {
       app.cancelPendingSave();
     });
 
-    testWidgets('fits the smallest window the app opens, wide open', (tester) async {
+    testWidgets('fits the smallest window the app opens, wide open',
+        (tester) async {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       widen(tester);
       await tester.pumpWidget(MaterialApp(
@@ -252,7 +264,9 @@ void main() {
       // do not fit fold into one "More" menu instead of sliding out of
       // reach behind `_ToolbarScroll`'s old horizontal viewport.
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-      widen(tester, const Size(1280, 900));
+      // The ribbon lives in a popover now, which leaves ~48px of margin, so
+      // the window at which it stops fitting moved a little: 1200 here.
+      widen(tester, const Size(1200, 900));
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: ListenableBuilder(
@@ -265,8 +279,15 @@ void main() {
       await tester.tap(find.text('Insert'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(Scrollable), findsNothing,
-          reason: 'the old rescue is gone — nothing here scrolls any more');
+      // The ribbon's own panel holds no scroll view: it folds instead. (The
+      // toolbar that OPENS it may scroll on a narrow window, and is an
+      // element ancestor of the popover, so the check is scoped to the
+      // panel.)
+      expect(
+          find.descendant(
+              of: find.byType(GlassPanel), matching: find.byType(Scrollable)),
+          findsNothing,
+          reason: 'the old rescue is gone — the ribbon does not scroll');
       expect(find.byTooltip('More'), findsOneWidget,
           reason: 'thirteen labelled buttons do not fit a 1280px window; '
               'something has to fold, or a wider regression than this test '
@@ -391,5 +412,4 @@ void main() {
       }
     });
   });
-
 }

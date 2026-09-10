@@ -1360,16 +1360,28 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           body: Listener(
             onPointerDown: (_) => _ring.value = null,
             child: Stack(children: [
+              // The room: the ambient ground the cards float on. In focus
+              // mode the canvas covers it edge to edge.
+              const Positioned.fill(child: AmbientBackdrop()),
               Row(
                 children: [
                   // Focus mode takes the whole frame away, not just the
                   // toolbar: the point is the page edge to edge with nothing
                   // around it, and a sidebar left behind would make it a
                   // half-measure that still has a border down one side.
-                  if (!app.focusMode) ...[
-                    _regionWrap(_Region.sidebar, _navigator()),
-                    const VerticalDivider(width: 1),
-                  ],
+                  //
+                  // The navigator is a glass card on the ground, not a panel
+                  // welded to the window edge; the gap between it and the
+                  // page card is what makes both read as objects.
+                  if (!app.focusMode)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          OnoteSpace.x5, OnoteSpace.x5, 0, OnoteSpace.x5),
+                      child: GlassCard(
+                        radius: OnoteRadius.xl,
+                        child: _regionWrap(_Region.sidebar, _navigator()),
+                      ),
+                    ),
                   // The chrome FLOATS over the page. The canvas takes the
                   // whole column and the bars sit on it in a Stack, on glass,
                   // so the page scrolls under them and the glass has something
@@ -1384,99 +1396,134 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                             ? EdgeInsets.zero
                             : EdgeInsets.only(
                                 top: chromeTop, bottom: OnoteSize.statusBar);
-                        return Stack(children: [
-                          Positioned.fill(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  // The gate is HERE, at the point the canvas
-                                  // would be built, rather than only on the
-                                  // click that opened the page. A page can
-                                  // become locked while it is on screen — the
-                                  // policy expires, or "Lock now" is pressed —
-                                  // and gating only the click would leave the
-                                  // content sitting there.
-                                  //
-                                  // Only the canvas goes UNDER the glass; the
-                                  // empty and locked states are padded clear
-                                  // of it, since they have nothing to scroll.
-                                  child: _regionWrap(
-                                      _Region.page,
-                                      page == null
-                                          ? Padding(
-                                              padding: insets,
-                                              child: _EmptyState(app: app))
-                                          : app.isLocked(page.id)
-                                              ? Padding(
-                                                  padding: insets,
-                                                  child: _LockedPage(
-                                                      app: app, page: page))
-                                              : _canvasKeys(PageCanvas(
-                                                  key: ValueKey(app.pageId),
-                                                  state: app,
-                                                  insets: insets))),
-                                ),
-                                if (panel != null) ...[
-                                  const VerticalDivider(width: 1),
-                                  PanelEntryFocus(
-                                    node: _panelEntry,
-                                    child: _regionWrap(_Region.panel,
-                                        Padding(padding: insets, child: panel)),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          // The top stack: one sheet of glass, measured so the
-                          // canvas can be told where its page should rest.
-                          if (!app.focusMode)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              top: 0,
-                              child: _MeasureHeight(
-                                onHeight: (h) => _chromeTop.value = h,
-                                child: GlassSheet(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
+                        // The page card: rounded, hairlined, the glass bars
+                        // floating inside it. Focus mode drops the frame and
+                        // the canvas fills the window.
+                        return Padding(
+                          padding: app.focusMode
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.all(OnoteSpace.x5),
+                          child: ClipRRect(
+                            borderRadius: app.focusMode
+                                ? BorderRadius.zero
+                                : OnoteRadius.xlAll,
+                            child: DecoratedBox(
+                              position: DecorationPosition.foreground,
+                              decoration: BoxDecoration(
+                                borderRadius: app.focusMode
+                                    ? BorderRadius.zero
+                                    : OnoteRadius.xlAll,
+                                border: app.focusMode
+                                    ? null
+                                    : Border.all(
+                                        color: Colors.white.withValues(
+                                            alpha:
+                                                Theme.of(context).brightness ==
+                                                        Brightness.dark
+                                                    ? .08
+                                                    : .75)),
+                              ),
+                              child: Stack(children: [
+                                Positioned.fill(
+                                  child: Row(
                                     children: [
-                                      _regionWrap(_Region.toolbar,
-                                          CommandBar(app: app)),
-                                      // **The object row.** With nothing
-                                      // selected it takes no height; when it
-                                      // opens, the page is pushed down by
-                                      // exactly its height (the insets setter
-                                      // does that) so the line under it stays
-                                      // readable. See `object_row.dart`.
-                                      _regionWrap(
-                                          _Region.object, ObjectRow(app: app)),
-                                      if (app.findOpen) _FindBar(app: app),
-                                      // The breadcrumb is CONTEXT, not a second
-                                      // navigator (§7d). With the navigator
-                                      // expanded it repeats what is already on
-                                      // screen two inches to the left, so it
-                                      // spends a full-width row saying nothing.
-                                      // Collapsed — or on the rail — it is the
-                                      // only place the notebook and section are
-                                      // named, and it earns the row.
-                                      if (page != null && app.navCollapsed)
-                                        _PageHeader(app: app, page: page),
+                                      Expanded(
+                                        // The gate is HERE, at the point the canvas
+                                        // would be built, rather than only on the
+                                        // click that opened the page. A page can
+                                        // become locked while it is on screen — the
+                                        // policy expires, or "Lock now" is pressed —
+                                        // and gating only the click would leave the
+                                        // content sitting there.
+                                        //
+                                        // Only the canvas goes UNDER the glass; the
+                                        // empty and locked states are padded clear
+                                        // of it, since they have nothing to scroll.
+                                        child: _regionWrap(
+                                            _Region.page,
+                                            page == null
+                                                ? Padding(
+                                                    padding: insets,
+                                                    child:
+                                                        _EmptyState(app: app))
+                                                : app.isLocked(page.id)
+                                                    ? Padding(
+                                                        padding: insets,
+                                                        child: _LockedPage(
+                                                            app: app,
+                                                            page: page))
+                                                    : _canvasKeys(PageCanvas(
+                                                        key: ValueKey(
+                                                            app.pageId),
+                                                        state: app,
+                                                        insets: insets))),
+                                      ),
+                                      if (panel != null) ...[
+                                        const VerticalDivider(width: 1),
+                                        PanelEntryFocus(
+                                          node: _panelEntry,
+                                          child: _regionWrap(
+                                              _Region.panel,
+                                              Padding(
+                                                  padding: insets,
+                                                  child: panel)),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
-                              ),
+                                // The top stack: one sheet of glass, measured so the
+                                // canvas can be told where its page should rest.
+                                if (!app.focusMode)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    child: _MeasureHeight(
+                                      onHeight: (h) => _chromeTop.value = h,
+                                      child: GlassSheet(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _regionWrap(_Region.toolbar,
+                                                CommandBar(app: app)),
+                                            // **The object row.** With nothing
+                                            // selected it takes no height; when it
+                                            // opens, the page is pushed down by
+                                            // exactly its height (the insets setter
+                                            // does that) so the line under it stays
+                                            // readable. See `object_row.dart`.
+                                            _regionWrap(_Region.object,
+                                                ObjectRow(app: app)),
+                                            if (app.findOpen)
+                                              _FindBar(app: app),
+                                            // The breadcrumb is CONTEXT, not a second
+                                            // navigator (§7d). With the navigator
+                                            // expanded it repeats what is already on
+                                            // screen two inches to the left, so it
+                                            // spends a full-width row saying nothing.
+                                            // Collapsed — or on the rail — it is the
+                                            // only place the notebook and section are
+                                            // named, and it earns the row.
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (!app.focusMode)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: GlassSheet(
+                                      edge: ChromeEdge.top,
+                                      child: _StatusBar(app: app),
+                                    ),
+                                  ),
+                              ]),
                             ),
-                          if (!app.focusMode)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: GlassSheet(
-                                edge: ChromeEdge.top,
-                                child: _StatusBar(app: app),
-                              ),
-                            ),
-                        ]);
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -1659,37 +1706,6 @@ class _FindBarState extends State<_FindBar> {
 }
 
 /// Slim breadcrumb — the editable TITLE lives in the page itself.
-class _PageHeader extends StatelessWidget {
-  const _PageHeader({required this.app, required this.page});
-  final AppState app;
-  final TreeNode page;
-
-  @override
-  Widget build(BuildContext context) {
-    final section = app.node(page.parentId ?? '');
-    final notebook = app.notebooks.firstWhere((n) => n.id == app.notebookId);
-    final crumbStyle =
-        TextStyle(fontSize: 12, color: context.surfaces.textSecondary);
-    return Container(
-      height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
-      child: Row(
-        children: [
-          Text(notebook.title, style: crumbStyle),
-          if (section != null) ...[
-            Text('  ›  ', style: crumbStyle),
-            Text(section.title, style: crumbStyle),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// Right-side links panel: incoming backlinks + outgoing links (TEXT-8).
 /// Find tags (TEXT-5): every tagged line in the notebook, grouped by tag.
 ///

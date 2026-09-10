@@ -13,7 +13,6 @@ import 'package:openote/state/app_state.dart';
 import 'package:openote/store/repository.dart';
 import 'package:openote/theme/onote_theme.dart';
 import 'package:openote/ui/app_shell.dart';
-import 'package:openote/ui/settings_dialog.dart';
 
 import '../support/sqlite.dart';
 
@@ -97,14 +96,14 @@ void main() {
       await t.pump(const Duration(milliseconds: 900));
       await t.pump(const Duration(milliseconds: 300));
       await shoot(t, 'home-${mode.name}');
-      await t.tap(find.text('Draw'));
-      await t.pump(const Duration(milliseconds: 300));
       app.setTool(Tool.pen);
       await t.pump(const Duration(milliseconds: 300));
       await shoot(t, 'draw-${mode.name}');
       await t.tap(find.text('View'));
       await t.pump(const Duration(milliseconds: 300));
       await shoot(t, 'view-${mode.name}');
+      await t.tapAt(const Offset(640, 600)); // close the popover
+      await t.pump(const Duration(milliseconds: 300));
       // Content under the glass: scroll the page up so the heading passes
       // beneath the bars, which is the only state in which glass is visible.
       app.canvas.panBy(const Offset(0, -150));
@@ -132,17 +131,22 @@ void main() {
     ));
     await t.pump(const Duration(milliseconds: 900));
     await t.pump(const Duration(milliseconds: 300));
-    await t.tap(find.text('View'));
-    await t.pump(const Duration(milliseconds: 300));
     await shoot(t, 'themed-green-cream');
     app.setPaper('texture');
     await t.pump(const Duration(milliseconds: 300));
     await shoot(t, 'themed-texture');
-    showSettingsDialog(t.element(find.byType(AppShell)), app);
-    await t.pump(const Duration(milliseconds: 400));
-    await t.pump(const Duration(milliseconds: 400));
-    await shoot(t, 'themed-settings');
     app.setAccent(OnoteAccent.blue);
+    app.setPaper('ambient');
+    app.setBackground('dotted');
+    await t.pump(const Duration(milliseconds: 300));
+    await shoot(t, 'dotted-ambient');
+    // Full screen: the canvas edge to edge, one floating palette.
+    app.setTool(Tool.pen);
+    app.setFocusMode(true);
+    await t.pump(const Duration(milliseconds: 400));
+    await t.pump(const Duration(milliseconds: 400));
+    await shoot(t, 'focus-light');
+    app.setFocusMode(false);
     app.cancelPendingSave();
   });
 }

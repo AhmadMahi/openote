@@ -123,7 +123,8 @@ void main() {
     // from one visible click to a dialog nobody opens, and the object row
     // shows its half only when nothing at all is selected. A PERMANENT tab
     // is not the thing this test guards against; an ARRIVING one is.
-    for (final t in ['Home', 'Insert', 'Draw', 'View']) {
+    // The tabs became one toolbar with three popovers; those are permanent.
+    for (final t in ['Format', 'Insert', 'View']) {
       expect(find.text(t), findsOneWidget, reason: '$t should be there');
     }
   });
@@ -144,7 +145,8 @@ void main() {
     expect(find.byType(MathBar), findsOneWidget,
         reason: 'the palette is there the moment the equation is');
     expect(find.text('Equation'), findsWidgets,
-        reason: 'and Insert is STILL what the command row is showing \u2014 the '
+        reason:
+            'and Insert is STILL what the command row is showing \u2014 the '
             'owner: "its best to not force any navigation"');
     settle();
   });
@@ -162,8 +164,7 @@ void main() {
         of: find.byTooltip('Esc when you are done'),
         matching: find.byType(ExcludeFocus));
     expect(badge, findsOneWidget, reason: 'the badge is up');
-    expect(
-        find.descendant(of: badge, matching: find.byType(InkWell)),
+    expect(find.descendant(of: badge, matching: find.byType(InkWell)),
         findsNothing,
         reason: 'nothing to press means nothing to be moved onto');
     settle();
@@ -231,13 +232,15 @@ void main() {
     final writing = tester.getSize(find.byType(Column).first).height;
 
     expect(writing, resting,
-        reason: 'the canvas box must not move when an equation opens \u2014 that '
+        reason:
+            'the canvas box must not move when an equation opens \u2014 that '
             'is what makes "do not move the user" a property of the layout '
             'rather than a promise somebody has to keep');
     settle();
   });
 
-  testWidgets('the block editor puts itself on the toolbar, and takes itself '
+  testWidgets(
+      'the block editor puts itself on the toolbar, and takes itself '
       'off again', (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     // The seam between the two halves: the tab is useless if the editor never
@@ -256,7 +259,8 @@ void main() {
         reason: 'an open equation must reach the toolbar');
 
     // Tear the editor down the way leaving the page does.
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
+    await tester
+        .pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
     await tester.pumpAndSettle();
     expect(app.activeMath, isNull,
         reason: 'the tab would otherwise drive an editor that is gone');
@@ -276,7 +280,8 @@ void main() {
       block.content['latex'] = 'y=3x+10';
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: SizedBox(width: 500, child: MathBlockView(block: block, app: app)),
+          body: SizedBox(
+              width: 500, child: MathBlockView(block: block, app: app)),
         ),
       ));
       await tester.pumpAndSettle();
@@ -299,7 +304,8 @@ void main() {
       block.content['latex'] = 'y=3x+10';
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: SizedBox(width: 500, child: MathBlockView(block: block, app: app)),
+          body: SizedBox(
+              width: 500, child: MathBlockView(block: block, app: app)),
         ),
       ));
       await tester.pumpAndSettle();
@@ -323,7 +329,8 @@ void main() {
       final block = app.insertEquation(at: const Offset(20, 20));
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: SizedBox(width: 500, child: MathBlockView(block: block, app: app)),
+          body: SizedBox(
+              width: 500, child: MathBlockView(block: block, app: app)),
         ),
       ));
       await tester.pumpAndSettle();
@@ -387,8 +394,10 @@ void main() {
       // room than there was, and the next thing that wants a place on it has
       // to take something else off.
       expect(w, lessThan(1240),
-          reason: 'measured ' + w.toString() + ' px; the row has to fit the '
-              'smallest window the app opens, which is 1280');
+          reason: 'measured ' +
+              w.toString() +
+              ' px; the row has to fit the '
+                  'smallest window the app opens, which is 1280');
     });
 
     testWidgets('the row carries no answer readout at all any more',
@@ -444,7 +453,9 @@ void main() {
       }
       final chips = find.byType(MathChip).evaluate().length;
       expect(rows.length, lessThan(chips),
-          reason: chips.toString() + ' chips on ' + rows.length.toString() +
+          reason: chips.toString() +
+              ' chips on ' +
+              rows.length.toString() +
               ' rows is a column, not a grid');
 
       // `\rt` is the advertised route now; `\root` still works but is not
@@ -644,14 +655,14 @@ void main() {
         await pumpBar(tester, onInsert: (_) {}, onEvaluateAtValue: null);
         await tester.tap(find.byTooltip('More'));
         await tester.pumpAndSettle();
-        final item = tester.widget<PopupMenuItem<String>>(
-            find.ancestor(
-                of: find.textContaining('Evaluate at a value'),
-                matching: find.byType(PopupMenuItem<String>)));
+        final item = tester.widget<PopupMenuItem<String>>(find.ancestor(
+            of: find.textContaining('Evaluate at a value'),
+            matching: find.byType(PopupMenuItem<String>)));
         expect(item.enabled, isFalse);
       });
 
-      testWidgets('is on the LaTeX face too, the same as Graph', (tester) async {
+      testWidgets('is on the LaTeX face too, the same as Graph',
+          (tester) async {
         var evaluated = 0;
         await pumpBar(tester,
             onInsert: (_) {},

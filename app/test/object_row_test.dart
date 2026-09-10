@@ -111,7 +111,8 @@ void main() {
   });
 
   group('parity, enforced by the constructor', () {
-    testWidgets('the equation face is built from closures and primitives, '
+    testWidgets(
+        'the equation face is built from closures and primitives, '
         'with no AppState in scope', (tester) async {
       // This test compiles or it does not. If someone gives EquationFace an
       // `AppState`, a `Block` or an `EquationPlacement`, this line stops
@@ -126,9 +127,9 @@ void main() {
       tester.view.physicalSize = const Size(2600, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(
-          MaterialApp(home: Scaffold(body: Align(
-              alignment: Alignment.topLeft, child: face))));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: Align(alignment: Alignment.topLeft, child: face))));
       await tester.pumpAndSettle();
       expect(find.byType(MathBar), findsOneWidget);
     });
@@ -201,11 +202,10 @@ void main() {
       await tester.pumpAndSettle();
 
       Map<String, double> tabXs() => {
-            for (final t in ['Home', 'Insert', 'Draw'])
+            for (final t in ['Format', 'Insert', 'View'])
               t: tester.getRect(find.text(t)).left,
           };
-      double pageTop() =>
-          tester.getRect(find.byType(ColoredBox).last).top;
+      double pageTop() => tester.getRect(find.byType(ColoredBox).last).top;
 
       final restingTabs = tabXs();
       final restingTop = pageTop();

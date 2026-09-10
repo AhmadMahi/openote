@@ -1816,7 +1816,7 @@ class _PagePainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..color = pageColor);
     // Grain covers the whole surface; a picture is fitted to the page's
     // width and repeated down it, since a canvas has no bottom.
-    if (paper == 'texture') {
+    if (paper == 'texture' || paper == 'ambient') {
       paintPaperDetail(canvas, Offset.zero & size, paper, dark: dark);
     } else if (paper == 'image') {
       final left = controller.pageToScreen(Offset.zero);

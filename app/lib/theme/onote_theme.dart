@@ -61,8 +61,8 @@ abstract final class OnoteColors {
   static const ink100 = Color(0xFFD6E8FF);
   static const ink200 = Color(0xFFB3D4FF);
   static const ink300 = Color(0xFF7FB8FF);
-  static const ink400 = Color(0xFF4DA1FF);
-  static const ink500 = Color(0xFF0A7AFF);
+  static const ink400 = Color(0xFF6E96FF);
+  static const ink500 = Color(0xFF3B6FF0);
   static const ink600 = Color(0xFF0066DB);
   static const ink700 = Color(0xFF0052B4);
   static const ink800 = Color(0xFF003E8C);
@@ -76,13 +76,13 @@ abstract final class OnoteColors {
   // toolbar, a grey sidebar, and hairlines two steps darker than the chrome
   // they divide. No warmth in the greys — the page's own paper carries it.
   static const paper0 = Color(0xFFFFFFFF);
-  static const paper50 = Color(0xFFF7F7F9);
-  static const paper100 = Color(0xFFEFEFF3);
-  static const paper200 = Color(0xFFE3E3E8);
-  static const paper300 = Color(0xFFD1D1D6);
-  static const graphite400 = Color(0xFF8E8E93);
-  static const graphite500 = Color(0xFF6E6E73);
-  static const graphite700 = Color(0xFF2C2C2E);
+  static const paper50 = Color(0xFFF7F9FE);
+  static const paper100 = Color(0xFFEFF3FC);
+  static const paper200 = Color(0xFFE2E8F5);
+  static const paper300 = Color(0xFFCDD5E6);
+  static const graphite400 = Color(0xFF8E96A8);
+  static const graphite500 = Color(0xFF6B7280);
+  static const graphite700 = Color(0xFF1F2433);
   // Kept: this is also the default pen ink, and pen ink is data on disk.
   static const graphite900 = Color(0xFF211F1B);
   // Night ink (dark). Same ordering, so the roles fall out the same way.
@@ -156,7 +156,7 @@ String onoteHexOf(Color c) =>
 /// is deliberately slight (5–9%); chrome that shouts its colour tires the eye
 /// and competes with the page.
 enum OnoteAccent {
-  blue('Blue', Color(0xFF0A7AFF), Color(0xFF4DA1FF)),
+  blue('Blue', Color(0xFF3B6FF0), Color(0xFF6E96FF)),
   graphite('Graphite', Color(0xFF5E5E64), Color(0xFFB4B4BC)),
   green('Green', Color(0xFF2DA44E), Color(0xFF4CC26A)),
   teal('Teal', Color(0xFF0E8A8A), Color(0xFF3FBFBF)),

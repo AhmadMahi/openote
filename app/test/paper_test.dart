@@ -13,12 +13,15 @@ import 'support/sqlite.dart';
 
 void main() {
   group('PageProps.paper', () {
-    test('white is the default and says nothing', () {
-      expect(PageProps().paperKind, 'white');
+    test('ambient is the default and says nothing', () {
+      expect(PageProps().paperKind, 'ambient');
       expect(PageProps().toJson().containsKey('paper'), isFalse,
           reason: 'a page nobody changed serialises as every earlier build '
               'wrote it, or the next save diffs every page in the notebook');
-      expect(PageProps.fromJson({'background': 'grid'}).paperKind, 'white');
+      expect(PageProps.fromJson({'background': 'grid'}).paperKind, 'ambient',
+          reason: 'a page from any earlier build takes the default look');
+      expect(PageProps(paperKind: 'white').toJson()['paper'], 'white',
+          reason: 'plain white is now a choice, and is written down');
     });
 
     test('a chosen paper and its picture round-trip', () {

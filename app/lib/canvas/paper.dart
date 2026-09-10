@@ -12,12 +12,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../theme/onote_theme.dart';
+import '../ui/glass.dart' show paintAmbient;
 
 /// The papers, in the order the pickers offer them. `image` is last because
 /// choosing it opens a file dialog rather than applying at once.
-const kPapers = ['white', 'grey', 'cream', 'texture', 'image'];
+const kPapers = ['ambient', 'white', 'grey', 'cream', 'texture', 'image'];
 
 String paperLabel(String paper) => switch (paper) {
+      'ambient' => 'Ambient',
       'grey' => 'Grey',
       'cream' => 'Cream',
       'texture' => 'Paper texture',
@@ -31,6 +33,9 @@ String paperLabel(String paper) => switch (paper) {
 /// the night page, cream stays warm — rather than inverting it, so switching
 /// theme changes the light in the room and not the paper on the desk.
 Color paperColor(String paper, {required bool dark}) => switch (paper) {
+      // The default: a near-white with the room's glow laid over it — see
+      // `paintPaperDetail` and `paintAmbient`.
+      'ambient' => dark ? const Color(0xFF15161C) : const Color(0xFFF9FAFF),
       'grey' => dark ? const Color(0xFF232328) : const Color(0xFFECECEF),
       'cream' => dark ? const Color(0xFF211F1A) : const Color(0xFFF8F2E2),
       'texture' => dark ? const Color(0xFF1F1D19) : const Color(0xFFF4EEDE),
@@ -40,6 +45,10 @@ Color paperColor(String paper, {required bool dark}) => switch (paper) {
 /// The pattern-line colour that reads on this paper. The greys that sit on
 /// white vanish on cream and shout on grey, so each paper names its own.
 Color paperRuleColor(String paper, {required bool dark}) => switch (paper) {
+      // Quieter than white's: the glow is the texture, the dots only a beat.
+      'ambient' => dark
+          ? Colors.white.withValues(alpha: .10)
+          : const Color(0xFF1F2433).withValues(alpha: .11),
       'grey' => dark ? const Color(0xFF35353C) : const Color(0xFFD8D8DD),
       'cream' ||
       'texture' =>
@@ -93,6 +102,10 @@ ui.Image _grain({required bool dark}) {
 /// paper all the way down.
 void paintPaperDetail(Canvas canvas, Rect rect, String paper,
     {required bool dark, ui.Image? image, bool cover = true}) {
+  if (paper == 'ambient') {
+    paintAmbient(canvas, rect, dark: dark);
+    return;
+  }
   if (paper == 'texture') {
     final tile = paperGrainTile(dark: dark);
     canvas.drawRect(

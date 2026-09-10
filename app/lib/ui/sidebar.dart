@@ -165,9 +165,10 @@ class _SidebarState extends State<Sidebar> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
+        // No fill of its own: the glass card the shell puts it in is the
+        // material, and a second colour on top would make the card opaque.
+        SizedBox(
           width: app.navSectionsW + app.navPagesW,
-          color: context.surfaces.chrome2,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -399,7 +400,7 @@ class _SidebarState extends State<Sidebar> {
         // two-tone depth cue the canvas already uses, no new tokens.
         Expanded(
           child: Container(
-            color: context.surfaces.chrome,
+            color: context.surfaces.chrome.withValues(alpha: .45),
             child:
                 app.navHome ? _HomePane(app: app) : _pagesZone(context, active),
           ),
@@ -957,9 +958,8 @@ class _NavRail extends StatelessWidget {
     final current = app.notebooks.firstWhere((n) => n.id == app.notebookId);
     final sections =
         app.nodes.where((n) => n.kind == NodeKind.section).toList();
-    return Container(
+    return SizedBox(
       width: 44,
-      color: context.surfaces.chrome2,
       child: Column(
         children: [
           const SizedBox(height: 6),

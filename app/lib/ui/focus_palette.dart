@@ -76,7 +76,7 @@ class _FocusPaletteState extends State<FocusPalette> {
       color: Colors.transparent,
       child: GlassPanel(
         dark: Theme.of(context).brightness == Brightness.dark,
-        radius: 20,
+        radius: OnoteRadius.xl,
         child: IntrinsicWidth(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -95,6 +95,7 @@ class _FocusPaletteState extends State<FocusPalette> {
                       'Eraser'),
                   _tool(scheme, Tool.lasso, Icons.gesture_outlined, 'Lasso'),
                   _tool(scheme, Tool.text, Icons.text_fields, 'Text'),
+                  _tool(scheme, Tool.arrow, Icons.north_east, 'Arrow'),
                   _divider(s),
                   IconButton(
                     icon: const Icon(Icons.undo, size: 18),
@@ -209,13 +210,17 @@ class _FocusPaletteState extends State<FocusPalette> {
   Widget _tool(ColorScheme scheme, Tool t, IconData icon, String tip) {
     final on = app.tool == t;
     final key = app.toolShortcut(t);
+    // The armed tool sits in a soft tinted square — a glow, not a filled
+    // button — the way the reference marks its active tool.
     return IconButton(
-      icon: Icon(icon, size: 18),
+      icon: Icon(icon, size: OnoteIcon.md),
       tooltip: '$tip${key.isEmpty ? '' : '  ·  ${key.toUpperCase()}'}',
       visualDensity: VisualDensity.compact,
       style: IconButton.styleFrom(
-        backgroundColor: on ? scheme.primary.withValues(alpha: .14) : null,
+        backgroundColor:
+            on ? scheme.primary.withValues(alpha: OnoteAlpha.selected) : null,
         foregroundColor: on ? scheme.primary : null,
+        shape: const RoundedRectangleBorder(borderRadius: OnoteRadius.lgAll),
       ),
       onPressed: () => app.setTool(t),
     );
@@ -243,13 +248,18 @@ class _FocusPaletteState extends State<FocusPalette> {
             child: Container(
               width: 24,
               height: 24,
+              // Clean filled discs; the armed one wears a thin ring in the
+              // accent, standing a little off the disc.
               decoration: BoxDecoration(
                 color: c,
                 shape: BoxShape.circle,
                 border: Border.all(
-                    width: 1, color: Colors.black.withValues(alpha: .22)),
+                    width: 1, color: Colors.black.withValues(alpha: .10)),
                 boxShadow: on
-                    ? [BoxShadow(color: scheme.primary, spreadRadius: 2.5)]
+                    ? [
+                        BoxShadow(color: Colors.white, spreadRadius: 2),
+                        BoxShadow(color: scheme.primary, spreadRadius: 3.5),
+                      ]
                     : null,
               ),
             ),

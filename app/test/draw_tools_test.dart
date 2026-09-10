@@ -64,12 +64,11 @@ void main() {
         ),
       );
 
-  testWidgets('the Draw tab selects each ink tool', (tester) async {
+  testWidgets('the toolbar selects each ink tool', (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     final app = await newApp(tester);
     await tester.pumpWidget(host(app));
-
-    await tester.tap(find.text('Draw'));
+    // The drawing tools are inline on the one toolbar now — no tab to open.
     await tester.pumpAndSettle();
 
     for (final (tip, want) in const [
@@ -84,13 +83,11 @@ void main() {
     }
   });
 
-  testWidgets('the Draw tab survives the rebuild its own tap causes',
+  testWidgets('the tools survive the rebuild their own tap causes',
       (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     final app = await newApp(tester);
     await tester.pumpWidget(host(app));
-
-    await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
     await tester.tap(tool('Pen  (P)'));
     await tester.pumpAndSettle();
@@ -116,7 +113,10 @@ void main() {
     expect(tester.takeException(), isNull,
         reason: 'a narrow command bar must not overflow');
 
-    await tester.tap(find.text('Draw'));
+    // The tool row SCROLLS on a window this narrow; the pen is still there,
+    // a scroll away, and still works once it is in view.
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(tool('Pen  (P)'));
     await tester.pumpAndSettle();
     await tester.tap(tool('Pen  (P)'));
     await tester.pumpAndSettle();

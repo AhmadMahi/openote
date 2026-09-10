@@ -84,12 +84,26 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         ),
       );
 
+  /// Label left, control right — and stacked instead when the dialog is
+  /// squeezed (a very narrow window), so a wide control never overflows.
   Widget _row(String label, Widget control) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
-          control,
-        ]),
+        child: LayoutBuilder(
+          builder: (context, c) => c.maxWidth < 380
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Align(alignment: Alignment.centerLeft, child: control),
+                  ],
+                )
+              : Row(children: [
+                  Expanded(
+                      child: Text(label, style: const TextStyle(fontSize: 13))),
+                  control,
+                ]),
+        ),
       );
 
   /// An on/off preference, shown the same way as the Theme row above it — a
@@ -279,10 +293,12 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   onSelectionChanged: (s) => app.setDefaultBackground(s.first),
                 ),
               ),
-              _row(
+              // Stacked, not beside its label: a slider wants the width, and
+              // a narrow window (or a folded test at 300px) must not overflow.
+              _rowStacked(
                 'Pattern spacing',
                 SizedBox(
-                  width: 200,
+                  width: double.infinity,
                   child: Row(children: [
                     Expanded(
                       child: Slider(

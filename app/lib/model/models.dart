@@ -193,15 +193,15 @@ class PageProps {
     this.layout = 'canvas',
     this.paperSize = 'A4',
     this.landscape = false,
-    this.paperKind = 'white',
+    this.paperKind = 'ambient',
     this.paperImage,
     Map<String, dynamic>? unknownFields,
   }) : unknownFields = unknownFields ?? {};
   String background; // blank | grid | dotted | ruled
   double gridSize;
 
-  /// The sheet: `white` (the default, and what every page has always been),
-  /// `grey`, `cream`, `texture` (paper grain) or `image`. Per page, like the
+  /// The sheet: `ambient` (the default — near-white with the room's glow),
+  /// `white`, `grey`, `cream`, `texture` (paper grain) or `image`. Per page, like the
   /// pattern drawn on it — see `lib/canvas/paper.dart`. Named `paperKind`
   /// because [paper] is already the sheet SIZE; the JSON key is `paper`.
   String paperKind;
@@ -292,8 +292,9 @@ class PageProps {
         if (isPaged) 'layout': layout,
         if (isPaged) 'paperSize': paperSize,
         if (isPaged && landscape) 'landscape': landscape,
-        // White is the paper every page has always had, so it says nothing.
-        if (paperKind != 'white') 'paper': paperKind,
+        // The default paper says nothing, so an unchanged page serialises
+        // exactly as every earlier build wrote it.
+        if (paperKind != 'ambient') 'paper': paperKind,
         if (paperImage != null) 'paperImage': paperImage,
         ...unknownFields,
       };
@@ -311,7 +312,7 @@ class PageProps {
         layout: j?['layout'] as String? ?? 'canvas',
         paperSize: j?['paperSize'] as String? ?? 'A4',
         landscape: j?['landscape'] as bool? ?? false,
-        paperKind: j?['paper'] as String? ?? 'white',
+        paperKind: j?['paper'] as String? ?? 'ambient',
         paperImage: j?['paperImage'] as String?,
         unknownFields: {
           for (final e in (j ?? const {}).entries)

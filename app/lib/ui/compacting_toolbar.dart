@@ -186,7 +186,8 @@ class _MoreMenu extends StatelessWidget {
           else
             MenuItemButton(
               leadingIcon: Icon(c.icon, size: 18),
-              trailingIcon: c.selected ? const Icon(Icons.check, size: 16) : null,
+              trailingIcon:
+                  c.selected ? const Icon(Icons.check, size: 16) : null,
               onPressed: c.onPressed,
               child: Text(c.label),
             ),
