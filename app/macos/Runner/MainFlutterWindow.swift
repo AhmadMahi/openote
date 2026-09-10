@@ -18,6 +18,10 @@ class MainFlutterWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden
     self.styleMask.insert(.fullSizeContentView)
+    // Say so explicitly: the storyboard never did, and without it
+    // `toggleFullScreen(_:)` has nothing to do — the drawn green light then
+    // only zoomed the window between its two sizes, which is what build 8 did.
+    self.collectionBehavior.insert(.fullScreenPrimary)
     // Light, not black: in full screen the title bar is revealed on hover as
     // a strip over the content, and that strip shows the window's background.
     self.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1)
