@@ -253,20 +253,14 @@ void main() {
     });
 
     testWidgets(
-        'compacts instead of scrolling once the ribbon runs past a '
-        '1280px window', (tester) async {
-      // **It does not fit, and that is the shape that was asked for back.**
-      //
-      // Thirteen labelled buttons run past the ~965px a 1280 window leaves
-      // once the navigator is open. Reported later: "it doesnt handle
-      // resizing well (menus should either compact as required or become
-      // sliding, again i belive the former is cleaner)" — so the ones that
-      // do not fit fold into one "More" menu instead of sliding out of
-      // reach behind `_ToolbarScroll`'s old horizontal viewport.
+        'wraps onto more rows in a narrow window — nothing folds, '
+        'nothing scrolls', (tester) async {
+      // The ribbon lives in a popover now, which has room in two directions:
+      // in a window too narrow for one row it takes two, and every item keeps
+      // its word. Neither a "More" fold nor a scroll view — the two rescues
+      // this row has needed before — has anything left to do.
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-      // The ribbon lives in a popover now, which leaves ~48px of margin, so
-      // the window at which it stops fitting moved a little: 1200 here.
-      widen(tester, const Size(1200, 900));
+      widen(tester, const Size(1000, 900));
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: ListenableBuilder(
@@ -279,29 +273,24 @@ void main() {
       await tester.tap(find.text('Insert'));
       await tester.pumpAndSettle();
 
-      // The ribbon's own panel holds no scroll view: it folds instead. (The
-      // toolbar that OPENS it may scroll on a narrow window, and is an
-      // element ancestor of the popover, so the check is scoped to the
-      // panel.)
       expect(
           find.descendant(
               of: find.byType(GlassPanel), matching: find.byType(Scrollable)),
           findsNothing,
-          reason: 'the old rescue is gone — the ribbon does not scroll');
-      expect(find.byTooltip('More'), findsOneWidget,
-          reason: 'thirteen labelled buttons do not fit a 1280px window; '
-              'something has to fold, or a wider regression than this test '
-              'caught it');
-
-      // Whatever folded is REACHABLE, not simply gone.
-      await tester.tap(find.byTooltip('More'));
-      await tester.pumpAndSettle();
-      final visible = kInsertRibbon
-          .where((i) => find.text(i.label).evaluate().isNotEmpty)
-          .length;
-      expect(visible, kInsertRibbon.length,
-          reason: 'every item is on screen SOMEWHERE — inline or in the '
-              'fold — once the menu is open');
+          reason: 'the ribbon does not scroll');
+      expect(
+          find.descendant(
+              of: find.byType(GlassPanel), matching: find.byTooltip('More')),
+          findsNothing,
+          reason: 'nor does it fold — it wraps');
+      for (final item in kInsertRibbon) {
+        expect(find.text(item.label), findsOneWidget, reason: item.id);
+      }
+      // Two rows, not one: the first and last items are at different heights.
+      final first = tester.getRect(find.text(kInsertRibbon.first.label));
+      final last = tester.getRect(find.text(kInsertRibbon.last.label));
+      expect(last.top, greaterThan(first.bottom - 1),
+          reason: 'at 1000px the catalogue needs a second row');
       app.cancelPendingSave();
     });
   });

@@ -313,19 +313,32 @@ class _CommandBarState extends State<CommandBar> {
                     tooltip: 'Text formatting — bold, headings, lists, '
                         'tags, colour, font',
                     app: app,
+                    maxWidth: 640,
                     builder: (context) => Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      runSpacing: OnoteSpace.x2,
+                      runSpacing: OnoteSpace.x3,
                       children: _formatTools(context),
                     ),
                   ),
+                  // The catalogue WRAPS onto rows rather than compacting into
+                  // a "More" menu: a popover is a place with room, and every
+                  // item with its word is the shape the owner asked for.
                   _Popover(
                     icon: Icons.add_box_outlined,
                     label: 'Insert',
                     tooltip: 'Insert — text box, image, table, code, '
                         'equation and more',
                     app: app,
-                    builder: _insertRow,
+                    maxWidth: 720,
+                    builder: (context) => Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: OnoteSpace.x1,
+                      runSpacing: OnoteSpace.x3,
+                      children: [
+                        for (final item in kInsertRibbon)
+                          _InsertButton(app: app, item: item),
+                      ],
+                    ),
                   ),
                   _Popover(
                     icon: Icons.tune,
@@ -333,9 +346,10 @@ class _CommandBarState extends State<CommandBar> {
                     tooltip: 'View — paper, pattern, page size, zoom, '
                         'light or dark',
                     app: app,
+                    maxWidth: 620,
                     builder: (context) => Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      runSpacing: OnoteSpace.x2,
+                      runSpacing: OnoteSpace.x3,
                       children: _viewTools(context),
                     ),
                   ),
@@ -682,71 +696,6 @@ class _CommandBarState extends State<CommandBar> {
   /// three short columns, which is a shape a menu can carry and a row cannot.
   /// [kRibbonOrder] is the row's own order, and a test pins it against the
   /// catalog so the two cannot drift.
-  /// The width one [InsertItem] needs inline — measured, not guessed, the
-  /// same rule `CompactingToolbar`'s own doc comment sets out: a
-  /// `CommandButton` costs 40px plus 12px per character of its label (its
-  /// fixed padding and icon against `OnoteType.small`'s own metrics — see
-  /// `compacting_toolbar_test.dart`'s width-guard test for how these
-  /// constants get caught if a theme change ever moves them), a label-less
-  /// entry is the same 40px every compact `IconButton` in this app
-  /// measures, +22 for the split button's own dropdown arrow when the item
-  /// has [InsertItem.extras], +2 for `_InsertButton`'s own trailing gap.
-  static double _insertItemWidth(InsertItem item) {
-    final base = item.showLabel ? 40 + item.label.length * 12 : 40;
-    return base + (item.extras.isEmpty ? 0 : 22) + 2;
-  }
-
-  /// Inserting something is a statement that you are done drawing.
-  ///
-  /// Without this, placing a code block or a text box with the pen still
-  /// armed left every click on the new block drawing a line across it — the
-  /// insert put a thing on the page and then handed you the wrong tool for
-  /// the only two things anyone does next, which are move it and type in it.
-  /// Select does both, so Select is where you land.
-  ///
-  /// Wrapped around EVERY insert path rather than dropped into the individual
-  /// actions: the ribbon, its split-button main half and its extras all reach
-  /// `item.run`, and three copies of one rule is how one of them gets missed.
-  void Function() _insert(void Function() run) => () {
-        if (app.tool != Tool.select) app.setTool(Tool.select);
-        run();
-      };
-
-  Widget _insertRow(BuildContext context) {
-    return CompactingToolbar(
-      controls: [
-        for (final item in kInsertRibbon)
-          ToolbarControl(
-            width: _insertItemWidth(item),
-            icon: item.icon,
-            label: item.label,
-            inline: _InsertButton(app: app, item: item),
-            onPressed:
-                _insert(() => item.run(context, app, insertAnchor(app, item))),
-            submenu: item.extras.isEmpty
-                ? null
-                : [
-                    // The split button's own MAIN half, first — folding
-                    // must not cost the item the one action it already
-                    // had before it grew a dropdown arrow.
-                    ToolbarSubmenuItem(
-                      icon: item.icon,
-                      label: item.label,
-                      onPressed: _insert(() =>
-                          item.run(context, app, insertAnchor(app, item))),
-                    ),
-                    for (final extra in item.extras)
-                      ToolbarSubmenuItem(
-                        icon: extra.icon,
-                        label: extra.label,
-                        onPressed: _insert(() =>
-                            extra.run(context, app, insertAnchor(app, extra))),
-                      ),
-                  ],
-          ),
-      ],
-    );
-  }
 
   /// Pick a colour, and add it to the row.
   Future<void> _addColour(BuildContext context) async {
@@ -2171,15 +2120,19 @@ class _PalettePicker extends StatelessWidget {
 }
 
 /// A labelled button that opens one family of controls on a floating glass
-/// panel under itself.
+/// card under itself.
 ///
-/// Its own overlay rather than a `MenuAnchor`: a menu is a list of items,
-/// and what opens here is a toolbar — split buttons, a text field, a
-/// compacting ribbon — that needs a real bounded width and no scroll view
-/// wrapped around it (the Insert ribbon folds into "More" by measuring the
-/// width it is given, and a `Scrollable` gives it infinity). Clicking
-/// anywhere outside closes it; the panel rebuilds with the app so a control
-/// that greys out when the caret leaves a box does so here too.
+/// The card is the size of what it holds (up to [maxWidth]; the contents
+/// wrap), its left edge sits on the button's left edge, and it is nudged
+/// inward only when the window edge would cut it — so it reads as THIS
+/// button's panel and not as another bar across the window. Its own overlay
+/// rather than a `MenuAnchor`: a menu is a list of items, and what opens here
+/// is a toolbar. Positioned by a layout delegate from the button's rectangle,
+/// not a `CompositedTransformFollower`: a follower layer makes the paint
+/// transform of everything inside it "unreliable", which is exactly what a
+/// dropdown inside the panel needs in order to open. Clicking anywhere
+/// outside closes it; the panel rebuilds with the app so a control that greys
+/// out when the caret leaves a box does so here too.
 class _Popover extends StatefulWidget {
   const _Popover({
     required this.icon,
@@ -2187,6 +2140,7 @@ class _Popover extends StatefulWidget {
     required this.tooltip,
     required this.app,
     required this.builder,
+    this.maxWidth = 640,
   });
 
   final IconData icon;
@@ -2194,6 +2148,7 @@ class _Popover extends StatefulWidget {
   final String tooltip;
   final AppState app;
   final WidgetBuilder builder;
+  final double maxWidth;
 
   @override
   State<_Popover> createState() => _PopoverState();
@@ -2212,26 +2167,14 @@ class _PopoverState extends State<_Popover> {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final s = context.surfaces;
     return OverlayPortal(
       controller: _ctl,
       overlayChildBuilder: (context) {
-        final screen = MediaQuery.sizeOf(context);
-        // The window's width less a margin: wide enough for the whole Insert
-        // ribbon on a wide window, so it folds only when the window itself
-        // is what is narrow.
-        final width = math.max(320.0, screen.width - 48);
-        // Placed by plain arithmetic from the button's own rectangle, NOT a
-        // `CompositedTransformFollower`: a follower layer makes the paint
-        // transform of everything inside it "unreliable", which is exactly
-        // what a `MenuAnchor` or a dropdown inside the panel needs to open
-        // — so the Insert ribbon's own "More" menu could not appear at all.
         final box = this.context.findRenderObject() as RenderBox?;
         final anchor = box == null || !box.hasSize
             ? Rect.zero
             : box.localToGlobal(Offset.zero) & box.size;
-        final left = anchor.left
-            .clamp(0.0, math.max(0.0, screen.width - 24 - width))
-            .toDouble();
         return Stack(children: [
           Positioned.fill(
             child: GestureDetector(
@@ -2240,21 +2183,39 @@ class _PopoverState extends State<_Popover> {
               onSecondaryTap: _close,
             ),
           ),
-          Positioned(
-            left: left,
-            top: anchor.bottom + OnoteSpace.x3,
-            child: Material(
-              color: Colors.transparent,
-              child: GlassPanel(
-                dark: dark,
-                radius: OnoteRadius.xl,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: OnoteSpace.x4, vertical: OnoteSpace.x3),
-                child: SizedBox(
-                  width: width,
-                  child: ListenableBuilder(
-                    listenable: widget.app,
-                    builder: (context, _) => widget.builder(context),
+          Positioned.fill(
+            child: CustomSingleChildLayout(
+              delegate:
+                  _PopoverLayout(anchor: anchor, maxWidth: widget.maxWidth),
+              child: Material(
+                color: Colors.transparent,
+                child: GlassPanel(
+                  dark: dark,
+                  radius: OnoteRadius.xl,
+                  opacity: dark ? .86 : .88,
+                  padding: const EdgeInsets.fromLTRB(OnoteSpace.x5,
+                      OnoteSpace.x4, OnoteSpace.x5, OnoteSpace.x5),
+                  // No `IntrinsicWidth` here: a Wrap already shrinks to its
+                  // longest row, and intrinsic-width probing crashes on the
+                  // segmented buttons the View card holds.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // The card says what it is, once, in the overline —
+                      // the one all-caps style, reserved for exactly this.
+                      Padding(
+                        padding: const EdgeInsets.only(
+                            left: OnoteSpace.x2, bottom: OnoteSpace.x3),
+                        child: Text(widget.label.toUpperCase(),
+                            style: OnoteType.overline
+                                .copyWith(color: s.textSecondary)),
+                      ),
+                      ListenableBuilder(
+                        listenable: widget.app,
+                        builder: (context, _) => widget.builder(context),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -2269,7 +2230,7 @@ class _PopoverState extends State<_Popover> {
           style: TextButton.styleFrom(
             foregroundColor: _ctl.isShowing
                 ? Theme.of(context).colorScheme.primary
-                : context.surfaces.textPrimary,
+                : s.textPrimary,
             backgroundColor: _ctl.isShowing
                 ? Theme.of(context)
                     .colorScheme
@@ -2284,11 +2245,40 @@ class _PopoverState extends State<_Popover> {
           icon: Icon(widget.icon, size: OnoteIcon.sm),
           label: Row(mainAxisSize: MainAxisSize.min, children: [
             Text(widget.label),
-            Icon(Icons.expand_more,
-                size: 14, color: context.surfaces.textSecondary),
+            Icon(Icons.expand_more, size: 14, color: s.textSecondary),
           ]),
         ),
       ),
     );
   }
+}
+
+/// Puts the popover card under its button: left edges aligned, six points
+/// down, kept inside the window by a 12-point margin on either side.
+class _PopoverLayout extends SingleChildLayoutDelegate {
+  const _PopoverLayout({required this.anchor, required this.maxWidth});
+  final Rect anchor;
+  final double maxWidth;
+
+  static const _margin = 12.0;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints(
+        maxWidth: math.min(maxWidth, constraints.maxWidth - 2 * _margin),
+        maxHeight:
+            constraints.maxHeight - anchor.bottom - OnoteSpace.x3 - _margin,
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final maxLeft = size.width - childSize.width - _margin;
+    final left =
+        anchor.left.clamp(_margin, math.max(_margin, maxLeft)).toDouble();
+    return Offset(left, anchor.bottom + OnoteSpace.x3);
+  }
+
+  @override
+  bool shouldRelayout(covariant _PopoverLayout old) =>
+      old.anchor != anchor || old.maxWidth != maxWidth;
 }

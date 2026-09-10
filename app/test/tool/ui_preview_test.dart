@@ -90,8 +90,11 @@ void main() {
       addTearDown(t.view.reset);
       await t.pumpWidget(MaterialApp(
         theme: onoteTheme(mode),
-        home: RepaintBoundary(
-            key: const ValueKey('shot'), child: AppShell(app: app)),
+        // The boundary wraps the Navigator, so popovers and dialogs in the
+        // Overlay are in the picture too.
+        builder: (context, child) =>
+            RepaintBoundary(key: const ValueKey('shot'), child: child),
+        home: AppShell(app: app),
       ));
       await t.pump(const Duration(milliseconds: 900));
       await t.pump(const Duration(milliseconds: 300));
@@ -103,6 +106,16 @@ void main() {
       await t.pump(const Duration(milliseconds: 300));
       await shoot(t, 'view-${mode.name}');
       await t.tapAt(const Offset(640, 600)); // close the popover
+      await t.pump(const Duration(milliseconds: 300));
+      await t.tap(find.text('Insert'));
+      await t.pump(const Duration(milliseconds: 300));
+      await shoot(t, 'insert-${mode.name}');
+      await t.tapAt(const Offset(640, 600));
+      await t.pump(const Duration(milliseconds: 300));
+      await t.tap(find.text('Format'));
+      await t.pump(const Duration(milliseconds: 300));
+      await shoot(t, 'format-${mode.name}');
+      await t.tapAt(const Offset(640, 600));
       await t.pump(const Duration(milliseconds: 300));
       // Content under the glass: scroll the page up so the heading passes
       // beneath the bars, which is the only state in which glass is visible.
@@ -126,8 +139,9 @@ void main() {
     app.setBackground('ruled');
     await t.pumpWidget(MaterialApp(
       theme: onoteTheme(Brightness.light, accent: app.accent),
-      home: RepaintBoundary(
-          key: const ValueKey('shot'), child: AppShell(app: app)),
+      builder: (context, child) =>
+          RepaintBoundary(key: const ValueKey('shot'), child: child),
+      home: AppShell(app: app),
     ));
     await t.pump(const Duration(milliseconds: 900));
     await t.pump(const Duration(milliseconds: 300));

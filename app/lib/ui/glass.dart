@@ -27,12 +27,18 @@ class GlassPanel extends StatelessWidget {
     required this.dark,
     this.radius = OnoteRadius.xl,
     this.padding = EdgeInsets.zero,
+    this.opacity,
   });
 
   final Widget child;
   final bool dark;
   final double radius;
   final EdgeInsets padding;
+
+  /// The fill's alpha. Null is the default glass; a popover over another
+  /// sheet of glass wants more (`.88`), or it reads as part of the bar it
+  /// opened from rather than a card above it.
+  final double? opacity;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +52,7 @@ class GlassPanel extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: r,
             color: (dark ? OnoteColors.night50 : OnoteColors.paper50)
-                .withValues(alpha: dark ? .70 : .72),
+                .withValues(alpha: opacity ?? (dark ? .70 : .72)),
             border: Border.all(
               color: (dark ? Colors.white : Colors.black)
                   .withValues(alpha: dark ? .12 : .06),
