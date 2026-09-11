@@ -4219,6 +4219,30 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Four distinct, theme-visible ink colours, re-rolled on every call. The
+  /// picker's "Random colours" entry uses it, so choosing it never gives the
+  /// same row twice. Hues are spread about 90 degrees apart so the four stay
+  /// distinct as the cycle key steps between them, at a mid lightness that
+  /// reads on both a white page and a dark one.
+  void applyRandomPalette() {
+    final rnd = math.Random();
+    final base = rnd.nextDouble() * 360;
+    String comp(double v) =>
+        (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+    String hex(Color c) => '#${comp(c.r)}${comp(c.g)}${comp(c.b)}'.toUpperCase();
+
+    final colours = [
+      for (var i = 0; i < maxPaletteColours; i++)
+        hex(HSVColor.fromAHSV(
+          1,
+          (base + i * 90 + rnd.nextDouble() * 24 - 12) % 360,
+          0.62 + rnd.nextDouble() * 0.22,
+          0.58 + rnd.nextDouble() * 0.14,
+        ).toColor()),
+    ];
+    applyInkPalette(InkPalette('Random', colours));
+  }
+
   void _saveCustomPalettes() {
     _repo.setSetting('customPalettes', [
       for (final p in customPalettes) {'name': p.name, 'colours': p.colours}

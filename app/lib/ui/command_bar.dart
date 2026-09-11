@@ -815,19 +815,9 @@ class _CommandBarState extends State<CommandBar> {
             ),
           ],
         ),
-      if (paged)
-        IconButton(
-          icon: const Icon(Icons.vertical_split_outlined, size: 18),
-          tooltip: app.sheetRailOpen
-              ? 'Hide the page list'
-              : 'Show the page list down the right-hand edge',
-          isSelected: app.sheetRailOpen,
-          visualDensity: VisualDensity.compact,
-          color: app.sheetRailOpen ? scheme.primary : null,
-          onPressed: app.toggleSheetRail,
-        ),
-      // Zoom, fit and focus live on the canvas itself now — see
-      // `CanvasControls` — where the page they act on is in view.
+      // The page list, zoom, fit and focus all live on the canvas controls
+      // now — see `CanvasControls` — where the page they act on is in view,
+      // so none of them is repeated on this toolbar.
       const _Div(),
       // ── Helpers while you work ─────────────────────────────────────────
       IconButton(
@@ -1100,21 +1090,8 @@ class _CommandBarState extends State<CommandBar> {
         isSelected: app.penProximitySwitch,
         onPressed: () => app.setPenProximitySwitch(!app.penProximitySwitch),
       ),
-      const SizedBox(width: 4),
-      const _Div(),
-      // Focus mode, at the end of the row: the last thing you do before
-      // you draw is take the chrome away, and the last thing in the row is
-      // where a hand finds it without reading.
-      Tooltip(
-        message: 'Focus mode: hide everything but the page, and float the '
-            'drawing tools.\nEsc comes back. Full screen does this on its own '
-            'while a drawing tool is up.',
-        child: IconButton(
-          icon: const Icon(Icons.open_in_full, size: 18),
-          visualDensity: VisualDensity.compact,
-          onPressed: () => app.setFocusMode(true),
-        ),
-      ),
+      // Focus mode lives on the canvas controls now (top-right of the page),
+      // not repeated here.
     ];
   }
 }
@@ -1954,15 +1931,26 @@ class _PalettePicker extends StatelessWidget {
       onSelected: (v) {
         if (v is InkPalette) {
           app.applyInkPalette(v);
+        } else if (v == 'random') {
+          app.applyRandomPalette();
         } else if (v == 'save') {
           _savePalette(context);
         } else if (v == 'reset') {
           _reset(context);
-        } else if (v is String && v.startsWith('delete:')) {
-          app.deleteCustomPalette(v.substring('delete:'.length));
         }
       },
-      itemBuilder: (_) => [
+      itemBuilder: (context) => [
+        // A fresh, distinct, theme-visible row every time it is chosen.
+        const PopupMenuItem<Object>(
+          value: 'random',
+          height: 40,
+          child: Row(children: [
+            Icon(Icons.shuffle, size: 16),
+            SizedBox(width: 10),
+            Text('Random colours', style: TextStyle(fontSize: 13)),
+          ]),
+        ),
+        const PopupMenuDivider(),
         for (final p in app.allPalettes)
           PopupMenuItem<Object>(
             value: p,
@@ -1986,7 +1974,26 @@ class _PalettePicker extends StatelessWidget {
               Expanded(
                   child: Text(p.name, style: const TextStyle(fontSize: 13))),
               if (app.activePaletteName == p.name)
-                const Icon(Icons.check, size: 16),
+                const Padding(
+                  padding: EdgeInsets.only(right: 2),
+                  child: Icon(Icons.check, size: 16),
+                ),
+              // Delete sits ON the palette it removes, and only for the ones
+              // you made; the built-ins are the floor you can always get back
+              // to. Tapping it closes the menu and removes that palette.
+              if (app.customPalettes.any((c) => c.name == p.name))
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  tooltip: 'Delete “${p.name}”',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    app.deleteCustomPalette(p.name);
+                  },
+                ),
             ]),
           ),
         const PopupMenuDivider(),
@@ -2000,20 +2007,6 @@ class _PalettePicker extends StatelessWidget {
                 style: TextStyle(fontSize: 13)),
           ]),
         ),
-        // Deleting is offered per palette, and only for the ones you made:
-        // the built-ins are the floor you can always get back to.
-        for (final p in app.customPalettes)
-          PopupMenuItem<Object>(
-            value: 'delete:${p.name}',
-            height: 34,
-            child: Row(children: [
-              const Icon(Icons.delete_outline, size: 16),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text('Delete “${p.name}”',
-                      style: const TextStyle(fontSize: 13))),
-            ]),
-          ),
         const PopupMenuItem<Object>(
           value: 'reset',
           height: 36,

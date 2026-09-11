@@ -16,13 +16,32 @@ import '../ui/glass.dart' show paintAmbient;
 
 /// The papers, in the order the pickers offer them. `image` is last because
 /// choosing it opens a file dialog rather than applying at once.
-const kPapers = ['ambient', 'white', 'grey', 'cream', 'texture', 'image'];
+const kPapers = [
+  'ambient',
+  'white',
+  'grey',
+  'cream',
+  'texture',
+  'slate',
+  'sage',
+  'sky',
+  'blush',
+  'charcoal',
+  'midnight',
+  'image',
+];
 
 String paperLabel(String paper) => switch (paper) {
       'ambient' => 'Ambient',
       'grey' => 'Grey',
       'cream' => 'Cream',
       'texture' => 'Paper texture',
+      'slate' => 'Blue grey',
+      'sage' => 'Sage',
+      'sky' => 'Sky',
+      'blush' => 'Blush',
+      'charcoal' => 'Charcoal',
+      'midnight' => 'Midnight',
       'image' => 'Picture',
       _ => 'White',
     };
@@ -39,6 +58,14 @@ Color paperColor(String paper, {required bool dark}) => switch (paper) {
       'grey' => dark ? const Color(0xFF232328) : const Color(0xFFECECEF),
       'cream' => dark ? const Color(0xFF211F1A) : const Color(0xFFF8F2E2),
       'texture' => dark ? const Color(0xFF1F1D19) : const Color(0xFFF4EEDE),
+      // Soft tints for a light page.
+      'slate' => dark ? const Color(0xFF1A1F26) : const Color(0xFFEDF1F6),
+      'sage' => dark ? const Color(0xFF19201B) : const Color(0xFFEDF3EC),
+      'sky' => dark ? const Color(0xFF151D25) : const Color(0xFFE9F2FB),
+      'blush' => dark ? const Color(0xFF221A1E) : const Color(0xFFFBEEF1),
+      // Dark sheets, dark in either theme, for a dark-background look.
+      'charcoal' => dark ? const Color(0xFF17191E) : const Color(0xFF2B2F36),
+      'midnight' => dark ? const Color(0xFF12141F) : const Color(0xFF1E2536),
       _ => dark ? OnoteColors.night0 : OnoteColors.paper0,
     };
 
@@ -53,6 +80,20 @@ Color paperRuleColor(String paper, {required bool dark}) => switch (paper) {
       'cream' ||
       'texture' =>
         dark ? const Color(0xFF3A362C) : const Color(0xFFE2D9C2),
+      'slate' => dark
+          ? Colors.white.withValues(alpha: .10)
+          : const Color(0xFF2A3340).withValues(alpha: .12),
+      'sage' => dark
+          ? Colors.white.withValues(alpha: .10)
+          : const Color(0xFF2A3A2E).withValues(alpha: .12),
+      'sky' => dark
+          ? Colors.white.withValues(alpha: .10)
+          : const Color(0xFF213241).withValues(alpha: .12),
+      'blush' => dark
+          ? Colors.white.withValues(alpha: .10)
+          : const Color(0xFF3A2A30).withValues(alpha: .12),
+      // Dark sheets carry a light rule in both themes.
+      'charcoal' || 'midnight' => Colors.white.withValues(alpha: .10),
       _ => dark ? OnoteColors.night200 : OnoteColors.paper200,
     };
 
