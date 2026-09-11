@@ -2311,7 +2311,8 @@ class _SheetRail extends StatelessWidget {
       child: Column(children: [
         Expanded(
           child: ReorderableListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            // Top inset clears the canvas controls that float over this corner.
+            padding: const EdgeInsets.fromLTRB(10, 52, 10, 8),
             buildDefaultDragHandles: false,
             itemCount: n,
             onReorder: (from, to) {
