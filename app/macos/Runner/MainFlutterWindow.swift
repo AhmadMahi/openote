@@ -35,6 +35,16 @@ class MainFlutterWindow: NSWindow {
     // a strip over the content, and that strip shows the window's background.
     self.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1)
 
+    // No title bar sliding down on hover in full screen. macOS reveals the
+    // (empty) title bar when the pointer reaches the top edge; a titlebar
+    // accessory that declares zero full-screen height tells AppKit to keep it
+    // hidden. The app draws its own lights, so the native strip is redundant.
+    let hideTitlebar = NSTitlebarAccessoryViewController()
+    hideTitlebar.view = NSView(frame: .zero)
+    hideTitlebar.layoutAttribute = .right
+    hideTitlebar.fullScreenMinHeight = 0
+    self.addTitlebarAccessoryViewController(hideTitlebar)
+
     // The app draws the three lights itself (lib/ui/window_chrome.dart) so
     // they can stay on screen in full screen, where macOS hides the title
     // bar. One set of lights, so the native ones are hidden; the channel

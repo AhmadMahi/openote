@@ -190,9 +190,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 icon: const Icon(Icons.add, size: OnoteIcon.md),
                 label: const Text('New notebook'),
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 38),
+                  minimumSize: const Size(0, 42),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: OnoteSpace.x6),
+                      const EdgeInsets.symmetric(horizontal: OnoteSpace.x7),
                   shape: const RoundedRectangleBorder(
                       borderRadius: OnoteRadius.lgAll),
                 ),

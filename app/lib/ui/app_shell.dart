@@ -1406,7 +1406,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                         child: Stack(children: [
                           Padding(
                             padding:
-                                EdgeInsets.only(top: Platform.isMacOS ? 22 : 0),
+                                EdgeInsets.only(top: Platform.isMacOS ? 28 : 0),
                             child: _regionWrap(_Region.sidebar, _navigator()),
                           ),
                           if (Platform.isMacOS)
@@ -1414,7 +1414,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                               left: 0,
                               right: 0,
                               top: 0,
-                              height: 22,
+                              height: 28,
                               child: WindowDragArea(child: SizedBox.expand()),
                             ),
                         ]),
@@ -1616,8 +1616,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
               // them; gone only in focus mode, with the rest of the frame.
               if (Platform.isMacOS && !app.focusMode)
                 const Positioned(
-                  left: OnoteSpace.x5 + 10,
-                  top: OnoteSpace.x5 + 5,
+                  left: OnoteSpace.x5 + 12,
+                  top: OnoteSpace.x5 + 9,
                   child: ExcludeFocus(child: WindowLights()),
                 ),
               AlertPopup(app: app, regionFocus: _alertRegion),

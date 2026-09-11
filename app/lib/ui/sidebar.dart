@@ -532,7 +532,7 @@ class _SidebarState extends State<Sidebar> {
   // ── Footer toolbar ────────────────────────────────────────────────────
 
   Widget _footer(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
         child: Row(
           children: [
             Expanded(
@@ -1083,7 +1083,7 @@ class _NotebookHeader extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final current = app.notebooks.firstWhere((n) => n.id == app.notebookId);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 10, 6, 4),
+      padding: const EdgeInsets.fromLTRB(10, 12, 8, 8),
       child: Tooltip(
         message: 'Notebooks — switch, rename, duplicate, import',
         waitDuration: const Duration(milliseconds: 600),
