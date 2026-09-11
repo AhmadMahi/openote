@@ -6215,6 +6215,8 @@ class AppState extends ChangeNotifier
     if (dpp != null) defaultPaper = dpp;
     final dps = _repo.getSetting('defaultPageSize') as String?;
     if (dps != null) defaultPageSize = dps;
+    final dss = _repo.getSetting('defaultStretchToScreen');
+    if (dss is bool) defaultStretchToScreen = dss;
     final nsw = _repo.getSetting('navSectionsW');
     if (nsw is num) navSectionsW = nsw.toDouble().clamp(96, 220);
     final npw = _repo.getSetting('navPagesW');
@@ -6916,6 +6918,9 @@ class AppState extends ChangeNotifier
     }
     docRevision++;
     _persistSession();
+    // Stretch to screen: a page opens fitted to the window when that default
+    // is on. Opt-in, so pages otherwise open exactly as before.
+    if (id != null && defaultStretchToScreen) fitPageToWidth();
     notifyListeners();
   }
 
@@ -9133,6 +9138,10 @@ class AppState extends ChangeNotifier
   /// `canvas`, or the name of a [PaperSize] for a paged sheet.
   String defaultPageSize = 'canvas';
 
+  /// Whether a page opens stretched to fill the window width (fit-to-width
+  /// locked). Off by default, so a page opens exactly as earlier builds left it.
+  bool defaultStretchToScreen = false;
+
   void setDefaultBackground(String v) {
     defaultBackground = v;
     _repo.setSetting('defaultBackground', v);
@@ -9154,6 +9163,12 @@ class AppState extends ChangeNotifier
   void setDefaultPageSize(String v) {
     defaultPageSize = v;
     _repo.setSetting('defaultPageSize', v);
+    notifyListeners();
+  }
+
+  void setDefaultStretchToScreen(bool v) {
+    defaultStretchToScreen = v;
+    _repo.setSetting('defaultStretchToScreen', v);
     notifyListeners();
   }
 

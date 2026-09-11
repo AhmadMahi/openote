@@ -1413,28 +1413,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                         // floating inside it. Focus mode drops the frame and
                         // the canvas fills the window.
                         return Padding(
-                          padding: app.focusMode
-                              ? EdgeInsets.zero
-                              : const EdgeInsets.all(OnoteSpace.x5),
+                          padding: const EdgeInsets.all(OnoteSpace.x5),
                           child: ClipRRect(
-                            borderRadius: app.focusMode
-                                ? BorderRadius.zero
-                                : OnoteRadius.xlAll,
+                            borderRadius: OnoteRadius.xlAll,
                             child: DecoratedBox(
                               position: DecorationPosition.foreground,
                               decoration: BoxDecoration(
-                                borderRadius: app.focusMode
-                                    ? BorderRadius.zero
-                                    : OnoteRadius.xlAll,
-                                border: app.focusMode
-                                    ? null
-                                    : Border.all(
-                                        color: Colors.white.withValues(
-                                            alpha:
-                                                Theme.of(context).brightness ==
-                                                        Brightness.dark
-                                                    ? .08
-                                                    : .75)),
+                                borderRadius: OnoteRadius.xlAll,
+                                border: Border.all(
+                                    color: Colors.white.withValues(
+                                        alpha: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? .08
+                                            : .75)),
                               ),
                               child: Stack(children: [
                                 Positioned.fill(
@@ -2023,7 +2014,7 @@ class _StatusBar extends StatelessWidget {
         // when it floats 12px in from the window edge — the "the UI doesn't
         // reach the sides" complaint. 6px is the optical match.
         padding:
-            const EdgeInsets.only(left: OnoteSpace.x5, right: OnoteSpace.x3),
+            const EdgeInsets.only(left: OnoteSpace.x6, right: OnoteSpace.x3),
         child: Row(
           children: [
             Tooltip(

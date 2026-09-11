@@ -23,8 +23,13 @@ import '../markdown/md_syntax.dart';
 /// app_update_test.dart fails the build the moment the two drift.
 const kAppVersion = '0.8.0';
 
+/// Our release build number. Releases are tagged `slate-<kAppVersion>-b<N>`;
+/// this is the running build's N, so the update check can tell one 0.8.0 build
+/// from the next. Bump it with every release.
+const kAppBuild = 11;
+
 const _kLatestReleaseApi =
-    'https://api.github.com/repos/icmric/openote/releases/latest';
+    'https://api.github.com/repos/AhmadMahi/openote/releases/latest';
 
 class UpdateInfo {
   const UpdateInfo({
@@ -68,12 +73,30 @@ int compareVersions(String a, String b) {
 
 /// Pure half of the check, so tests can feed it release JSON directly.
 /// Returns null when there is nothing newer to offer.
+/// A release tag split into its version and (for our tags) build number.
+/// Handles our `slate-0.8.0-b11` and a plain `v0.7.0` alike.
+({String version, int? build})? parseReleaseTag(String tag) {
+  final m = RegExp(r'(\d+\.\d+(?:\.\d+)?)(?:-b(\d+))?').firstMatch(tag);
+  if (m == null) return null;
+  final b = m.group(2);
+  return (version: m.group(1)!, build: b == null ? null : int.tryParse(b));
+}
+
 UpdateInfo? parseLatestRelease(
-    {required String current, required Map<String, dynamic> json}) {
+    {required String current,
+    required Map<String, dynamic> json,
+    int currentBuild = kAppBuild}) {
   if (json['draft'] == true || json['prerelease'] == true) return null;
-  final tag = '${json['tag_name'] ?? ''}';
-  final version = tag.startsWith('v') ? tag.substring(1) : tag;
-  if (version.isEmpty || compareVersions(version, current) <= 0) return null;
+  final parsed = parseReleaseTag('${json['tag_name'] ?? ''}');
+  if (parsed == null) return null;
+  final version = parsed.version;
+  final build = parsed.build;
+
+  // Newer if the version is higher, or the same version at a higher build.
+  final baseCmp = compareVersions(version, current);
+  final newer =
+      baseCmp > 0 || (baseCmp == 0 && build != null && build > currentBuild);
+  if (!newer) return null;
 
   String? setup;
   final assets = json['assets'];
@@ -85,11 +108,11 @@ UpdateInfo? parseLatestRelease(
     }
   }
   return UpdateInfo(
-    version: version,
+    version: build == null ? version : '$version build $build',
     notes: json['body'] as String?,
     windowsSetupUrl: setup,
     pageUrl: json['html_url'] as String? ??
-        'https://github.com/icmric/openote/releases',
+        'https://github.com/AhmadMahi/openote/releases',
   );
 }
 

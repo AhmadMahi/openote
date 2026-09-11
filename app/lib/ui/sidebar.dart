@@ -206,7 +206,7 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _searchRow(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 2, 4, 6),
+      padding: const EdgeInsets.fromLTRB(10, 4, 8, 8),
       child: Row(
         children: [
           Expanded(

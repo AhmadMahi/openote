@@ -101,24 +101,6 @@ class _CommandBarState extends State<CommandBar> {
                       // lives in Settings ▸ About now, at the owner's request:
                       // a toolbar is for the page, and a release notice is
                       // not about the page.
-                      // Current-tool escape hatch: visible whenever not in Select.
-                      if (app.tool != Tool.select)
-                        ToolbarControl(
-                          width: 98,
-                          icon: _toolIcon(app.tool),
-                          label: 'Done',
-                          onPressed: () => app.setTool(Tool.select),
-                          inline: Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: ActionChip(
-                              avatar: Icon(_toolIcon(app.tool), size: 16),
-                              label: const Text('Done',
-                                  style: TextStyle(fontSize: 11)),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: () => app.setTool(Tool.select),
-                            ),
-                          ),
-                        ),
                       // Study: the due count is the whole nudge, so it's on the
                       // badge rather than hidden behind the panel.
                       ToolbarControl(
@@ -390,12 +372,12 @@ class _CommandBarState extends State<CommandBar> {
     // Home and the notebook overview are places too, and the crumb says so.
     if (app.navHome) {
       return Padding(
-        padding: const EdgeInsets.only(left: OnoteSpace.x5),
+        padding: const EdgeInsets.only(left: OnoteSpace.x6),
         child: Text('Home', style: here),
       );
     }
     return Padding(
-      padding: const EdgeInsets.only(left: OnoteSpace.x5),
+      padding: const EdgeInsets.only(left: OnoteSpace.x6),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         if (notebook != null)
           Text(notebook.title, style: app.navNotebook ? here : dim),
@@ -425,14 +407,6 @@ class _CommandBarState extends State<CommandBar> {
           onPressed: app.canRedo ? app.redo : null,
         ),
       ];
-
-  static IconData _toolIcon(Tool t) => switch (t) {
-        Tool.pen => Icons.edit_outlined,
-        Tool.highlighter => Icons.border_color_outlined,
-        Tool.eraser => Icons.cleaning_services_outlined,
-        Tool.text => Icons.text_fields,
-        _ => Icons.near_me_outlined,
-      };
 
   /// Every item in the Export menu comes through here.
   ///

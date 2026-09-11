@@ -87,6 +87,34 @@ void main() {
       expect(u!.windowsSetupUrl, isNull);
       expect(u.pageUrl, contains('releases'));
     });
+
+    test('our slate-<ver>-b<N> tags: newer build offered, same or older not', () {
+      final u = parseLatestRelease(
+          current: '0.8.0',
+          currentBuild: 10,
+          json: release('slate-0.8.0-b11',
+              assets: ['slate-0.8.0-windows-x64-setup.exe']));
+      expect(u, isNotNull);
+      expect(u!.version, '0.8.0 build 11');
+      expect(u.windowsSetupUrl, endsWith('-setup.exe'));
+      expect(
+          parseLatestRelease(
+              current: '0.8.0',
+              currentBuild: 11,
+              json: release('slate-0.8.0-b11')),
+          isNull);
+      expect(
+          parseLatestRelease(
+              current: '0.8.0',
+              currentBuild: 12,
+              json: release('slate-0.8.0-b11')),
+          isNull);
+    });
+
+    test('parseReleaseTag reads version and build', () {
+      expect(parseReleaseTag('slate-0.8.0-b11'), (version: '0.8.0', build: 11));
+      expect(parseReleaseTag('v0.7.0'), (version: '0.7.0', build: null));
+    });
   });
 
   test('kAppVersion matches pubspec.yaml — the constant cannot drift', () {
