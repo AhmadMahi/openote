@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -37,7 +36,6 @@ import 'sync_dot.dart';
 import '../theme/tokens.dart';
 import 'canvas_controls.dart';
 import 'glass.dart';
-import 'window_chrome.dart';
 import 'home_dashboard.dart';
 
 /// Layout per style guide §5.4: navigator | (toolbar / canvas-as-hero / status).
@@ -1394,30 +1392,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                           OnoteSpace.x5, OnoteSpace.x5, 0, OnoteSpace.x5),
                       child: GlassCard(
                         radius: OnoteRadius.xl,
-                        // On macOS the window's traffic lights sit over this
-                        // card's top-left corner (the title bar is
-                        // transparent and the content full-size), so the
-                        // navigator starts below them.
-                        // The navigator sizes the card; the strip over its
-                        // top 22 points, where the lights sit, moves the
-                        // window as a title bar would. A Stack, so the strip
-                        // takes the navigator's width rather than asking the
-                        // Row for one it cannot give.
-                        child: Stack(children: [
-                          Padding(
-                            padding:
-                                EdgeInsets.only(top: Platform.isMacOS ? 28 : 0),
-                            child: _regionWrap(_Region.sidebar, _navigator()),
-                          ),
-                          if (Platform.isMacOS)
-                            const Positioned(
-                              left: 0,
-                              right: 0,
-                              top: 0,
-                              height: 28,
-                              child: WindowDragArea(child: SizedBox.expand()),
-                            ),
-                        ]),
+                        child: _regionWrap(_Region.sidebar, _navigator()),
                       ),
                     ),
                   // The chrome FLOATS over the page. The canvas takes the
@@ -1611,15 +1586,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
               // an edge-to-edge page with a bar reserved along one side is not
               // edge to edge.
               if (app.focusMode) FocusPalette(app: app),
-              // The window's lights, drawn by the app so they survive full
-              // screen. Over the navigator card's top-left, where macOS puts
-              // them; gone only in focus mode, with the rest of the frame.
-              if (Platform.isMacOS && !app.focusMode)
-                const Positioned(
-                  left: OnoteSpace.x5 + 12,
-                  top: OnoteSpace.x5 + 9,
-                  child: ExcludeFocus(child: WindowLights()),
-                ),
               AlertPopup(app: app, regionFocus: _alertRegion),
               ImportProgressCard(app: app),
             ]),
