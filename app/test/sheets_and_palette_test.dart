@@ -148,6 +148,39 @@ void main() {
     });
   });
 
+  group('deleting a sheet removes it', () {
+    test('page 1 goes and page 2 becomes page 1', () {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      final onOne = Block(type: BlockType.image, x: 100, y: 50, w: 80, h: 80);
+      final onTwo =
+          Block(type: BlockType.image, x: 100, y: h + 50, w: 80, h: 80);
+      app.blocks = [onOne, onTwo];
+      app.deleteSheet(0);
+      expect(app.blocks.contains(onOne), isFalse,
+          reason: 'page 1 content is gone');
+      expect(app.blocks, contains(onTwo));
+      expect(onTwo.y, closeTo(50, 0.01), reason: 'page 2 came up to page 1');
+    });
+
+    test('deleting an added blank page is one fewer added page', () {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      app.blocks = [];
+      app.addSheet();
+      final before = app.scrollableSheetCount;
+      app.deleteSheet(app.sheetCount); // the first blank past the content
+      expect(app.pageProps.addedSheets, 0);
+      expect(app.scrollableSheetCount, before - 1);
+    });
+
+    test('a pure spare page cannot be deleted', () {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      app.blocks = [];
+      final rev = app.docRevision;
+      app.deleteSheet(app.scrollableSheetCount - 1);
+      expect(app.docRevision, rev, reason: 'a spare is scroll room, not a page');
+    });
+  });
+
   group('the palette is yours, up to four', () {
     test('a colour can be added until the ceiling, then not', () {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');

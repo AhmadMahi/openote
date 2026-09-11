@@ -2215,22 +2215,19 @@ class _PenCursorPainter extends CustomPainter {
 
 /// The sheet rail down the right-hand edge of a paged page.
 ///
-/// A paged document can run to many sheets, and until now the only way to
-/// know how many — or to reach sheet 7 — was to scroll and count. This lists
-/// them, marks the one you are looking at, and jumps on a click.
-///
-/// Deliberately a strip of numbers rather than thumbnails: a thumbnail of a
-/// page of handwriting at 40px wide is a grey smudge that takes a render of
-/// the whole document to produce, and it would have to be kept up to date
-/// with every stroke. The number is the part that is actually legible.
+/// A paged document can run to many sheets. This shows each as a small LIVE
+/// preview — the real paper, ink and text at a readable size, drawn straight
+/// from the page's data so it stays current without a costly snapshot — marks
+/// the one you are looking at, jumps on a click, reorders on a drag, and
+/// deletes a page from the control on it.
 class _SheetRail extends StatelessWidget {
   const _SheetRail({required this.app, required this.dark});
 
   final AppState app;
   final bool dark;
 
-  /// Insert or add, anchored on the page that was right-clicked.
   Future<void> _sheetMenu(BuildContext context, int i, Offset at) async {
+    final canDelete = i < app.sheetCount + app.pageProps.addedSheets;
     final choice = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
@@ -2245,6 +2242,18 @@ class _SheetRail extends StatelessWidget {
             child: Text('Insert a page after ${i + 1}')),
         const PopupMenuItem(
             value: 'end', height: 36, child: Text('Add a page at the end')),
+        if (canDelete) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            value: 'delete',
+            height: 36,
+            child: Row(children: [
+              Icon(Icons.delete_outline, size: 16),
+              SizedBox(width: 8),
+              Text('Delete this page'),
+            ]),
+          ),
+        ],
       ],
     );
     switch (choice) {
@@ -2254,20 +2263,44 @@ class _SheetRail extends StatelessWidget {
         app.insertSheet(i + 1);
       case 'end':
         app.addSheet();
+      case 'delete':
+        if (context.mounted) await _confirmDelete(context, i);
     }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, int i) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete page ${i + 1}?'),
+        content: const Text('What is on this page is removed and the pages '
+            'below it move up. This can be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok == true) app.deleteSheet(i);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final n = app.scrollableSheetCount;
-    final h = app.pageProps.paper.height;
-    // Which sheet the top of the viewport is sitting in.
+    final paper = app.pageProps.paper;
+    final h = paper.height;
+    final aspect = paper.width / paper.height;
     final current = ((-app.canvas.offset.dy / app.canvas.scale) / h)
         .floor()
         .clamp(0, n - 1);
+    // Content pages and any added blanks can be deleted; the trailing spares
+    // are scroll room, not pages.
+    final deletableUpTo = app.sheetCount + app.pageProps.addedSheets;
     return Container(
-      width: 44,
+      width: 132,
       decoration: BoxDecoration(
         color: (dark ? OnoteColors.night0 : OnoteColors.paper0)
             .withValues(alpha: .92),
@@ -2277,23 +2310,17 @@ class _SheetRail extends StatelessWidget {
       ),
       child: Column(children: [
         Expanded(
-          // REORDERABLE, and the reorder moves the CONTENT. A list of page
-          // numbers you can drag but which does not take the writing with it
-          // would be a lie told in the most convincing possible way.
           child: ReorderableListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
             buildDefaultDragHandles: false,
             itemCount: n,
             onReorder: (from, to) {
-              // Flutter reports the destination as an index in the list
-              // BEFORE the removal, so a downward move is one too far.
               app.moveSheet(from, to > from ? to - 1 : to);
             },
             itemBuilder: (context, i) {
-              final on = i == current;
               return Padding(
                 key: ValueKey('sheet-$i'),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: ReorderableDragStartListener(
                   index: i,
                   child: Tooltip(
@@ -2302,33 +2329,15 @@ class _SheetRail extends StatelessWidget {
                     child: GestureDetector(
                       onSecondaryTapDown: (d) =>
                           _sheetMenu(context, i, d.globalPosition),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(6),
+                      child: _SheetCard(
+                        app: app,
+                        index: i,
+                        dark: dark,
+                        aspect: aspect,
+                        selected: i == current,
+                        canDelete: i < deletableUpTo,
                         onTap: () => app.goToSheet(i),
-                        child: Container(
-                          height: 40,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            color: on
-                                ? scheme.primary.withValues(alpha: .16)
-                                : Colors.transparent,
-                            border: Border.all(
-                              color: on
-                                  ? scheme.primary
-                                  : (dark
-                                      ? OnoteColors.night300
-                                      : OnoteColors.paper300),
-                            ),
-                          ),
-                          child: Text('${i + 1}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight:
-                                    on ? FontWeight.w700 : FontWeight.w400,
-                                color: on ? scheme.primary : null,
-                              )),
-                        ),
+                        onDelete: () => _confirmDelete(context, i),
                       ),
                     ),
                   ),
@@ -2347,6 +2356,229 @@ class _SheetRail extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// One page in the rail: a live thumbnail with a number, selectable, and a
+/// delete control on hover.
+class _SheetCard extends StatefulWidget {
+  const _SheetCard({
+    required this.app,
+    required this.index,
+    required this.dark,
+    required this.aspect,
+    required this.selected,
+    required this.canDelete,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final AppState app;
+  final int index;
+  final bool dark;
+  final double aspect;
+  final bool selected;
+  final bool canDelete;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  State<_SheetCard> createState() => _SheetCardState();
+}
+
+class _SheetCardState extends State<_SheetCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Stack(children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: widget.onTap,
+            child: AspectRatio(
+              aspectRatio: widget.aspect,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: widget.selected
+                        ? scheme.primary
+                        : (widget.dark
+                            ? OnoteColors.night300
+                            : OnoteColors.paper300),
+                    width: widget.selected ? 2 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black
+                          .withValues(alpha: widget.dark ? .3 : .08),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: CustomPaint(
+                    painter: _SheetThumbPainter(
+                      app: widget.app,
+                      sheetIndex: widget.index,
+                      dark: widget.dark,
+                      rev: widget.app.docRevision,
+                    ),
+                    size: Size.infinite,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (widget.canDelete && _hover)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: Material(
+                color: (widget.dark ? Colors.black : Colors.white)
+                    .withValues(alpha: .82),
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 15),
+                  tooltip: 'Delete this page',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  onPressed: widget.onDelete,
+                ),
+              ),
+            ),
+        ]),
+        const SizedBox(height: 3),
+        Text('${widget.index + 1}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight:
+                  widget.selected ? FontWeight.w700 : FontWeight.w400,
+              color: widget.selected ? scheme.primary : null,
+            )),
+      ]),
+    );
+  }
+}
+
+/// Draws one sheet's real content, scaled down: the paper, its ink, the text,
+/// and a light footprint for every other block. Straight from the live page
+/// data, so it never goes stale; cheap enough to redraw on an edit because it
+/// paints the data, not a captured bitmap.
+class _SheetThumbPainter extends CustomPainter {
+  _SheetThumbPainter({
+    required this.app,
+    required this.sheetIndex,
+    required this.dark,
+    required this.rev,
+  });
+
+  final AppState app;
+  final int sheetIndex;
+  final bool dark;
+  final int rev;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final props = app.pageProps;
+    final paper = props.paper;
+    final w = paper.width, h = paper.height;
+    if (w <= 0 || h <= 0) return;
+    final top = sheetIndex * h, bot = top + h;
+    final scale = size.width / w;
+
+    canvas.drawRect(Offset.zero & size,
+        Paint()..color = paperColor(props.paperKind, dark: dark));
+
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.scale(scale);
+    canvas.translate(0, -top);
+
+    final ink = dark ? Colors.white : Colors.black;
+    // Non-ink blocks: real text, a light footprint for the rest.
+    for (final b in app.blocks) {
+      if (b.type == BlockType.ink) continue;
+      final bh = b.h ?? 120;
+      if (b.y + bh < top || b.y > bot) continue;
+      if (b.type == BlockType.text) {
+        final txt = _plain((b.content['text'] as String?) ?? '');
+        if (txt.isEmpty) continue;
+        final tp = TextPainter(
+          text: TextSpan(
+              text: txt,
+              style: TextStyle(
+                  fontSize: 15,
+                  height: 1.3,
+                  color: ink.withValues(alpha: .82))),
+          textDirection: TextDirection.ltr,
+          maxLines: (bh / 20).clamp(1, 60).floor(),
+          ellipsis: '…',
+        )..layout(maxWidth: b.w);
+        tp.paint(canvas, Offset(b.x, b.y));
+      } else {
+        final rect = Rect.fromLTWH(b.x, b.y, b.w, bh);
+        final rr = RRect.fromRectAndRadius(rect, const Radius.circular(4));
+        canvas.drawRRect(rr, Paint()..color = ink.withValues(alpha: .05));
+        canvas.drawRRect(
+            rr,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1
+              ..color = ink.withValues(alpha: .14));
+      }
+    }
+
+    // Ink: the real strokes on this sheet, drawn by the canvas's own painter.
+    final strokes = <Stroke>[];
+    for (final b in app.blocks) {
+      if (b.type != BlockType.ink) continue;
+      final bh = b.h ?? 0;
+      if (b.y + bh < top || b.y > bot) continue;
+      strokes.addAll(_decode(b));
+    }
+    if (strokes.isNotEmpty) {
+      InkPainter(strokes, themeDark: dark).paint(canvas, Size(w, bot));
+    }
+    canvas.restore();
+  }
+
+  /// Decoded strokes per ink block, cached by the block's `updatedAt` so a
+  /// repaint (on an edit elsewhere on the page) does not re-parse every stroke
+  /// — and so the decoded objects keep their identity, which lets
+  /// [InkPainter]'s own outline cache hit. The same reasoning as `_strokesOf`.
+  static final Map<String, ({int rev, List<Stroke> strokes})> _decodeCache = {};
+
+  static List<Stroke> _decode(Block b) {
+    final hit = _decodeCache[b.id];
+    if (hit != null && hit.rev == b.updatedAt) return hit.strokes;
+    final raw = b.content['strokes'];
+    final decoded = <Stroke>[
+      if (raw is List)
+        for (final sj in raw)
+          if (sj is Map) Stroke.fromJson(sj.cast<String, dynamic>()),
+    ];
+    _decodeCache[b.id] = (rev: b.updatedAt, strokes: decoded);
+    return decoded;
+  }
+
+  /// A light strip so headings and bullets read as text, not as markup.
+  static String _plain(String md) => md
+      .replaceAll(RegExp(r'[*_`>#~]'), '')
+      .replaceAll(RegExp(r'^\s*[-+]\s', multiLine: true), '• ')
+      .trim();
+
+  @override
+  bool shouldRepaint(_SheetThumbPainter old) =>
+      old.rev != rev || old.sheetIndex != sheetIndex || old.dark != dark;
 }
 
 /// The Insert Space preview: where the cut is, and how much is opening.

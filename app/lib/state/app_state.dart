@@ -7867,6 +7867,63 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Delete sheet [i]: remove what sits on it and pull the sheets below up by
+  /// one, so the document loses a page. Undoable.
+  ///
+  /// Belonging is decided by the TOP of a thing, the same rule [moveSheet] and
+  /// [insertSpace] use, so a stroke that crosses a page break goes whole with
+  /// wherever its top was rather than being torn. A purely-blank spare page
+  /// (past the content and any added pages) cannot be deleted: it is scroll
+  /// room, not a page.
+  void deleteSheet(int i) {
+    if (!pageProps.isPaged) return;
+    final h = pageProps.paper.height;
+    if (h <= 0 || i < 0 || i >= scrollableSheetCount) return;
+    final isContent = i < sheetCount;
+    if (!isContent && pageProps.addedSheets == 0) return;
+    final top = i * h, bot = top + h;
+    pushUndo();
+    // What lives on this sheet goes.
+    blocks.removeWhere((b) => b.y >= top && b.y < bot);
+    // Everything below it moves up one sheet to close the gap.
+    for (final b in blocks) {
+      if (b.type == BlockType.ink) {
+        final strokes = b.content['strokes'];
+        if (strokes is! List) continue;
+        var touched = false;
+        for (final raw in strokes) {
+          if (raw is! Map) continue;
+          final ys = raw['y'];
+          if (ys is! List || ys.isEmpty) continue;
+          var stop = double.infinity;
+          for (final v in ys) {
+            stop = math.min(stop, (v as num).toDouble());
+          }
+          if (stop < bot) continue; // top rule: only the sheets below
+          for (var k = 0; k < ys.length; k++) {
+            ys[k] = (ys[k] as num).toDouble() - h;
+          }
+          touched = true;
+        }
+        if (touched) {
+          b.updatedAt = nowMs();
+          _refitInkBoundsOf(b);
+        }
+        continue;
+      }
+      if (b.y >= bot) {
+        b.y -= h;
+        b.updatedAt = nowMs();
+      }
+    }
+    // A blank page we delete is one fewer added page; a content page shrinks
+    // the document on its own as the content extent recomputes.
+    if (!isContent && pageProps.addedSheets > 0) pageProps.addedSheets--;
+    docRevision++;
+    markDirty();
+    notifyListeners();
+  }
+
   /// Scroll sheet [i] (0-based) to the top of the viewport.
   void goToSheet(int i) {
     if (!pageProps.isPaged) return;
