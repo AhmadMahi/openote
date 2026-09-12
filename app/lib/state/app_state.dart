@@ -77,7 +77,12 @@ enum Tool {
   /// A straight line with a head on the end you finish at. Same colour and
   /// width as the pen, because it is the pen — the tool only changes what
   /// shape the drag makes.
-  arrow
+  arrow,
+
+  /// A rectangle, drawn by dragging one corner to the opposite one. Like the
+  /// arrow it draws in the pen's colour and weight — the tool only changes
+  /// what shape the drag makes.
+  rectangle
 }
 
 /// What the drawing cursor looks like (INK-11).

@@ -96,6 +96,8 @@ class _FocusPaletteState extends State<FocusPalette> {
                   _tool(scheme, Tool.lasso, Icons.gesture_outlined, 'Lasso'),
                   _tool(scheme, Tool.text, Icons.text_fields, 'Text'),
                   _tool(scheme, Tool.arrow, Icons.north_east, 'Arrow'),
+                  _tool(scheme, Tool.rectangle, Icons.crop_square, 'Rectangle'),
+                  _tool(scheme, Tool.space, Icons.unfold_more, 'Insert space'),
                   _divider(s),
                   IconButton(
                     icon: const Icon(Icons.undo, size: 18),

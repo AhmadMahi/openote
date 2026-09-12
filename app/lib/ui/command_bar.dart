@@ -926,6 +926,7 @@ class _CommandBarState extends State<CommandBar> {
     final inkActive = app.tool == Tool.pen ||
         app.tool == Tool.highlighter ||
         app.tool == Tool.arrow ||
+        app.tool == Tool.rectangle ||
         app.hasInkSelection;
     // One palette, from state. These wells are CONTENTS, not constants: the
     // selected one reopens as an editor (below), which is what makes the row
@@ -944,6 +945,8 @@ class _CommandBarState extends State<CommandBar> {
       toolButton(Tool.lasso, Icons.gesture_outlined, 'Lasso-select ink'),
       toolButton(Tool.arrow, Icons.north_east,
           'Arrow  (A) — drag; the head lands where you let go'),
+      toolButton(Tool.rectangle, Icons.crop_square,
+          'Rectangle  (R) — drag one corner to the opposite one'),
       toolButton(
           Tool.space,
           Icons.unfold_more,

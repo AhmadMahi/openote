@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../ink/arrow.dart';
+import '../ink/rectangle.dart';
 import '../ink/shape_snap.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
@@ -153,8 +154,13 @@ class _PageCanvasState extends State<PageCanvas>
   Stroke? get _wetForPaint => _snapPreview ?? _wet;
 
   bool get _arrowTool => app.tool == Tool.arrow;
+  bool get _rectTool => app.tool == Tool.rectangle;
 
-  /// Where an arrow drag began, in page space.
+  /// The two-corner drag tools (arrow and rectangle) share the same gesture:
+  /// press one point, drag to another, and the shape is decided by the pair.
+  bool get _twoCornerTool => _arrowTool || _rectTool;
+
+  /// Where a two-corner (arrow or rectangle) drag began, in page space.
   Offset2? _arrowFrom;
   Offset2? _arrowTo;
 
@@ -509,25 +515,33 @@ class _PageCanvasState extends State<PageCanvas>
     setState(() => _wet = null);
   }
 
-  /// Put an arrow on the page, in the pen's colour and weight.
-  void _commitArrow(Offset2 from, Offset2 to) {
+  /// The strokes for the current two-corner tool (arrow or rectangle), in the
+  /// pen's colour and weight. Shared by the commit below and the drag preview
+  /// so what you drag is exactly what you get.
+  List<Stroke> _twoCornerStrokes(Offset2 from, Offset2 to, String colorHex) {
+    return _rectTool
+        ? rectangleStrokes(
+            from: from, to: to, colorHex: colorHex, size: app.penSize)
+        : arrowStrokes(
+            from: from, to: to, colorHex: colorHex, size: app.penSize);
+  }
+
+  /// Put a two-corner shape (arrow or rectangle) on the page, in the pen's
+  /// colour and weight.
+  void _commitShape(Offset2 from, Offset2 to) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     var color = app.inkColor;
     if (dark && color == OnoteColors.graphite900) color = OnoteColors.moon0;
-    final strokes = arrowStrokes(
-      from: from,
-      to: to,
-      colorHex: onoteHexOf(color),
-      size: app.penSize,
-    );
-    // Too short to have a direction, so it would be a head pointing nowhere.
+    final strokes = _twoCornerStrokes(from, to, onoteHexOf(color));
+    // Too short to have a shape — an arrow with no direction, a box with no
+    // size — so there is nothing to place.
     if (strokes.isEmpty) return;
     app.pushUndo();
     final target = app.addBlock(
         Block(type: BlockType.ink, x: 0, y: 0, content: {'strokes': []}),
         recordUndo: false);
-    // One block for all three strokes: erase, lasso and recolour all act on a
-    // block's strokes, so an arrow in one block is an arrow they treat whole.
+    // One block for all the shape's strokes: erase, lasso and recolour all act
+    // on a block's strokes, so a shape in one block is one they treat whole.
     for (final st in strokes) {
       (target.content['strokes'] as List).add(st.toJson());
     }
@@ -1350,14 +1364,15 @@ class _PageCanvasState extends State<PageCanvas>
                         ),
                       ),
                     ),
-                  // The arrow being dragged, so its length and direction are
+                  // The shape being dragged, so its size and direction are
                   // visible before it is committed.
                   if (_arrowFrom != null && _arrowTo != null)
                     Positioned.fill(
                       child: IgnorePointer(
                         child: CustomPaint(
-                          painter: _ArrowPreviewPainter(
+                          painter: _ShapePreviewPainter(
                             controller: controller,
+                            tool: app.tool,
                             from: _arrowFrom!,
                             to: _arrowTo!,
                             color: _penCursorColor(dark),
@@ -1410,10 +1425,11 @@ class _PageCanvasState extends State<PageCanvas>
       );
     });
 
-    if (_arrowTool) {
-      // An arrow is a drag with two ends and nothing in between: the shape is
-      // decided by where you start and where you stop, so there is no path to
-      // record and no reason to route it through the ink handlers.
+    if (_twoCornerTool) {
+      // Arrow and rectangle are each a drag with two corners and nothing in
+      // between: the shape is decided by where you start and where you stop,
+      // so there is no path to record and no reason to route it through the
+      // ink handlers.
       canvas = Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: (e) {
@@ -1437,7 +1453,7 @@ class _PageCanvasState extends State<PageCanvas>
             _arrowTo = null;
           });
           if (from == null || to == null) return;
-          _commitArrow(from, to);
+          _commitShape(from, to);
         },
         onPointerCancel: (_) => setState(() {
           _arrowFrom = null;
@@ -1724,9 +1740,10 @@ class _PageCanvasState extends State<PageCanvas>
               },
             Tool.lasso => SystemMouseCursors.precise,
             Tool.space => SystemMouseCursors.resizeUpDown,
-            // Crosshair: an arrow is placed by its two ENDS, so the cursor's
-            // job is to say "this exact point", which is what a reticle is for.
-            Tool.arrow => SystemMouseCursors.precise,
+            // Crosshair: an arrow or rectangle is placed by two exact points,
+            // so the cursor's job is to say "this exact point", which is what
+            // a reticle is for.
+            Tool.arrow || Tool.rectangle => SystemMouseCursors.precise,
             _ => MouseCursor.defer,
           },
           // Leaving the canvas is the one thing the Listener above cannot see,
@@ -2636,15 +2653,17 @@ class _InsertSpacePainter extends CustomPainter {
       old.controller.offset != controller.offset;
 }
 
-/// The arrow being dragged, drawn in screen space.
+/// The two-corner shape (arrow or rectangle) being dragged, drawn in screen
+/// space.
 ///
-/// A preview rather than a live ink stroke: an arrow has no path to record,
-/// so there is nothing to accumulate — only two ends, redrawn as the far one
-/// moves. Built from the same [arrowStrokes] geometry the commit uses, so
-/// what you drag is what you get rather than an approximation of it.
-class _ArrowPreviewPainter extends CustomPainter {
-  _ArrowPreviewPainter({
+/// A preview rather than a live ink stroke: the shape has no path to record,
+/// so there is nothing to accumulate — only two corners, redrawn as the far
+/// one moves. Built from the same geometry the commit uses, so what you drag
+/// is what you get rather than an approximation of it.
+class _ShapePreviewPainter extends CustomPainter {
+  _ShapePreviewPainter({
     required this.controller,
+    required this.tool,
     required this.from,
     required this.to,
     required this.color,
@@ -2652,6 +2671,7 @@ class _ArrowPreviewPainter extends CustomPainter {
   });
 
   final CanvasController controller;
+  final Tool tool;
   final Offset2 from;
   final Offset2 to;
   final Color color;
@@ -2659,8 +2679,9 @@ class _ArrowPreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size _) {
-    final strokes =
-        arrowStrokes(from: from, to: to, colorHex: '#000000', size: size);
+    final strokes = tool == Tool.rectangle
+        ? rectangleStrokes(from: from, to: to, colorHex: '#000000', size: size)
+        : arrowStrokes(from: from, to: to, colorHex: '#000000', size: size);
     if (strokes.isEmpty) return;
     final paint = Paint()
       ..color = color
@@ -2683,7 +2704,8 @@ class _ArrowPreviewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ArrowPreviewPainter old) =>
+  bool shouldRepaint(covariant _ShapePreviewPainter old) =>
+      old.tool != tool ||
       old.from.x != from.x ||
       old.from.y != from.y ||
       old.to.x != to.x ||
