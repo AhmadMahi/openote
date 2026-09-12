@@ -150,8 +150,30 @@ class _PageCanvasState extends State<PageCanvas>
   Timer? _holdTimer;
   Stroke? _snapPreview;
 
-  /// The stroke the ink layer should draw: the proposal if there is one.
-  Stroke? get _wetForPaint => _snapPreview ?? _wet;
+  // ── Auto-shape adjust: hold to size, release to move, click to place ─────
+  //
+  // Once a drawn stroke snaps to a shape (INK-10), the shape LOCKS instead of
+  // being thrown away the moment the hand moves again. While the drawing
+  // pointer stays down, dragging up grows it and down shrinks it. On release
+  // it becomes a floating, draggable copy: a drag repositions it and a plain
+  // tap drops it into the page and hands the pen back.
+  bool _sizingShape = false; // snapped, and the drawing pointer is still down
+  double? _sizeAnchorScreenY; // pointer Y (screen) at the moment it snapped
+  Stroke? _snapBase; // the snapped shape at scale 1, scaled from
+  Offset? _snapCenter; // its centre, the point size grows around
+  Offset? _lastInkScreenPos; // most recent ink-pointer position, for the anchor
+
+  Stroke? _placedShape; // released and active: draggable, not yet committed
+  Stroke? _placedDragBase; // the placed shape when the current drag began
+  Offset? _dragAnchorScreen; // pointer position (screen) when the drag began
+  double _placedMoved = 0; // furthest the current pointer travelled (tap vs drag)
+
+  /// A tap may wander this far (screen px) and still count as a placing click.
+  static const double _placeTapSlop = 5.0;
+
+  /// The stroke the ink layer should draw: a placed shape, else a proposal,
+  /// else the wet stroke.
+  Stroke? get _wetForPaint => _placedShape ?? _snapPreview ?? _wet;
 
   bool get _arrowTool => app.tool == Tool.arrow;
   bool get _rectTool => app.tool == Tool.rectangle;
@@ -272,6 +294,7 @@ class _PageCanvasState extends State<PageCanvas>
   void _cancelWetStroke() {
     _cancelHold();
     _snapPreview = null;
+    _resetSizing();
     if (_wet != null) setState(() => _wet = null);
   }
 
@@ -366,6 +389,15 @@ class _PageCanvasState extends State<PageCanvas>
 
   void _inkDown(PointerDownEvent e) {
     app.claimedPointers.remove(e.pointer); // keep the claim set tidy
+    _lastInkScreenPos = e.localPosition;
+    // A placed shape is waiting to be moved or dropped: this pointer drives
+    // it, not a new stroke. A drag repositions it; a tap (below) drops it.
+    if (_placedShape != null) {
+      _placedDragBase = _placedShape;
+      _dragAnchorScreen = e.localPosition;
+      _placedMoved = 0;
+      return;
+    }
     // The pen's own erase signals, per gesture: the tail end, or the barrel
     // button held at contact. (kPrimaryStylusButton shares its bit with
     // kSecondaryButton, which is exactly how Windows reports a barrel press —
@@ -405,7 +437,19 @@ class _PageCanvasState extends State<PageCanvas>
       _eraseAt(controller.screenToPage(e.localPosition));
       return;
     }
+    _lastInkScreenPos = e.localPosition;
+    // Moving a placed shape around before it is dropped.
+    if (_placedShape != null) {
+      _dragPlacedShape(e);
+      return;
+    }
     if (_wet == null) return;
+    // After a snap, the shape is LOCKED: dragging resizes it instead of
+    // adding to the stroke or throwing the proposal away.
+    if (_sizingShape) {
+      _resizeSnappedShape(e);
+      return;
+    }
     // Repaint-only: grow the stroke and nudge the ink painter. No setState —
     // rebuilding every visible block per point made inking sluggish.
     _addPoint(e, _clampToPagePoint(controller.screenToPage(e.localPosition)));
@@ -415,6 +459,30 @@ class _PageCanvasState extends State<PageCanvas>
     // gesture feels broken on some hardware.
     if (app.autoShape) _noteDrawingMovement();
     _wetTick.value++;
+  }
+
+  /// Resize the snapped shape while the drawing pointer is still held: up
+  /// grows it, down shrinks it, about the centre it snapped at.
+  void _resizeSnappedShape(PointerMoveEvent e) {
+    final base = _snapBase, c = _snapCenter, anchorY = _sizeAnchorScreenY;
+    if (base == null || c == null || anchorY == null) return;
+    // Up is a smaller screen Y, so `anchorY - y` is positive when growing.
+    // ~200px of travel doubles or halves it, which feels neither twitchy nor
+    // sluggish; clamped so it can never invert or vanish.
+    final dy = anchorY - e.localPosition.dy;
+    final factor = (1 + dy / 200.0).clamp(0.15, 6.0);
+    setState(() => _snapPreview = _scaleStroke(base, c, factor));
+  }
+
+  /// Drag the placed shape to a new spot. Screen delta becomes page delta so
+  /// it tracks the pointer at any zoom.
+  void _dragPlacedShape(PointerMoveEvent e) {
+    final base = _placedDragBase, start = _dragAnchorScreen;
+    if (base == null || start == null) return;
+    final d = e.localPosition - start;
+    _placedMoved = math.max(_placedMoved, d.distance);
+    setState(() => _placedShape =
+        _translateStroke(base, d.dx / controller.scale, d.dy / controller.scale));
   }
 
   /// Distance a pointer may wander and still count as held still.
@@ -437,13 +505,22 @@ class _PageCanvasState extends State<PageCanvas>
     _holdTimer = Timer(_holdToSnap, _offerShape);
   }
 
-  /// Hold expired: propose a shape, if the stroke reads as one.
+  /// Hold expired: propose a shape, if the stroke reads as one. The proposal
+  /// then LOCKS — from here dragging resizes it rather than redrawing — so the
+  /// snap arms the sizing state and remembers the shape and where it sits.
   void _offerShape() {
     final w = _wet;
     if (w == null || !app.autoShape) return;
     final snapped = ShapeSnap.snap(w);
     if (snapped == null) return;
-    setState(() => _snapPreview = snapped);
+    setState(() {
+      _snapPreview = snapped;
+      _snapBase = snapped;
+      _snapCenter = _strokeCenter(snapped);
+      _sizingShape = true;
+      _sizeAnchorScreenY =
+          _lastInkScreenPos?.dy ?? controller.pageToScreen(_snapCenter!).dy;
+    });
   }
 
   void _cancelHold() {
@@ -451,6 +528,52 @@ class _PageCanvasState extends State<PageCanvas>
     _holdTimer = null;
     _holdAnchor = null;
   }
+
+  /// Clear the auto-shape sizing state (the snapped-and-holding phase). Does
+  /// not touch a placed shape, which outlives the gesture that made it.
+  void _resetSizing() {
+    _sizingShape = false;
+    _snapBase = null;
+    _snapCenter = null;
+    _sizeAnchorScreenY = null;
+  }
+
+  /// The centre of a stroke's bounding box, in page space.
+  Offset _strokeCenter(Stroke s) {
+    var minX = double.infinity, minY = double.infinity;
+    var maxX = -double.infinity, maxY = -double.infinity;
+    for (var i = 0; i < s.x.length; i++) {
+      minX = math.min(minX, s.x[i]);
+      maxX = math.max(maxX, s.x[i]);
+      minY = math.min(minY, s.y[i]);
+      maxY = math.max(maxY, s.y[i]);
+    }
+    return Offset((minX + maxX) / 2, (minY + maxY) / 2);
+  }
+
+  /// A copy of [s] with its coordinates remapped, keeping pressure, tilt and
+  /// timing intact so the resized or moved shape is still the same ink.
+  Stroke _mapStroke(
+          Stroke s, double Function(double) fx, double Function(double) fy) =>
+      Stroke(
+        tool: s.tool,
+        colorHex: s.colorHex,
+        size: s.size,
+        opacity: s.opacity,
+        x: [for (final v in s.x) fx(v)],
+        y: [for (final v in s.y) fy(v)],
+        p: List<double>.of(s.p),
+        tx: List<double>.of(s.tx),
+        ty: List<double>.of(s.ty),
+        t: List<int>.of(s.t),
+      );
+
+  Stroke _scaleStroke(Stroke s, Offset c, double factor) =>
+      _mapStroke(s, (v) => c.dx + (v - c.dx) * factor,
+          (v) => c.dy + (v - c.dy) * factor);
+
+  Stroke _translateStroke(Stroke s, double dx, double dy) =>
+      _mapStroke(s, (v) => v + dx, (v) => v + dy);
 
   Offset _clampToPagePoint(Offset p) =>
       Offset(math.max(0, p.dx), math.max(0, p.dy));
@@ -466,11 +589,37 @@ class _PageCanvasState extends State<PageCanvas>
   }
 
   void _inkUp(PointerUpEvent e) {
+    // A placed shape is being adjusted: a plain tap drops it into the page and
+    // hands the pen back; a drag has just moved it, so it stays active for the
+    // next drag or the placing tap.
+    if (_placedShape != null) {
+      final s = _placedShape!;
+      final wasTap = _placedMoved < _placeTapSlop;
+      _placedDragBase = null;
+      _dragAnchorScreen = null;
+      if (wasTap) {
+        setState(() => _placedShape = null);
+        _commitStroke(s);
+      }
+      return;
+    }
     final wasErasing = app.tool == Tool.eraser || _gestureErase;
     final erasedSomething = _eraseUndoPushed;
     _eraseUndoPushed = false;
     _gestureErase = false;
     _cancelHold();
+    // A snapped shape (resized or not) does NOT commit on release. It becomes
+    // a floating, draggable copy; the placing tap above is what commits it.
+    if (_sizingShape && _snapPreview != null) {
+      setState(() {
+        _placedShape = _snapPreview;
+        _snapPreview = null;
+        _wet = null;
+        _resetSizing();
+      });
+      return;
+    }
+    _resetSizing();
     // ERASING HANDS THE PEN BACK.
     //
     // Only when something was actually rubbed out: a stray click with the
@@ -497,6 +646,14 @@ class _PageCanvasState extends State<PageCanvas>
     // now, and it is a signal you can watch and take back.
     final stroke = _snapPreview ?? w;
     _snapPreview = null;
+    _commitStroke(stroke, pushUndo: false);
+    setState(() => _wet = null);
+  }
+
+  /// Write [stroke] into the page — the recent ink block if there is one, or a
+  /// fresh block. Shared by live inking and by dropping a placed auto-shape.
+  void _commitStroke(Stroke stroke, {bool pushUndo = true}) {
+    if (pushUndo) app.pushUndo();
     Block? target;
     for (final b in app.blocks.reversed) {
       if (b.type == BlockType.ink &&
@@ -512,7 +669,7 @@ class _PageCanvasState extends State<PageCanvas>
     (target.content['strokes'] as List).add(stroke.toJson());
     _refitInkBounds(target);
     app.updateBlock(target);
-    setState(() => _wet = null);
+    setState(() {});
   }
 
   /// The strokes for the current two-corner tool (arrow or rectangle), in the
@@ -1113,6 +1270,18 @@ class _PageCanvasState extends State<PageCanvas>
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // A placed auto-shape lives on the pen/highlighter path. If the tool
+    // changed out from under it (say to Select), drop it into the page rather
+    // than leave a shape on screen with nothing able to move it.
+    if (_placedShape != null &&
+        app.tool != Tool.pen &&
+        app.tool != Tool.highlighter) {
+      final s = _placedShape;
+      _placedShape = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (s != null && mounted) _commitStroke(s);
+      });
+    }
     // Page size is content-driven (this bounds scrolling — constrained
     // horizontal at normal zoom). The backdrop is drawn the same colour as the
     // page (seamless — no "page floating on canvas"), and clicks anywhere in
@@ -1377,6 +1546,21 @@ class _PageCanvasState extends State<PageCanvas>
                             to: _arrowTo!,
                             color: _penCursorColor(dark),
                             size: app.penSize,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // A placed auto-shape, waiting to be moved or dropped: a soft
+                  // outline round it says it is still live — drag to move, tap
+                  // to place.
+                  if (_placedShape != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _PlacedShapePainter(
+                            controller: controller,
+                            shape: _placedShape!,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                       ),
@@ -1833,7 +2017,7 @@ class _PagePainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..color = pageColor);
     // Grain covers the whole surface; a picture is fitted to the page's
     // width and repeated down it, since a canvas has no bottom.
-    if (paper == 'texture' || paper == 'ambient') {
+    if (paper == 'texture' || paper.startsWith('ambient')) {
       paintPaperDetail(canvas, Offset.zero & size, paper, dark: dark);
     } else if (paper == 'image') {
       final left = controller.pageToScreen(Offset.zero);
@@ -2712,6 +2896,53 @@ class _ShapePreviewPainter extends CustomPainter {
       old.to.y != to.y ||
       old.color != color ||
       old.size != size ||
+      old.controller.scale != controller.scale ||
+      old.controller.offset != controller.offset;
+}
+
+/// A soft rounded outline around a placed auto-shape, so it reads as still
+/// live — drag to move it, tap to drop it. Just the frame; the shape itself is
+/// drawn by the ink painter as the wet stroke.
+class _PlacedShapePainter extends CustomPainter {
+  _PlacedShapePainter({
+    required this.controller,
+    required this.shape,
+    required this.color,
+  });
+
+  final CanvasController controller;
+  final Stroke shape;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size _) {
+    if (shape.x.isEmpty) return;
+    var minX = double.infinity, minY = double.infinity;
+    var maxX = -double.infinity, maxY = -double.infinity;
+    for (var i = 0; i < shape.x.length; i++) {
+      minX = math.min(minX, shape.x[i]);
+      maxX = math.max(maxX, shape.x[i]);
+      minY = math.min(minY, shape.y[i]);
+      maxY = math.max(maxY, shape.y[i]);
+    }
+    final tl = controller.pageToScreen(Offset(minX, minY));
+    final br = controller.pageToScreen(Offset(maxX, maxY));
+    final rect = Rect.fromPoints(tl, br).inflate(10);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(10));
+    canvas.drawRRect(
+        rrect, Paint()..color = color.withValues(alpha: .06));
+    canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = color.withValues(alpha: .55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlacedShapePainter old) =>
+      old.shape != shape ||
+      old.color != color ||
       old.controller.scale != controller.scale ||
       old.controller.offset != controller.offset;
 }

@@ -62,6 +62,41 @@ void main() {
     });
   });
 
+  group('ambient family', () {
+    const variants = [
+      'ambient-sunset',
+      'ambient-ocean',
+      'ambient-forest',
+      'ambient-dusk',
+      'ambient-aurora',
+    ];
+
+    test('the variants are offered, after the default ambient', () {
+      expect(kPapers.first, 'ambient');
+      for (final v in variants) {
+        expect(kPapers.contains(v), isTrue, reason: '$v is not offered');
+      }
+    });
+
+    test('each variant has its own Ambient-prefixed name', () {
+      final names = <String>{};
+      for (final v in variants) {
+        final label = paperLabel(v);
+        expect(label.startsWith('Ambient '), isTrue, reason: v);
+        expect(names.add(label), isTrue, reason: '$label is not unique');
+      }
+    });
+
+    test('the whole family shares the default ambient rule colour', () {
+      for (final dark in [false, true]) {
+        final base = paperRuleColor('ambient', dark: dark);
+        for (final v in variants) {
+          expect(paperRuleColor(v, dark: dark), base, reason: '$v (dark=$dark)');
+        }
+      }
+    });
+  });
+
   group('new-page defaults', () {
     var haveSqlite = false;
     setUpAll(() => haveSqlite = initSqliteForTests());

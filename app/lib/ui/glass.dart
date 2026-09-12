@@ -273,8 +273,12 @@ class _AmbientPainter extends CustomPainter {
 
 /// The ambient glow itself, painted into [rect]: three soft radial lights.
 /// Shared by the window backdrop and the `ambient` paper so both agree.
+/// The signature ambient wash and its variants. Each is the same three-glow
+/// composition — a large glow bottom-left, a medium one top-right, a small one
+/// up top — so they feel like one family; only the colours change. The default
+/// `ambient` is unchanged. Variants are chosen as a page paper (`paper.dart`).
 void paintAmbient(Canvas canvas, Rect rect,
-    {required bool dark, double strength = 1}) {
+    {required bool dark, double strength = 1, String variant = 'ambient'}) {
   void glow(Alignment at, double r, Color c, double a) {
     final centre = at.withinRect(rect);
     final radius = r * math.max(rect.width, rect.height);
@@ -292,15 +296,39 @@ void paintAmbient(Canvas canvas, Rect rect,
           ));
   }
 
-  if (dark) {
-    glow(const Alignment(-1.1, 1.1), .75, const Color(0xFF2A3C7A), .45);
-    glow(const Alignment(1.1, -1.1), .65, const Color(0xFF5A2A52), .35);
-    glow(const Alignment(-.2, -.9), .5, const Color(0xFF3A2E6E), .18);
-  } else {
-    glow(const Alignment(-1.1, 1.1), .75, const Color(0xFFB9CFFF), .55);
-    glow(const Alignment(1.1, -1.1), .65, const Color(0xFFF7C9E0), .45);
-    glow(const Alignment(-.2, -.9), .5, const Color(0xFFD9D3FF), .28);
+  // Three (colour, alpha) pairs — bottom-left, top-right, top — per variant
+  // and theme. The positions and radii are shared below.
+  final ({int c, double a}) g0, g1, g2;
+  switch (variant) {
+    case 'ambient-sunset': // warm amber, rose, peach
+      (g0, g1, g2) = dark
+          ? ((c: 0x6E4A2A, a: .44), (c: 0x6E2A3A, a: .34), (c: 0x5A3A24, a: .18))
+          : ((c: 0xFFD9A8, a: .55), (c: 0xFBC0C6, a: .48), (c: 0xFFE3C4, a: .28));
+    case 'ambient-ocean': // teal, sky, aqua
+      (g0, g1, g2) = dark
+          ? ((c: 0x1F4A5A, a: .44), (c: 0x23415A, a: .34), (c: 0x1F5A50, a: .16))
+          : ((c: 0xA8E0E6, a: .52), (c: 0xBFE0FF, a: .46), (c: 0xC6F0EA, a: .26));
+    case 'ambient-forest': // green, moss, sage
+      (g0, g1, g2) = dark
+          ? ((c: 0x234A2E, a: .42), (c: 0x3A4A23, a: .30), (c: 0x1F4A34, a: .16))
+          : ((c: 0xBFE6C2, a: .50), (c: 0xDCEBB8, a: .44), (c: 0xCFE8D2, a: .26));
+    case 'ambient-dusk': // violet, magenta, indigo
+      (g0, g1, g2) = dark
+          ? ((c: 0x3A2E6E, a: .46), (c: 0x4A2A5A, a: .35), (c: 0x2E2A6E, a: .20))
+          : ((c: 0xCBBFFF, a: .55), (c: 0xE9C4F0, a: .46), (c: 0xD9D3FF, a: .30));
+    case 'ambient-aurora': // green, teal, violet
+      (g0, g1, g2) = dark
+          ? ((c: 0x1F5A4A, a: .40), (c: 0x2A3C7A, a: .34), (c: 0x4A2A5A, a: .20))
+          : ((c: 0xB8F0D8, a: .50), (c: 0xC4D4FF, a: .46), (c: 0xE0C6F0, a: .28));
+    default: // 'ambient' — the signature wash, unchanged
+      (g0, g1, g2) = dark
+          ? ((c: 0x2A3C7A, a: .45), (c: 0x5A2A52, a: .35), (c: 0x3A2E6E, a: .18))
+          : ((c: 0xB9CFFF, a: .55), (c: 0xF7C9E0, a: .45), (c: 0xD9D3FF, a: .28));
   }
+
+  glow(const Alignment(-1.1, 1.1), .75, Color(0xFF000000 | g0.c), g0.a);
+  glow(const Alignment(1.1, -1.1), .65, Color(0xFF000000 | g1.c), g1.a);
+  glow(const Alignment(-.2, -.9), .5, Color(0xFF000000 | g2.c), g2.a);
 }
 
 /// A floating glass card: the sidebar, popovers, anything with corners that

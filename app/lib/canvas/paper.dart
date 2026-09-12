@@ -18,6 +18,11 @@ import '../ui/glass.dart' show paintAmbient;
 /// choosing it opens a file dialog rather than applying at once.
 const kPapers = [
   'ambient',
+  'ambient-sunset',
+  'ambient-ocean',
+  'ambient-forest',
+  'ambient-dusk',
+  'ambient-aurora',
   'white',
   'grey',
   'cream',
@@ -33,6 +38,11 @@ const kPapers = [
 
 String paperLabel(String paper) => switch (paper) {
       'ambient' => 'Ambient',
+      'ambient-sunset' => 'Ambient sunset',
+      'ambient-ocean' => 'Ambient ocean',
+      'ambient-forest' => 'Ambient forest',
+      'ambient-dusk' => 'Ambient dusk',
+      'ambient-aurora' => 'Ambient aurora',
       'grey' => 'Grey',
       'cream' => 'Cream',
       'texture' => 'Paper texture',
@@ -55,6 +65,17 @@ Color paperColor(String paper, {required bool dark}) => switch (paper) {
       // The default: a near-white with the room's glow laid over it — see
       // `paintPaperDetail` and `paintAmbient`.
       'ambient' => dark ? const Color(0xFF15161C) : const Color(0xFFF9FAFF),
+      // The variants keep a near-neutral sheet; the glow gives the colour.
+      'ambient-sunset' =>
+        dark ? const Color(0xFF181410) : const Color(0xFFFFF7F0),
+      'ambient-ocean' =>
+        dark ? const Color(0xFF10171B) : const Color(0xFFF0FAFC),
+      'ambient-forest' =>
+        dark ? const Color(0xFF121810) : const Color(0xFFF2FAF2),
+      'ambient-dusk' =>
+        dark ? const Color(0xFF16151E) : const Color(0xFFF8F5FF),
+      'ambient-aurora' =>
+        dark ? const Color(0xFF10181A) : const Color(0xFFF1FBF6),
       'grey' => dark ? const Color(0xFF232328) : const Color(0xFFECECEF),
       'cream' => dark ? const Color(0xFF211F1A) : const Color(0xFFF8F2E2),
       'texture' => dark ? const Color(0xFF1F1D19) : const Color(0xFFF4EEDE),
@@ -71,11 +92,15 @@ Color paperColor(String paper, {required bool dark}) => switch (paper) {
 
 /// The pattern-line colour that reads on this paper. The greys that sit on
 /// white vanish on cream and shout on grey, so each paper names its own.
-Color paperRuleColor(String paper, {required bool dark}) => switch (paper) {
-      // Quieter than white's: the glow is the texture, the dots only a beat.
-      'ambient' => dark
-          ? Colors.white.withValues(alpha: .10)
-          : const Color(0xFF1F2433).withValues(alpha: .11),
+Color paperRuleColor(String paper, {required bool dark}) {
+  // The whole ambient family shares one quiet rule: the glow is the texture,
+  // the dots only a beat.
+  if (paper.startsWith('ambient')) {
+    return dark
+        ? Colors.white.withValues(alpha: .10)
+        : const Color(0xFF1F2433).withValues(alpha: .11);
+  }
+  return switch (paper) {
       'grey' => dark ? const Color(0xFF35353C) : const Color(0xFFD8D8DD),
       'cream' ||
       'texture' =>
@@ -96,6 +121,7 @@ Color paperRuleColor(String paper, {required bool dark}) => switch (paper) {
       'charcoal' || 'midnight' => Colors.white.withValues(alpha: .10),
       _ => dark ? OnoteColors.night200 : OnoteColors.paper200,
     };
+}
 
 /// A repeating tile of paper grain, drawn once per theme and shared.
 ///
@@ -143,8 +169,8 @@ ui.Image _grain({required bool dark}) {
 /// paper all the way down.
 void paintPaperDetail(Canvas canvas, Rect rect, String paper,
     {required bool dark, ui.Image? image, bool cover = true}) {
-  if (paper == 'ambient') {
-    paintAmbient(canvas, rect, dark: dark);
+  if (paper.startsWith('ambient')) {
+    paintAmbient(canvas, rect, dark: dark, variant: paper);
     return;
   }
   if (paper == 'texture') {
