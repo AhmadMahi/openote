@@ -253,6 +253,52 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final laid = _layout();
 
+    final canvas = Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.tab): _ChildIntent(),
+        SingleActivator(LogicalKeyboardKey.tab, shift: true): _OutdentIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _ChildIntent: CallbackAction<_ChildIntent>(onInvoke: (_) {
+            if (_editingId != null) _addChild(_editingId!);
+            return null;
+          }),
+          _OutdentIntent: CallbackAction<_OutdentIntent>(onInvoke: (_) {
+            if (_editingId != null) _outdent(_editingId!);
+            return null;
+          }),
+        },
+        child: ClipRect(
+          child: InteractiveViewer(
+            constrained: false,
+            minScale: 0.4,
+            maxScale: 2.5,
+            boundaryMargin: const EdgeInsets.all(400),
+            child: SizedBox(
+              width: math.max(laid.size.width, 40),
+              height: math.max(laid.size.height, 40),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _ConnectorPainter(
+                        root: _root,
+                        rects: laid.rects,
+                        color: s.border,
+                      ),
+                    ),
+                  ),
+                  for (final entry in laid.rects.entries)
+                    _positionedNode(context, s, dark, entry.key, entry.value),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
     return Container(
       decoration: BoxDecoration(
         color: s.raised,
@@ -260,62 +306,26 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
         border: Border.all(color: s.border),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _toolbar(context, s),
-          Flexible(
-            child: Shortcuts(
-              shortcuts: const <ShortcutActivator, Intent>{
-                SingleActivator(LogicalKeyboardKey.tab): _ChildIntent(),
-                SingleActivator(LogicalKeyboardKey.tab, shift: true):
-                    _OutdentIntent(),
-              },
-              child: Actions(
-                actions: <Type, Action<Intent>>{
-                  _ChildIntent: CallbackAction<_ChildIntent>(onInvoke: (_) {
-                    if (_editingId != null) _addChild(_editingId!);
-                    return null;
-                  }),
-                  _OutdentIntent: CallbackAction<_OutdentIntent>(onInvoke: (_) {
-                    if (_editingId != null) _outdent(_editingId!);
-                    return null;
-                  }),
-                },
-                child: ClipRect(
-                  child: InteractiveViewer(
-                    constrained: false,
-                    minScale: 0.4,
-                    maxScale: 2.5,
-                    boundaryMargin: const EdgeInsets.all(400),
-                    child: SizedBox(
-                      width: math.max(laid.size.width, 40),
-                      height: math.max(laid.size.height, 40),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _ConnectorPainter(
-                                root: _root,
-                                rects: laid.rects,
-                                color: s.border,
-                              ),
-                            ),
-                          ),
-                          for (final entry in laid.rects.entries)
-                            _positionedNode(
-                                context, s, dark, entry.key, entry.value),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      // A definite height for the map area, because a free block hands us an
+      // UNBOUNDED height and a Flexible/Expanded cannot live in that. When the
+      // block has been resized we fill the height it was given; otherwise the
+      // map is as tall as its tree, capped so a big map still fits on the page
+      // and pans/zooms inside.
+      child: LayoutBuilder(builder: (context, cons) {
+        const toolbarH = 44.0;
+        final mapH = cons.maxHeight.isFinite
+            ? math.max(80.0, cons.maxHeight - toolbarH)
+            : math.min(laid.size.height + 12, 360.0);
+        return Column(
+          mainAxisSize:
+              cons.maxHeight.isFinite ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: toolbarH, child: _toolbar(context, s)),
+            SizedBox(height: mapH, child: canvas),
+          ],
+        );
+      }),
     );
   }
 
@@ -334,9 +344,6 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
       child: Row(
         children: [
           Icon(Icons.account_tree_outlined, size: 16, color: s.textSecondary),
-          const SizedBox(width: OnoteSpace.x2),
-          Text('Mind map',
-              style: OnoteType.caption.copyWith(color: s.textSecondary)),
           const Spacer(),
           btn(Icons.subdirectory_arrow_right, 'Add child  (Tab)',
               sel == null ? null : () => _addChild(sel)),
