@@ -61,10 +61,10 @@ void main() {
   }
 
   group('the catalog itself', () {
-    test('is thirteen things, grouped for the menu', () {
+    test('is fourteen things, grouped for the menu', () {
       expect(kInsertGroups.map((g) => g.title).toList(),
           ['Write', 'Bring in', 'Link up']);
-      expect(kInsertItems.length, 13);
+      expect(kInsertItems.length, 14);
     });
 
     test('the ribbon is one row, in the order it has always been', () {
@@ -77,6 +77,7 @@ void main() {
         'code',
         'table',
         'board',
+        'quiz',
         'image',
         'pdf',
         'file',
@@ -112,7 +113,7 @@ void main() {
         expect(kInsertItems.map((i) => i.id), contains(id), reason: id);
         expect(menu.contains(id), isFalse, reason: id);
       }
-      expect(menu.length, 10);
+      expect(menu.length, 11);
     });
 
     test('every label is a noun a fifteen-year-old uses', () {

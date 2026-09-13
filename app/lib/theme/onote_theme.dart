@@ -373,14 +373,19 @@ ThemeData onoteTheme(Brightness brightness,
             EdgeInsets.symmetric(horizontal: OnoteSpace.x4)),
         textStyle: WidgetStatePropertyAll(
             OnoteType.caption.copyWith(fontWeight: FontWeight.w500)),
-        side: WidgetStatePropertyAll(BorderSide(color: surfaces.border)),
+        // The chosen segment is filled with the accent so it reads as
+        // selected at a glance; an unselected one sits quietly on the track.
+        // (It was `surfaces.lift`, a half-step off `well` that was nearly
+        // invisible — the owner could not tell which option was set.)
+        side: WidgetStateProperty.resolveWith((s) => BorderSide(
+            color: s.contains(WidgetState.selected) ? primary : surfaces.border)),
         shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: OnoteRadius.mdAll)),
         backgroundColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? surfaces.lift : surfaces.well),
+            s.contains(WidgetState.selected) ? primary : surfaces.well),
         foregroundColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.selected)
-                ? surfaces.textPrimary
+                ? scheme.onPrimary
                 : surfaces.textSecondary),
         overlayColor: WidgetStateProperty.resolveWith(overlayFor),
       ),

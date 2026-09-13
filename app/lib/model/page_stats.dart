@@ -177,6 +177,9 @@ List<String> _sourceOf(Block b) {
     case BlockType.board:
     case BlockType.graph:
     case BlockType.substitute:
+    // A quiz's words are imported from a file, not written on the page, so
+    // they do not count toward the page's own word count.
+    case BlockType.quiz:
     case BlockType.unknown:
       return const [];
   }

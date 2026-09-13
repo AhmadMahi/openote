@@ -60,6 +60,7 @@ import '../state/app_state.dart';
 import '../store/media_store.dart';
 import 'insert_portal_dialog.dart';
 import 'media_link_dialog.dart';
+import 'quiz_import_dialog.dart';
 import 'onote_dialog.dart';
 import 'sidebar.dart';
 
@@ -185,6 +186,7 @@ const List<String> kRibbonOrder = [
   'code',
   'table',
   'board',
+  'quiz',
   'image',
   'pdf',
   'file',
@@ -327,6 +329,15 @@ final List<InsertGroup> kInsertGroups = [
         ));
         app.select(b.id);
       },
+    ),
+    InsertItem(
+      id: 'quiz',
+      icon: Icons.quiz_outlined,
+      label: 'Quiz',
+      tooltip: 'Multiple choice, built from a CSV or Excel file',
+      opensPicker: true,
+      size: const Size(420, 320),
+      run: (context, app, at) => showQuizImportDialog(context, app, at),
     ),
   ]),
   InsertGroup(title: 'Bring in', items: [

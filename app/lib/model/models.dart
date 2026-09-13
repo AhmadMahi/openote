@@ -356,6 +356,10 @@ enum BlockType {
   // An equation with a value plugged into it, and the result — the graph's
   // sibling for a single point rather than a curve. Same `rawType` safety.
   substitute,
+  // A multiple-choice quiz, populated from a CSV or Excel file. Additive
+  // under the same `rawType` contract: an older build shows "Unsupported
+  // block: quiz" and round-trips it untouched.
+  quiz,
   unknown
 }
 
