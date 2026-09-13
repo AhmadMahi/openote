@@ -53,6 +53,7 @@ import 'package:flutter/material.dart';
 
 import '../canvas/media_drop.dart';
 import '../editor/board_block_view.dart';
+import '../mindmap/mindmap.dart';
 import '../export/csv_import.dart';
 import '../export/pdf_import.dart';
 import '../model/models.dart';
@@ -187,6 +188,7 @@ const List<String> kRibbonOrder = [
   'table',
   'board',
   'quiz',
+  'mindmap',
   'image',
   'pdf',
   'file',
@@ -338,6 +340,34 @@ final List<InsertGroup> kInsertGroups = [
       opensPicker: true,
       size: const Size(420, 320),
       run: (context, app, at) => showQuizImportDialog(context, app, at),
+    ),
+    InsertItem(
+      id: 'mindmap',
+      icon: Icons.account_tree_outlined,
+      label: 'Mind map',
+      tooltip: 'A branching tree you build with Enter and Tab',
+      size: const Size(360, 240),
+      extras: [
+        InsertItem(
+          id: 'mindmap-file',
+          icon: Icons.subject,
+          label: 'From a Markdown file',
+          tooltip: 'Turn an outline into a map',
+          opensPicker: true,
+          size: const Size(360, 240),
+          run: insertMindmapFromPickedFile,
+        ),
+      ],
+      run: (context, app, at) async {
+        final b = app.addBlock(Block(
+          type: BlockType.mindmap,
+          x: at.dx,
+          y: at.dy,
+          w: 360,
+          content: {'root': MindNode.starter().toJson()},
+        ));
+        app.select(b.id);
+      },
     ),
   ]),
   InsertGroup(title: 'Bring in', items: [
@@ -521,6 +551,24 @@ Future<void> insertPickedFile(
         'mime': 'application/octet-stream',
         'size': bytes.length,
       }));
+  app.select(b.id);
+}
+
+Future<void> insertMindmapFromPickedFile(
+    BuildContext context, AppState app, Offset at) async {
+  final file = await _pick(context, groups: const [
+    XTypeGroup(label: 'Markdown', extensions: ['md', 'markdown', 'txt'])
+  ]);
+  if (file == null) return;
+  final text = await file.readAsString();
+  final root = parseMarkdownOutline(text);
+  final b = app.addBlock(Block(
+    type: BlockType.mindmap,
+    x: at.dx,
+    y: at.dy,
+    w: 420,
+    content: {'root': root.toJson()},
+  ));
   app.select(b.id);
 }
 

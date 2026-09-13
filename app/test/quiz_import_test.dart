@@ -71,7 +71,8 @@ void main() {
       expect(r.questions.single.correct, 0);
     });
 
-    test('a numeric answer still names a position when it is not an option', () {
+    test('a numeric answer still names a position when it is not an option',
+        () {
       final r = rows([
         ['Capital?', 'Paris', 'London', 'Berlin', 'Madrid', '3', ''],
       ]);
@@ -164,6 +165,20 @@ void main() {
     test('TSV is tab-separated', () {
       final r = parseQuizFile('q.tsv', b('Q\ta\tb\tc\td\t1\t\n'));
       expect(r.isOk, isTrue, reason: r.error);
+      expect(r.questions.single.options, ['a', 'b', 'c', 'd']);
+    });
+
+    test('pasted comma text parses', () {
+      final r = parseQuizText(
+          'Capital of France?,Paris,London,Berlin,Madrid,1,Since 987.');
+      expect(r.isOk, isTrue, reason: r.error);
+      expect(r.questions.single.correct, 0);
+    });
+
+    test('pasted tab-separated text is detected', () {
+      final r = parseQuizText('Q\ta\tb\tc\td\tB\t');
+      expect(r.isOk, isTrue, reason: r.error);
+      expect(r.questions.single.correct, 1);
       expect(r.questions.single.options, ['a', 'b', 'c', 'd']);
     });
 

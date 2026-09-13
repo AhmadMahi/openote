@@ -49,6 +49,7 @@ class QuizImportDialog extends StatefulWidget {
 
 class _QuizImportDialogState extends State<QuizImportDialog> {
   final _name = TextEditingController(text: 'Quiz');
+  final _paste = TextEditingController();
   List<QuizQuestion>? _questions;
   String? _error;
   String? _status;
@@ -56,7 +57,34 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _paste.dispose();
     super.dispose();
+  }
+
+  void _loadPaste() {
+    final text = _paste.text;
+    if (text.trim().isEmpty) {
+      setState(() {
+        _error = 'Paste some rows first.';
+        _questions = null;
+        _status = null;
+      });
+      return;
+    }
+    final res = parseQuizText(text);
+    setState(() {
+      if (res.isOk) {
+        _questions = res.questions;
+        _error = null;
+        _status = '${res.questions.length} '
+            'question${res.questions.length == 1 ? '' : 's'} read from the '
+            'pasted text';
+      } else {
+        _questions = null;
+        _status = null;
+        _error = res.error;
+      }
+    });
   }
 
   Future<void> _pickFile() async {
@@ -103,9 +131,10 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
     if (loc == null) return;
     try {
       await File(loc.path).writeAsString(quizTemplateCsv());
-      if (mounted)
+      if (mounted) {
         setState(
             () => _status = 'Template saved. Fill it in, then upload it here.');
+      }
     } catch (e) {
       if (mounted) setState(() => _error = "Couldn't save the template: $e");
     }
@@ -159,6 +188,31 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
                   label: Text(ready ? 'Choose another file' : 'Upload file'),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            const Text('Or paste rows',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _paste,
+              minLines: 3,
+              maxLines: 6,
+              style: const TextStyle(fontSize: 12, height: 1.35),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                hintText: 'question, option 1, option 2, option 3, option 4, '
+                    'correct answer, explanation',
+              ),
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _loadPaste,
+                icon: const Icon(Icons.playlist_add_check, size: 18),
+                label: const Text('Use pasted questions'),
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

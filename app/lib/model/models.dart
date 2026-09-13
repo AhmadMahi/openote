@@ -360,6 +360,9 @@ enum BlockType {
   // under the same `rawType` contract: an older build shows "Unsupported
   // block: quiz" and round-trips it untouched.
   quiz,
+  // An auto-laid-out mind map (tree of labels). Same `rawType` safety: an
+  // older build shows "Unsupported block: mindmap" and round-trips it.
+  mindmap,
   unknown
 }
 

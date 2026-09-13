@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../editor/board_block_view.dart';
 import '../editor/quiz_block_view.dart';
+import '../editor/mindmap_block_view.dart';
 import '../editor/code_block_view.dart';
 import '../editor/file_block_view.dart';
 import '../editor/flashcard_block_view.dart';
@@ -294,6 +295,7 @@ class _BlockViewState extends State<BlockView> {
                 b.type != BlockType.board &&
                 b.type != BlockType.graph &&
                 b.type != BlockType.quiz &&
+                b.type != BlockType.mindmap &&
                 b.type != BlockType.substitute) ||
             HardwareKeyboard.instance.isAltPressed;
     if (_bodyDragMoves) _dragStart(d);
@@ -420,6 +422,7 @@ class _BlockViewState extends State<BlockView> {
       BlockType.embed => 'Window to another page',
       BlockType.board => 'Task board',
       BlockType.quiz => 'Quiz: ${b.content['name'] ?? 'quiz'}',
+      BlockType.mindmap => 'Mind map',
       BlockType.graph => 'Graph of ${b.content['latex'] ?? 'an equation'}',
       BlockType.substitute =>
         'Evaluate ${b.content['latex'] ?? 'an equation'}',
@@ -569,6 +572,7 @@ class _BlockViewState extends State<BlockView> {
       BlockType.embed => PortalBlockView(block: b, app: app),
       BlockType.board => BoardBlockView(block: b, app: app),
       BlockType.quiz => QuizBlockView(block: b, app: app),
+      BlockType.mindmap => MindmapBlockView(block: b, app: app),
       BlockType.graph => GraphBlockView(block: b, app: app),
       BlockType.substitute => SubstituteBlockView(block: b, app: app),
       _ => Padding(

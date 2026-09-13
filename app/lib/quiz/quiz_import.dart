@@ -173,6 +173,19 @@ QuizParseResult parseQuizRows(List<List<String>> rows) {
   return QuizParseResult.ok(questions);
 }
 
+/// Read pasted text into a quiz. The same columns as a file, sniffing whether
+/// the paste is tab-separated (straight from a spreadsheet) or comma-separated
+/// (an LLM told to write CSV), so either just works.
+QuizParseResult parseQuizText(String text) {
+  final firstLine = const LineSplitter()
+      .convert(text)
+      .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+  final tabs = firstLine.split('\t').length - 1;
+  final commas = firstLine.split(',').length - 1;
+  final delimiter = tabs > commas ? '\t' : null; // null = comma (the default)
+  return parseQuizRows(parseCsv(text, delimiter: delimiter));
+}
+
 /// Read a picked file (by name and bytes) into a quiz: `.xlsx` through the
 /// minimal reader, everything else as CSV (tab-separated when it ends `.tsv`).
 /// One entry point so the dialog and the tests accept exactly the same files.

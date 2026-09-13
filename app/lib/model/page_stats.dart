@@ -180,6 +180,8 @@ List<String> _sourceOf(Block b) {
     // A quiz's words are imported from a file, not written on the page, so
     // they do not count toward the page's own word count.
     case BlockType.quiz:
+    // A mind map's labels are a diagram, not page prose.
+    case BlockType.mindmap:
     case BlockType.unknown:
       return const [];
   }
