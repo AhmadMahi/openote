@@ -94,18 +94,20 @@ bool _rowIsEmpty(List<String> row) => row.every((c) => c.trim().isEmpty);
 int? _resolveCorrect(String raw, List<String> options) {
   final s = raw.trim();
   if (s.isEmpty) return null;
-  // A number 1-4.
-  final n = int.tryParse(s);
-  if (n != null) return (n >= 1 && n <= options.length) ? n - 1 : null;
-  // A single letter A-D (or a-d).
-  if (s.length == 1) {
-    final code = s.toUpperCase().codeUnitAt(0) - 'A'.codeUnitAt(0);
-    if (code >= 0 && code < options.length) return code;
-  }
-  // The exact text of an option, case-insensitively.
+  // The exact text of an option wins FIRST, so an answer that IS one of the
+  // options — including a numeric one like "42" when the options are numbers —
+  // is never mistaken for an option number or a letter.
   final lower = s.toLowerCase();
   for (var i = 0; i < options.length; i++) {
     if (options[i].trim().toLowerCase() == lower) return i;
+  }
+  // Otherwise a number 1-4 names the option by position.
+  final n = int.tryParse(s);
+  if (n != null) return (n >= 1 && n <= options.length) ? n - 1 : null;
+  // Or a single letter A-D (or a-d).
+  if (s.length == 1) {
+    final code = s.toUpperCase().codeUnitAt(0) - 'A'.codeUnitAt(0);
+    if (code >= 0 && code < options.length) return code;
   }
   return null;
 }

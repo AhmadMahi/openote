@@ -49,6 +49,36 @@ void main() {
       }
     });
 
+    test('a numeric answer matching an option is that option, not an index',
+        () {
+      // Options are numbers and the answer "42" is one of them: it must mean
+      // the option whose text is "42", not "option number 42" (out of range).
+      final r = rows([
+        ['6 x 7?', '36', '42', '48', '54', '42', 'Six sevens are 42.'],
+      ]);
+      expect(r.isOk, isTrue, reason: r.error);
+      expect(r.questions.single.correct, 1, reason: 'the option reading "42"');
+    });
+
+    test('a small numeric answer prefers the matching option over its index',
+        () {
+      // Options 3-6, answer "3": the option labelled 3 (index 0), not the
+      // third option.
+      final r = rows([
+        ['Pick three', '3', '4', '5', '6', '3', ''],
+      ]);
+      expect(r.isOk, isTrue, reason: r.error);
+      expect(r.questions.single.correct, 0);
+    });
+
+    test('a numeric answer still names a position when it is not an option', () {
+      final r = rows([
+        ['Capital?', 'Paris', 'London', 'Berlin', 'Madrid', '3', ''],
+      ]);
+      expect(r.isOk, isTrue, reason: r.error);
+      expect(r.questions.single.correct, 2, reason: '"3" is the third option');
+    });
+
     test('the explanation column is optional', () {
       final r = rows([
         ['Q', '1', '2', '3', '4', '1'],
