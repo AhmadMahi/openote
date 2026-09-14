@@ -37,4 +37,35 @@ void main() {
     expect(mindmapSystemPrompt().toLowerCase(), contains('outline'));
     expect(mindmapUserPrompt('photosynthesis'), contains('photosynthesis'));
   });
+
+  group('branchesFromJson (expand one node)', () {
+    test('reads branches with nested children into fresh nodes', () {
+      final b = branchesFromJson('{"branches":['
+          '{"text":"Transformers","children":["Attention","BERT"]},'
+          '{"text":"CNNs"}]}');
+      expect(b.length, 2);
+      expect(b.first.text, 'Transformers');
+      expect(b.first.children.map((c) => c.text), ['Attention', 'BERT']);
+      expect(b[1].text, 'CNNs');
+      expect(b[1].children, isEmpty);
+      // Fresh ids, so appending them into a tree cannot collide.
+      expect(b.first.id, isNot(b[1].id));
+    });
+
+    test('accepts a bare array and plain-string children', () {
+      final b = branchesFromJson('[{"text":"A","children":["x","y"]}]');
+      expect(b.single.children.map((c) => c.text), ['x', 'y']);
+    });
+
+    test('non-JSON yields no branches, not a throw', () {
+      expect(branchesFromJson('sorry, here are some ideas'), isEmpty);
+    });
+
+    test('the expand prompt lists existing children to avoid repeats', () {
+      final p = expandUserPrompt('ML > Architecture', ['Neural networks']);
+      expect(p, contains('Architecture'));
+      expect(p, contains('Neural networks'));
+      expect(expandSystemPrompt(), contains('branches'));
+    });
+  });
 }

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../mindmap/mindmap.dart';
+import '../mindmap/mindmap_ai.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
@@ -36,6 +37,7 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
   late MindNode _root;
   String? _selectedId;
   String? _editingId;
+  String? _expandingId; // the node whose AI expansion is in flight
   final _editController = TextEditingController();
   final _editFocus = FocusNode();
 
@@ -296,6 +298,59 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     _save();
   }
 
+  /// The root-to-node labels, so the model knows where in the map it is
+  /// expanding (e.g. "Machine learning > Architecture > Neural networks").
+  String _pathTo(String id) {
+    final parts = <String>[];
+    String? cur = id;
+    var guard = 0;
+    while (cur != null && guard++ < 64) {
+      final n = _find(cur);
+      if (n == null) break;
+      parts.insert(0, n.text.trim().isEmpty ? '(untitled)' : n.text.trim());
+      cur = _parentOf(cur)?.id;
+    }
+    return parts.join(' > ');
+  }
+
+  /// Grow more branches under one node with the AI, using its path for context.
+  /// The new branches are appended to whatever the node already has.
+  Future<void> _expandNodeWithAi(String id) async {
+    if (_expandingId != null) return; // one at a time
+    final client = widget.app.aiClient();
+    if (client == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Connect an AI provider first: '
+            'Settings → Connections → AI provider.'),
+      ));
+      return;
+    }
+    final node = _find(id);
+    if (node == null) return;
+    _commitEdit(save: true);
+    setState(() => _expandingId = id);
+    final res = await generateBranches(
+      client,
+      path: _pathTo(id),
+      existing: [for (final c in node.children) c.text],
+    );
+    widget.app.addAiTokens(res.tokens);
+    if (!mounted) return;
+    if (!res.ok) {
+      setState(() => _expandingId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(res.error ?? 'Could not expand that branch.')),
+      );
+      return;
+    }
+    setState(() {
+      node.collapsed = false;
+      node.children.addAll(res.branches);
+      _expandingId = null;
+    });
+    _save();
+  }
+
   Future<void> _importMarkdown() async {
     XFile? file;
     try {
@@ -499,8 +554,7 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                 selNode.collapsed ? 'Expand' : 'Collapse',
                 () => _toggleCollapse(sel!)),
           _colorButton(context, s),
-          btn(Icons.auto_awesome_outlined, 'Generate with AI',
-              _generateWithAi),
+          btn(Icons.auto_awesome_outlined, 'Generate with AI', _generateWithAi),
           btn(Icons.delete_outline, 'Delete branch',
               (sel == null || sel == _root.id) ? null : _deleteSelected),
           btn(Icons.upload_file_outlined, 'Import a Markdown outline',
@@ -656,6 +710,42 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                     node.collapsed ? Icons.add : Icons.remove,
                     size: 12,
                     color: s.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          // "Grow this branch with AI" — a small badge on the selected node
+          // (and while its own expansion is running). Tapping it asks the model
+          // for more children, given this node's path, and appends them.
+          if (selected || _expandingId == id)
+            Positioned(
+              top: -10,
+              right: -10,
+              child: GestureDetector(
+                onTap:
+                    _expandingId == null ? () => _expandNodeWithAi(id) : null,
+                child: Tooltip(
+                  message: 'Grow this branch with AI',
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: s.raised, width: 1.5),
+                    ),
+                    child: _expandingId == id
+                        ? Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.6,
+                              valueColor: AlwaysStoppedAnimation(
+                                  Theme.of(context).colorScheme.onPrimary),
+                            ),
+                          )
+                        : Icon(Icons.auto_awesome,
+                            size: 12,
+                            color: Theme.of(context).colorScheme.onPrimary),
                   ),
                 ),
               ),

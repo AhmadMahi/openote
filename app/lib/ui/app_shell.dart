@@ -1570,8 +1570,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                         (panel == null
                                             ? 0
                                             : OnoteSize.panelWidth + 1),
-                                    child: ExcludeFocus(
-                                        child: AskAiPanel(app: app)),
+                                    // NOT wrapped in ExcludeFocus (as the button
+                                    // controls above are): the chat box has to
+                                    // be able to take focus, or it cannot be
+                                    // clicked into or typed in.
+                                    child: AskAiPanel(app: app),
                                   ),
                                 if (!app.focusMode)
                                   Positioned(
