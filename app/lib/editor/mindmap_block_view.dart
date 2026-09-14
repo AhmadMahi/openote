@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -37,6 +38,13 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
   final _editController = TextEditingController();
   final _editFocus = FocusNode();
 
+  // Pan/zoom of the map inside its own window, so a wheel or two-finger scroll
+  // moves the map rather than the page. The trackpad drives this controller
+  // natively; the mouse wheel is fed into it by [_wheelPan].
+  final _tc = TransformationController();
+  Size _viewport = Size.zero; // the map window's size, for clamping the pan
+  Size _contentSize = Size.zero; // the laid-out tree's size
+
   // Layout constants (logical px, before the canvas zoom).
   static const double _nodeW = 156;
   static const double _hGap = 44;
@@ -66,7 +74,40 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
   void dispose() {
     _editController.dispose();
     _editFocus.dispose();
+    _tc.dispose();
     super.dispose();
+  }
+
+  /// Pan the map by a mouse-wheel notch, and claim the notch so the page it
+  /// sits on does not scroll out from under it. A wheel notch is delivered to
+  /// every listener under the pointer; registering with the shared resolver
+  /// means this map is the one that moves. The trackpad's two-finger pan is a
+  /// different event family that the InteractiveViewer already handles, and is
+  /// kept off the page by the pointer claim on the enclosing Listener.
+  void _wheelPan(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent) return;
+    GestureBinding.instance.pointerSignalResolver.register(e, (_) {
+      final scale = _tc.value.getMaxScaleOnAxis();
+      final shift = HardwareKeyboard.instance.isShiftPressed;
+      // A mouse's vertical wheel scrolls the map sideways when Shift is held,
+      // matching the page's own wheel behaviour.
+      final d = shift
+          ? Offset(e.scrollDelta.dy + e.scrollDelta.dx, 0)
+          : e.scrollDelta;
+      const b = 400.0; // must match the InteractiveViewer's boundaryMargin
+      final m = _tc.value.clone();
+      var tx = m[12] - d.dx;
+      var ty = m[13] - d.dy;
+      // Keep the pan within the same bounds a drag would: the window may see
+      // from `-b` past the content's far edge to `+b` before it, in map units.
+      final loX = _viewport.width - (_contentSize.width + b) * scale;
+      final loY = _viewport.height - (_contentSize.height + b) * scale;
+      tx = tx.clamp(math.min(loX, b * scale), b * scale);
+      ty = ty.clamp(math.min(loY, b * scale), b * scale);
+      m[12] = tx;
+      m[13] = ty;
+      _tc.value = m;
+    });
   }
 
   void _save() {
@@ -280,6 +321,7 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     final s = context.surfaces;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final laid = _layout();
+    _contentSize = laid.size;
 
     final canvas = Shortcuts(
       // Ctrl/Cmd+C makes a child (a modifier chord, so plain "c" still types
@@ -310,10 +352,10 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
             return null;
           }),
         },
-        // Keep scroll and two-finger panning inside the map: claim the pointer
-        // so PageCanvas declines to move the page under it (a wheel notch and a
-        // pinch are isolated the same way a graph block does it), while the
-        // InteractiveViewer does the actual panning and zooming.
+        // Keep scroll and two-finger panning inside the map, not the page:
+        // claim the pointer so PageCanvas declines to move the page under a
+        // trackpad pan/pinch (the graph block's pattern), and route the mouse
+        // wheel through _wheelPan so a notch pans the map instead of the page.
         child: Listener(
           onPointerDown: (e) => widget.app.claimedPointers.add(e.pointer),
           onPointerUp: (e) => widget.app.claimedPointers.remove(e.pointer),
@@ -322,32 +364,38 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
               widget.app.claimedPointers.add(e.pointer),
           onPointerPanZoomEnd: (e) =>
               widget.app.claimedPointers.remove(e.pointer),
+          onPointerSignal: _wheelPan,
           child: ClipRect(
-            child: InteractiveViewer(
-              constrained: false,
-              minScale: 0.4,
-              maxScale: 2.5,
-              boundaryMargin: const EdgeInsets.all(400),
-              child: SizedBox(
-                width: math.max(laid.size.width, 40),
-                height: math.max(laid.size.height, 40),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _ConnectorPainter(
-                          root: _root,
-                          rects: laid.rects,
-                          color: s.border,
+            child: LayoutBuilder(builder: (context, vp) {
+              _viewport = Size(vp.maxWidth, vp.maxHeight);
+              return InteractiveViewer(
+                transformationController: _tc,
+                constrained: false,
+                minScale: 0.4,
+                maxScale: 2.5,
+                boundaryMargin: const EdgeInsets.all(400),
+                child: SizedBox(
+                  width: math.max(laid.size.width, 40),
+                  height: math.max(laid.size.height, 40),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _ConnectorPainter(
+                            root: _root,
+                            rects: laid.rects,
+                            color: s.border,
+                          ),
                         ),
                       ),
-                    ),
-                    for (final entry in laid.rects.entries)
-                      _positionedNode(context, s, dark, entry.key, entry.value),
-                  ],
+                      for (final entry in laid.rects.entries)
+                        _positionedNode(
+                            context, s, dark, entry.key, entry.value),
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            }),
           ),
         ),
       ),
