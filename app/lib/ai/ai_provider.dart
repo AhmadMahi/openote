@@ -11,6 +11,15 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+/// The default instructions ("system prompt") behind the Ask AI chat. The user
+/// can replace this in Settings → Connections → AI provider to steer the tone
+/// (a teaching style, a subject, a language). Empty in settings means "use
+/// this".
+const String kDefaultAskAiPrompt =
+    'You are a concise, friendly teaching assistant inside a note-taking app. '
+    'Explain clearly with simple language and short examples, and keep answers '
+    'brief unless asked to go deeper.';
+
 /// Which cloud AI a user brought a key for.
 enum AiProvider {
   openai,

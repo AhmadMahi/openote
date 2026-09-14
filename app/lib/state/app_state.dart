@@ -5154,6 +5154,19 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// The instructions ("system prompt") the Ask AI chat runs with. Editable in
+  /// settings so a teacher can steer the tone; empty falls back to the default.
+  String askAiSystemPrompt = kDefaultAskAiPrompt;
+
+  void setAskAiSystemPrompt(String v) {
+    final t = v.trim();
+    askAiSystemPrompt = t.isEmpty ? kDefaultAskAiPrompt : t;
+    // Store the raw text (empty means "use the default"), so shipping a new
+    // default later reaches anyone who never customised it.
+    _repo.setSetting('askAiPrompt', t.isEmpty ? null : t);
+    notifyListeners();
+  }
+
   /// Eraser behaviour (INK-6). Session-scoped like tool/penSize — a mode, not
   /// a preference.
   EraserMode eraserMode = EraserMode.area;
@@ -6425,6 +6438,8 @@ class AppState extends ChangeNotifier
     if (sc is bool) spellCheckEnabled = sc;
     final aa = _repo.getSetting('askAi');
     if (aa is bool) askAiEnabled = aa;
+    final aap = _repo.getSetting('askAiPrompt');
+    if (aap is String && aap.trim().isNotEmpty) askAiSystemPrompt = aap.trim();
     final am = _repo.getSetting('angleMode');
     mathAngleMode = am == 'rad' ? AngleMode.radians : AngleMode.degrees;
     onboardingSeen = _repo.getSetting('onboardingSeen') == true;

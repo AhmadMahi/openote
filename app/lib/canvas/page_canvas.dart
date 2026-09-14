@@ -166,7 +166,8 @@ class _PageCanvasState extends State<PageCanvas>
   Stroke? _placedShape; // released and active: draggable, not yet committed
   Stroke? _placedDragBase; // the placed shape when the current drag began
   Offset? _dragAnchorScreen; // pointer position (screen) when the drag began
-  double _placedMoved = 0; // furthest the current pointer travelled (tap vs drag)
+  double _placedMoved =
+      0; // furthest the current pointer travelled (tap vs drag)
 
   /// A tap may wander this far (screen px) and still count as a placing click.
   static const double _placeTapSlop = 5.0;
@@ -481,8 +482,8 @@ class _PageCanvasState extends State<PageCanvas>
     if (base == null || start == null) return;
     final d = e.localPosition - start;
     _placedMoved = math.max(_placedMoved, d.distance);
-    setState(() => _placedShape =
-        _translateStroke(base, d.dx / controller.scale, d.dy / controller.scale));
+    setState(() => _placedShape = _translateStroke(
+        base, d.dx / controller.scale, d.dy / controller.scale));
   }
 
   /// Distance a pointer may wander and still count as held still.
@@ -566,11 +567,11 @@ class _PageCanvasState extends State<PageCanvas>
         tx: List<double>.of(s.tx),
         ty: List<double>.of(s.ty),
         t: List<int>.of(s.t),
+        sharp: s.sharp,
       );
 
-  Stroke _scaleStroke(Stroke s, Offset c, double factor) =>
-      _mapStroke(s, (v) => c.dx + (v - c.dx) * factor,
-          (v) => c.dy + (v - c.dy) * factor);
+  Stroke _scaleStroke(Stroke s, Offset c, double factor) => _mapStroke(
+      s, (v) => c.dx + (v - c.dx) * factor, (v) => c.dy + (v - c.dy) * factor);
 
   Stroke _translateStroke(Stroke s, double dx, double dy) =>
       _mapStroke(s, (v) => v + dx, (v) => v + dy);
@@ -778,6 +779,7 @@ class _PageCanvasState extends State<PageCanvas>
               ty: s.ty.isEmpty ? [] : s.ty.sublist(i, j),
               t: s.t.sublist(i, j),
               strokeStart: s.strokeStart,
+              sharp: s.sharp,
             ).toJson());
           }
           i = j;
@@ -2662,8 +2664,7 @@ class _SheetCardState extends State<_SheetCard> {
         Text('${widget.index + 1}',
             style: TextStyle(
               fontSize: 11,
-              fontWeight:
-                  widget.selected ? FontWeight.w700 : FontWeight.w400,
+              fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w400,
               color: widget.selected ? scheme.primary : null,
             )),
       ]),
@@ -2867,12 +2868,15 @@ class _ShapePreviewPainter extends CustomPainter {
         ? rectangleStrokes(from: from, to: to, colorHex: '#000000', size: size)
         : arrowStrokes(from: from, to: to, colorHex: '#000000', size: size);
     if (strokes.isEmpty) return;
+    // A rectangle previews with square corners (miter, closed loop) so it
+    // matches the sharp stroke it commits to; the arrow keeps round joins.
+    final rect = tool == Tool.rectangle;
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = (size * controller.scale).clamp(1.0, 40.0)
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+      ..strokeCap = rect ? StrokeCap.square : StrokeCap.round
+      ..strokeJoin = rect ? StrokeJoin.miter : StrokeJoin.round;
     for (final st in strokes) {
       final path = Path();
       for (var i = 0; i < st.x.length; i++) {
@@ -2883,6 +2887,7 @@ class _ShapePreviewPainter extends CustomPainter {
           path.lineTo(p.dx, p.dy);
         }
       }
+      if (rect) path.close();
       canvas.drawPath(path, paint);
     }
   }
@@ -2929,8 +2934,7 @@ class _PlacedShapePainter extends CustomPainter {
     final br = controller.pageToScreen(Offset(maxX, maxY));
     final rect = Rect.fromPoints(tl, br).inflate(10);
     final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(10));
-    canvas.drawRRect(
-        rrect, Paint()..color = color.withValues(alpha: .06));
+    canvas.drawRRect(rrect, Paint()..color = color.withValues(alpha: .06));
     canvas.drawRRect(
         rrect,
         Paint()

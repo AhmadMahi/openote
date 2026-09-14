@@ -507,6 +507,7 @@ class Stroke {
     List<double>? ty,
     List<int>? t,
     int? strokeStart,
+    this.sharp = false,
   })  : id = id ?? newId(),
         x = x ?? [],
         y = y ?? [],
@@ -522,6 +523,12 @@ class Stroke {
   final double size;
   final double opacity;
   final List<double> x, y, p;
+
+  /// A drawn shape (rectangle) that must keep sharp corners: the renderer
+  /// skips the freehand streamline/smoothing that rounds a hand-drawn line, so
+  /// the four corners stay square. Written only when true, so ordinary
+  /// handwriting is byte-for-byte unchanged.
+  final bool sharp;
 
   /// Pen tilt (Ink Data Spec §2). Empty when the device didn't report it — which
   /// is every device Flutter currently exposes tilt-free, so we don't *capture*
@@ -561,6 +568,7 @@ class Stroke {
         'ty': ty,
         't': t,
         'strokeStart': strokeStart,
+        if (sharp) 'sharp': true,
       };
 
   factory Stroke.fromJson(Map<String, dynamic> j) {
@@ -586,6 +594,7 @@ class Stroke {
           .map((e) => (e as num).toInt())
           .toList(),
       strokeStart: (j['strokeStart'] as num?)?.toInt(),
+      sharp: j['sharp'] == true,
     );
   }
 

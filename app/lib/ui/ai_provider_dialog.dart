@@ -34,6 +34,7 @@ class _AiProviderDialogState extends State<_AiProviderDialog> {
   late AiProvider _provider = app.aiProvider;
   final _keyCtrl = TextEditingController();
   final _modelCtrl = TextEditingController();
+  final _promptCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
   bool _justConnected = false;
@@ -45,12 +46,14 @@ class _AiProviderDialogState extends State<_AiProviderDialog> {
   void initState() {
     super.initState();
     _modelCtrl.text = app.aiModelFor(_provider);
+    _promptCtrl.text = app.askAiSystemPrompt;
   }
 
   @override
   void dispose() {
     _keyCtrl.dispose();
     _modelCtrl.dispose();
+    _promptCtrl.dispose();
     super.dispose();
   }
 
@@ -130,6 +133,8 @@ class _AiProviderDialogState extends State<_AiProviderDialog> {
                   ..._connected(context, scheme)
                 else
                   ..._connectForm(context, scheme),
+                const Divider(height: 26),
+                ..._askAiInstructions(context),
                 const Divider(height: 26),
                 _tokenRow(context),
               ],
@@ -259,6 +264,43 @@ class _AiProviderDialogState extends State<_AiProviderDialog> {
           border: const OutlineInputBorder(),
         ),
       );
+
+  // The Ask AI system prompt, editable so a teacher can steer tone/subject.
+  List<Widget> _askAiInstructions(BuildContext context) => [
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Ask AI instructions',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
+            TextButton(
+              onPressed: () {
+                _promptCtrl.text = kDefaultAskAiPrompt;
+                app.setAskAiSystemPrompt(kDefaultAskAiPrompt);
+              },
+              child: const Text('Reset', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+        const Text(
+          'How the Ask AI chat should answer — its style, subject or language. '
+          'For example: "You are a patient tutor for high-school biology. Use '
+          'simple analogies and end with a quick check question."',
+          style: TextStyle(fontSize: 11.5, color: OnoteColors.graphite400),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _promptCtrl,
+          minLines: 3,
+          maxLines: 6,
+          style: const TextStyle(fontSize: 12.5, height: 1.35),
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+          onChanged: app.setAskAiSystemPrompt,
+        ),
+      ];
 
   Widget _tokenRow(BuildContext context) => Row(
         children: [

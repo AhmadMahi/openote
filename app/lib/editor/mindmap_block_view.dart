@@ -351,6 +351,28 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     _save();
   }
 
+  /// The AI-expand badge for the selected node, placed in the map's own
+  /// coordinate space at the node's top-right corner and clamped inside the
+  /// laid-out area so it is always hit-testable.
+  Widget _aiBadge(BuildContext context, Size mapSize, Rect r) {
+    const badge = 22.0;
+    final left = math.min(r.right - badge * 0.6, mapSize.width - badge);
+    final top = math.max(0.0, r.top - badge * 0.35);
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned(
+      left: left,
+      top: top,
+      child: _AiExpandBadge(
+        busy: _expandingId == _selectedId,
+        onTap: () => _expandNodeWithAi(_selectedId!),
+        fill: scheme.primary,
+        icon: scheme.onPrimary,
+        ring: context.surfaces.raised,
+        size: badge,
+      ),
+    );
+  }
+
   Future<void> _importMarkdown() async {
     XFile? file;
     try {
@@ -488,6 +510,15 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                       for (final entry in laid.rects.entries)
                         _positionedNode(
                             context, s, dark, entry.key, entry.value),
+                      // The "grow this branch with AI" badge is a sibling of the
+                      // nodes, not a child of one: a badge painted just outside
+                      // a node's own box (a negative offset) is drawn but NOT
+                      // hit-testable, which is why the click did nothing. Here
+                      // it sits in the map's own coordinate space and is clamped
+                      // inside the SizedBox, so it always takes a tap.
+                      if (_selectedId != null &&
+                          laid.rects.containsKey(_selectedId))
+                        _aiBadge(context, laid.size, laid.rects[_selectedId]!),
                     ],
                   ),
                 ),
@@ -714,42 +745,6 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                 ),
               ),
             ),
-          // "Grow this branch with AI" — a small badge on the selected node
-          // (and while its own expansion is running). Tapping it asks the model
-          // for more children, given this node's path, and appends them.
-          if (selected || _expandingId == id)
-            Positioned(
-              top: -10,
-              right: -10,
-              child: GestureDetector(
-                onTap:
-                    _expandingId == null ? () => _expandNodeWithAi(id) : null,
-                child: Tooltip(
-                  message: 'Grow this branch with AI',
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: s.raised, width: 1.5),
-                    ),
-                    child: _expandingId == id
-                        ? Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.6,
-                              valueColor: AlwaysStoppedAnimation(
-                                  Theme.of(context).colorScheme.onPrimary),
-                            ),
-                          )
-                        : Icon(Icons.auto_awesome,
-                            size: 12,
-                            color: Theme.of(context).colorScheme.onPrimary),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -790,6 +785,99 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
       fill: base.withValues(alpha: dark ? 0.22 : 0.15),
       border: base.withValues(alpha: 0.6),
       text: s.textPrimary,
+    );
+  }
+}
+
+/// The round "grow this branch with AI" badge. It shows a static sparkle, and
+/// while a generation is in flight the sparkle twinkles (a soft pulse of scale
+/// and opacity) so it is obvious something is happening.
+class _AiExpandBadge extends StatefulWidget {
+  const _AiExpandBadge({
+    required this.busy,
+    required this.onTap,
+    required this.fill,
+    required this.icon,
+    required this.ring,
+    required this.size,
+  });
+  final bool busy;
+  final VoidCallback onTap;
+  final Color fill;
+  final Color icon;
+  final Color ring;
+  final double size;
+
+  @override
+  State<_AiExpandBadge> createState() => _AiExpandBadgeState();
+}
+
+class _AiExpandBadgeState extends State<_AiExpandBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 750));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.busy) _c.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_AiExpandBadge old) {
+    super.didUpdateWidget(old);
+    if (widget.busy && !_c.isAnimating) {
+      _c.repeat(reverse: true);
+    } else if (!widget.busy && _c.isAnimating) {
+      _c.stop();
+      _c.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sparkle =
+        Icon(Icons.auto_awesome, size: widget.size * 0.6, color: widget.icon);
+    return Tooltip(
+      message: 'Grow this branch with AI',
+      child: GestureDetector(
+        onTap: widget.busy ? null : widget.onTap,
+        child: Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: widget.fill,
+            shape: BoxShape.circle,
+            border: Border.all(color: widget.ring, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1)),
+            ],
+          ),
+          child: widget.busy
+              ? AnimatedBuilder(
+                  animation: _c,
+                  builder: (context, child) {
+                    final t = Curves.easeInOut.transform(_c.value);
+                    return Opacity(
+                      opacity: 0.55 + 0.45 * t,
+                      child:
+                          Transform.scale(scale: 0.8 + 0.35 * t, child: child),
+                    );
+                  },
+                  child: sparkle,
+                )
+              : sparkle,
+        ),
+      ),
     );
   }
 }

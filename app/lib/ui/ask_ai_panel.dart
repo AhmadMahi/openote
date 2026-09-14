@@ -73,9 +73,7 @@ class _AskAiPanelState extends State<AskAiPanel> {
     });
     _toEnd();
     final history = <AiMessage>[
-      const AiMessage.system(
-          'You are a concise, friendly teaching assistant inside a '
-          'note-taking app. Answer briefly and clearly.'),
+      AiMessage.system(app.askAiSystemPrompt),
       for (final t in _turns)
         if (t.role == 'user' || t.role == 'assistant')
           AiMessage(t.role, t.text),

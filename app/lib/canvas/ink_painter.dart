@@ -109,9 +109,11 @@ class InkPainter extends CustomPainter {
       points,
       options: StrokeOptions(
         size: s.size * (s.tool == 'highlighter' ? 3 : 1),
-        thinning: s.tool == 'highlighter' ? 0.0 : 0.6,
-        smoothing: 0.5,
-        streamline: 0.5,
+        // A sharp shape (a rectangle) wants no width taper and, above all, no
+        // corner rounding — streamline and smoothing are what bevel a corner.
+        thinning: s.sharp ? 0.0 : (s.tool == 'highlighter' ? 0.0 : 0.6),
+        smoothing: s.sharp ? 0.0 : 0.5,
+        streamline: s.sharp ? 0.0 : 0.5,
         simulatePressure: !hasPressure,
       ),
     );

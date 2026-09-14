@@ -51,6 +51,9 @@ List<Stroke> rectangleStrokes({
       tool: 'pen',
       colorHex: colorHex,
       size: size,
+      // A rectangle keeps square corners: the renderer skips the freehand
+      // streamline/smoothing that would otherwise round them off.
+      sharp: true,
       x: [for (final p in pts) p.x],
       y: [for (final p in pts) p.y],
       // Flat pressure: a rectangle is a drawn object, not a gesture, and
