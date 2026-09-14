@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:super_clipboard/super_clipboard.dart'
     show Formats, SystemClipboard;
 
+import '../ai/ai_provider.dart';
 import '../canvas/align_guides.dart';
 import '../canvas/canvas_controller.dart';
 import '../core/engine.dart';
@@ -838,6 +839,155 @@ class AppState extends ChangeNotifier
     SecretStore.delete(_githubSecret);
     _repo.setSetting(_githubKey, null);
     notifyListeners();
+  }
+
+  // ── AI provider (bring your own key): OpenAI / OpenRouter ─────────────
+  //
+  // Separate from the MCP "AI access" above: that lets an external tool read
+  // these notes; this lets Slate itself call a cloud model with the user's own
+  // key (for the quiz generator, the mind-map generator and Ask AI). The key
+  // is verified before it is stored, kept in the OS keychain via SecretStore
+  // (never a file, never the notebook), and only the non-secret preferences —
+  // provider, model names, running token total — live in settings.
+
+  static const _aiSettingsKey = 'aiProvider';
+
+  /// Test hook: point the client at a local server instead of the real API,
+  /// the same way [debugGitHubBase] does. Null in production.
+  String? debugAiEndpoint;
+
+  AiProvider _aiProvider = AiProvider.openai;
+  final Map<AiProvider, String> _aiModels = {};
+  final Set<AiProvider> _aiVerified = {};
+  int _aiTokensUsed = 0;
+
+  static String _aiSecret(AiProvider p) => 'ai_${p.name}';
+
+  AiProvider get aiProvider => _aiProvider;
+  int get aiTokensUsed => _aiTokensUsed;
+  String aiModelFor(AiProvider p) => _aiModels[p] ?? '';
+  String get aiModel => aiModelFor(_aiProvider);
+  bool aiHasKey(AiProvider p) =>
+      (SecretStore.read(_aiSecret(p)) ?? '').isNotEmpty;
+
+  /// A provider is usable when it has a key AND that key passed its test.
+  bool aiVerified(AiProvider p) => _aiVerified.contains(p) && aiHasKey(p);
+
+  /// The active provider is ready to make calls (key verified, model set).
+  bool get aiConnected => aiVerified(_aiProvider) && aiModel.trim().isNotEmpty;
+
+  void reloadAi() {
+    final raw = _repo.getSetting(_aiSettingsKey);
+    if (raw is! Map) return;
+    _aiProvider = AiProvider.fromName(raw['provider'] as String?);
+    _aiTokensUsed = (raw['tokensUsed'] as num?)?.toInt() ?? 0;
+    _aiModels.clear();
+    final models = raw['models'];
+    if (models is Map) {
+      for (final p in AiProvider.values) {
+        final m = models[p.name];
+        if (m is String) _aiModels[p] = m;
+      }
+    }
+    _aiVerified.clear();
+    final verified = raw['verified'];
+    if (verified is List) {
+      for (final n in verified) {
+        final p = AiProvider.values.asNameMap()[n];
+        if (p != null) _aiVerified.add(p);
+      }
+    }
+  }
+
+  void _saveAi() {
+    _repo.setSetting(_aiSettingsKey, {
+      'provider': _aiProvider.name,
+      'tokensUsed': _aiTokensUsed,
+      'models': {for (final e in _aiModels.entries) e.key.name: e.value},
+      'verified': [for (final p in _aiVerified) p.name],
+    });
+  }
+
+  void setAiProvider(AiProvider p) {
+    _aiProvider = p;
+    _saveAi();
+    notifyListeners();
+  }
+
+  void setAiModel(AiProvider p, String model) {
+    _aiModels[p] = model.trim();
+    _saveAi();
+    notifyListeners();
+  }
+
+  /// Verify a key+model with a tiny call, then keep the key in the OS store.
+  ///
+  /// Verified BEFORE it is stored, exactly like [connectGitHub], so
+  /// "connected" never means "we kept a string you pasted and will find out it
+  /// was wrong later". Returns null on success, or a message to show.
+  Future<String?> connectAi(AiProvider p, String key, String model) async {
+    final k = key.trim();
+    final m = model.trim();
+    if (k.isEmpty) return 'Paste your ${p.label} API key.';
+    if (m.isEmpty) return 'Type a model name (${p.modelHint}).';
+    final res = await AiClient(
+      provider: p,
+      apiKey: k,
+      model: m,
+      endpoint: debugAiEndpoint,
+    ).ping();
+    if (!res.ok) return res.error;
+    final kept = await SecretStore.write(_aiSecret(p), k);
+    if (!kept) {
+      return '${p.label} accepted the key, but Slate could not keep it. '
+          'Slate stores it in your computer\'s own password storage, never in '
+          'a plain file, and this computer\'s storage did not take it.'
+          '${Platform.isLinux ? ' On Linux, installing the "libsecret-tools" '
+              'package usually fixes this.' : ''}';
+    }
+    _aiModels[p] = m;
+    _aiVerified.add(p);
+    _aiProvider = p;
+    _aiTokensUsed += res.totalTokens;
+    _saveAi();
+    notifyListeners();
+    return null;
+  }
+
+  void disconnectAi(AiProvider p) {
+    SecretStore.delete(_aiSecret(p));
+    _aiVerified.remove(p);
+    _saveAi();
+    notifyListeners();
+  }
+
+  /// Count tokens a feature just spent, for the running total in settings.
+  void addAiTokens(int n) {
+    if (n <= 0) return;
+    _aiTokensUsed += n;
+    _saveAi();
+    notifyListeners();
+  }
+
+  void resetAiTokens() {
+    _aiTokensUsed = 0;
+    _saveAi();
+    notifyListeners();
+  }
+
+  /// A client for the active provider, or null when it is not connected.
+  /// The quiz, mind-map and Ask AI features call this and prompt the user to
+  /// set a provider up in Settings when it returns null.
+  AiClient? aiClient() {
+    if (!aiConnected) return null;
+    final key = SecretStore.read(_aiSecret(_aiProvider));
+    if (key == null || key.isEmpty) return null;
+    return AiClient(
+      provider: _aiProvider,
+      apiKey: key,
+      model: aiModel,
+      endpoint: debugAiEndpoint,
+    );
   }
 
   /// Join a notebook from a git URL — the other half of publishing one.
@@ -4234,7 +4384,8 @@ class AppState extends ChangeNotifier
     final base = rnd.nextDouble() * 360;
     String comp(double v) =>
         (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
-    String hex(Color c) => '#${comp(c.r)}${comp(c.g)}${comp(c.b)}'.toUpperCase();
+    String hex(Color c) =>
+        '#${comp(c.r)}${comp(c.g)}${comp(c.b)}'.toUpperCase();
 
     final colours = [
       for (var i = 0; i < maxPaletteColours; i++)
@@ -4990,6 +5141,16 @@ class AppState extends ChangeNotifier
     // Re-open the editing session so the change is visible immediately rather
     // than at the next block.
     docRevision++;
+    notifyListeners();
+  }
+
+  /// Whether the Ask AI chat bubble is shown on the page canvas. Off by
+  /// default; it needs an AI provider connected to answer anything.
+  bool askAiEnabled = false;
+
+  void setAskAiEnabled(bool v) {
+    askAiEnabled = v;
+    _repo.setSetting('askAi', v);
     notifyListeners();
   }
 
@@ -6262,6 +6423,8 @@ class AppState extends ChangeNotifier
     if (as is bool) autoSync = as;
     final sc = _repo.getSetting('spellCheck');
     if (sc is bool) spellCheckEnabled = sc;
+    final aa = _repo.getSetting('askAi');
+    if (aa is bool) askAiEnabled = aa;
     final am = _repo.getSetting('angleMode');
     mathAngleMode = am == 'rad' ? AngleMode.radians : AngleMode.degrees;
     onboardingSeen = _repo.getSetting('onboardingSeen') == true;
@@ -6310,6 +6473,7 @@ class AppState extends ChangeNotifier
     }
     // Detached: binding a port must never gate the app opening.
     unawaited(_restoreMcp());
+    reloadAi();
     unawaited(checkForAppUpdate());
     final cc = _repo.getSetting('customColors');
     if (cc is List) customColors.addAll(cc.cast<String>());

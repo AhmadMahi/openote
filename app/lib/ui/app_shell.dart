@@ -1,6 +1,5 @@
 import 'dart:async';
 
-
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderProxyBox;
@@ -35,6 +34,7 @@ import 'sync_dialog.dart';
 import 'sync_dot.dart';
 import '../theme/tokens.dart';
 import 'canvas_controls.dart';
+import 'ask_ai_panel.dart';
 import 'glass.dart';
 import 'home_dashboard.dart';
 
@@ -1553,6 +1553,25 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                     // still reaches every one of them.
                                     child: ExcludeFocus(
                                         child: CanvasControls(app: app)),
+                                  ),
+                                // Ask AI: a floating chat bubble at the page's
+                                // bottom-right, clear of a side panel and the
+                                // status bar. Only on a page, and only when the
+                                // user turned it on in Settings.
+                                if (!app.focusMode &&
+                                    !app.navHome &&
+                                    !app.navNotebook &&
+                                    page != null &&
+                                    !app.isLocked(page.id) &&
+                                    app.askAiEnabled)
+                                  Positioned(
+                                    bottom: OnoteSpace.x6 + 32,
+                                    right: OnoteSpace.x5 +
+                                        (panel == null
+                                            ? 0
+                                            : OnoteSize.panelWidth + 1),
+                                    child: ExcludeFocus(
+                                        child: AskAiPanel(app: app)),
                                   ),
                                 if (!app.focusMode)
                                   Positioned(

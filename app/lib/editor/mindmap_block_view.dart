@@ -9,6 +9,7 @@ import '../mindmap/mindmap.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
+import '../ui/mindmap_ai_dialog.dart';
 
 /// A mind map on the page: a left-to-right tree you build by typing.
 ///
@@ -254,6 +255,47 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     _save();
   }
 
+  /// Draft the whole map from a prompt with the connected AI provider. The
+  /// model returns a Markdown outline, which becomes the tree through the same
+  /// importer [_importMarkdown] uses. Replaces a populated map only after a
+  /// confirm, so a generation cannot quietly wipe existing work.
+  Future<void> _generateWithAi() async {
+    if (widget.app.aiClient() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Connect an AI provider first: '
+            'Settings → Connections → AI provider.'),
+      ));
+      return;
+    }
+    if (_root.children.isNotEmpty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Replace this mind map?'),
+          content: const Text(
+              'Generating a new map with AI will replace what is here now.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Keep current')),
+            FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Continue')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    final root = await showMindmapAiDialog(context, widget.app);
+    if (root == null || !mounted) return;
+    setState(() {
+      _root = root;
+      _selectedId = _root.id;
+      _editingId = null;
+    });
+    _save();
+  }
+
   Future<void> _importMarkdown() async {
     XFile? file;
     try {
@@ -457,8 +499,8 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                 selNode.collapsed ? 'Expand' : 'Collapse',
                 () => _toggleCollapse(sel!)),
           _colorButton(context, s),
-          btn(Icons.auto_awesome_outlined, 'Auto-colour each branch',
-              _autoColorBranches),
+          btn(Icons.auto_awesome_outlined, 'Generate with AI',
+              _generateWithAi),
           btn(Icons.delete_outline, 'Delete branch',
               (sel == null || sel == _root.id) ? null : _deleteSelected),
           btn(Icons.upload_file_outlined, 'Import a Markdown outline',
@@ -474,6 +516,21 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
       icon: const Icon(Icons.palette_outlined, size: 18),
       onSelected: _setColor,
       itemBuilder: (_) => [
+        // A one-tap "colour every branch a different hue", which used to be its
+        // own toolbar button before that slot became Generate with AI.
+        PopupMenuItem<String>(
+          height: 34,
+          onTap: _autoColorBranches,
+          child: Row(
+            children: [
+              Icon(Icons.shuffle, size: 16, color: s.textSecondary),
+              const SizedBox(width: 8),
+              const Text('Auto colour branches',
+                  style: TextStyle(fontSize: 12.5)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(height: 8),
         for (final row in _swatchRows)
           PopupMenuItem<String>(
             enabled: false,

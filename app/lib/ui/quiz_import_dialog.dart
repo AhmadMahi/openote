@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../model/models.dart';
+import '../quiz/quiz_ai.dart';
 import '../quiz/quiz_import.dart';
 import '../state/app_state.dart';
 import 'onote_dialog.dart';
@@ -16,7 +17,7 @@ Future<void> showQuizImportDialog(
     BuildContext context, AppState app, Offset at) async {
   final draft = await showOnoteDialog<_QuizDraft>(
     context: context,
-    builder: (_) => const QuizImportDialog(),
+    builder: (_) => QuizImportDialog(app: app),
   );
   if (draft == null) return;
   final b = app.addBlock(Block(
@@ -41,7 +42,8 @@ class _QuizDraft {
 }
 
 class QuizImportDialog extends StatefulWidget {
-  const QuizImportDialog({super.key});
+  const QuizImportDialog({super.key, required this.app});
+  final AppState app;
 
   @override
   State<QuizImportDialog> createState() => _QuizImportDialogState();
@@ -50,6 +52,9 @@ class QuizImportDialog extends StatefulWidget {
 class _QuizImportDialogState extends State<QuizImportDialog> {
   final _name = TextEditingController(text: 'Quiz');
   final _paste = TextEditingController();
+  final _topic = TextEditingController();
+  final _count = TextEditingController(text: '5');
+  bool _generating = false;
   List<QuizQuestion>? _questions;
   String? _error;
   String? _status;
@@ -58,7 +63,60 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
   void dispose() {
     _name.dispose();
     _paste.dispose();
+    _topic.dispose();
+    _count.dispose();
     super.dispose();
+  }
+
+  Future<void> _generate() async {
+    final client = widget.app.aiClient();
+    if (client == null) {
+      setState(() {
+        _error = 'Connect an AI provider first: Settings → Connections → '
+            'AI provider.';
+        _questions = null;
+        _status = null;
+      });
+      return;
+    }
+    final topic = _topic.text.trim();
+    if (topic.isEmpty) {
+      setState(() {
+        _error = 'Type a topic to generate questions from.';
+        _questions = null;
+        _status = null;
+      });
+      return;
+    }
+    final count =
+        (int.tryParse(_count.text.trim()) ?? 5).clamp(1, kMaxQuizQuestions);
+    setState(() {
+      _generating = true;
+      _error = null;
+      _status = 'Thinking…';
+      _questions = null;
+    });
+    final r = await generateQuiz(client, topic: topic, count: count);
+    widget.app.addAiTokens(r.tokens);
+    if (!mounted) return;
+    setState(() {
+      _generating = false;
+      if (r.parse.isOk) {
+        _questions = r.parse.questions;
+        _error = null;
+        _status = '${r.parse.questions.length} '
+            'question${r.parse.questions.length == 1 ? '' : 's'} generated';
+        // Name the quiz after the topic if it is still the placeholder.
+        if (_name.text.trim().isEmpty || _name.text.trim() == 'Quiz') {
+          _name.text =
+              topic.length > 40 ? topic.substring(0, 40).trim() : topic;
+        }
+      } else {
+        _questions = null;
+        _status = null;
+        _error = r.parse.error;
+      }
+    });
   }
 
   void _loadPaste() {
@@ -213,6 +271,58 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
                 icon: const Icon(Icons.playlist_add_check, size: 18),
                 label: const Text('Use pasted questions'),
               ),
+            ),
+            const SizedBox(height: 14),
+            const Row(
+              children: [
+                Icon(Icons.auto_awesome_outlined, size: 15),
+                SizedBox(width: 6),
+                Text('Or auto generate with AI',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _topic,
+              minLines: 2,
+              maxLines: 3,
+              style: const TextStyle(fontSize: 12, height: 1.35),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                hintText: 'What should the quiz be about? '
+                    'e.g. photosynthesis for grade 8',
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                SizedBox(
+                  width: 88,
+                  child: TextField(
+                    controller: _count,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      labelText: 'How many',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton.tonalIcon(
+                  onPressed: _generating ? null : _generate,
+                  icon: _generating
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: Text(_generating ? 'Thinking…' : 'Generate with AI'),
+                ),
+              ],
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

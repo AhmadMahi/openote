@@ -6,6 +6,7 @@ import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
 import '../update/app_update.dart';
+import 'ai_provider_dialog.dart';
 import 'mcp_dialog.dart';
 import 'color_picker.dart' show ShortcutField;
 import 'onote_dialog.dart';
@@ -337,8 +338,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                             Theme.of(context).brightness == Brightness.dark),
                         border: a == app.accent
                             ? Border.all(
-                                color:
-                                    Theme.of(context).colorScheme.onSurface,
+                                color: Theme.of(context).colorScheme.onSurface,
                                 width: 2)
                             : null,
                       ),
@@ -468,6 +468,15 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 ? 'On — AI helpers on this computer can use your notes.'
                 : 'Off — connect Claude or other AI helpers.',
             () => showMcpDialog(context, app)),
+        _door(
+            Icons.auto_awesome_outlined,
+            'AI provider',
+            app.aiConnected
+                ? 'Connected — ${app.aiProvider.label} · ${app.aiModel}'
+                : 'Bring your own OpenAI or OpenRouter key.',
+            () => showAiProviderDialog(context, app)),
+        _row('Ask AI (chat bubble on the page)',
+            _toggle(app.askAiEnabled, app.setAskAiEnabled)),
       ];
 
   List<Widget> _keyboard(BuildContext context) => [
