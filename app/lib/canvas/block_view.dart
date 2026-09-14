@@ -441,6 +441,11 @@ class _BlockViewState extends State<BlockView> {
       b.type == BlockType.ink ||
       b.type == BlockType.image ||
       b.type == BlockType.table ||
+      // A mind map owns its height like a canvas does: it starts as tall as its
+      // tree, but the frame's bottom and corner grips let it be set by hand, so
+      // it can be dragged both wider AND taller (the first height drag reads the
+      // measured height from renderSizes, since a fresh map has no stored one).
+      b.type == BlockType.mindmap ||
       b.h != null;
 
   void _resize(DragUpdateDetails d) => _resizeBy(d, width: true, height: false);

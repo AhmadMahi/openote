@@ -13,12 +13,14 @@ import '../theme/tokens.dart';
 ///
 /// content: `{ root: <MindNode json> }`
 ///
-/// Enter adds a sibling branch, Tab a child, Shift+Tab outdents; a branch with
-/// children folds and unfolds; nodes take a colour (solid or translucent). The
-/// tree is laid out automatically — you don't place nodes by hand — and the
-/// whole block drags and resizes on the page like any other. A toolbar mirrors
-/// the keys so it is usable without knowing them, and a Markdown outline can be
-/// imported into it.
+/// Enter adds a sibling branch and Ctrl/Cmd+C a child (Tab also makes a child);
+/// Ctrl/Cmd+Shift+C outdents. A branch with children folds and unfolds; nodes
+/// take a colour (solid or translucent), and one button tints each branch a
+/// different hue automatically. The tree is laid out automatically — you don't
+/// place nodes by hand — and the whole block drags and resizes on the page,
+/// both wider and taller. Scrolling or two-finger panning over the map moves
+/// the map, not the page beneath it. A toolbar mirrors the keys so it is usable
+/// without knowing them, and a Markdown outline can be imported into it.
 class MindmapBlockView extends StatefulWidget {
   const MindmapBlockView({super.key, required this.block, required this.app});
   final Block block;
@@ -185,6 +187,32 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     _save();
   }
 
+  /// Give every top-level branch its own hue, shared down its whole subtree, so
+  /// the map reads by colour at a glance. Manual per-node colours still win the
+  /// moment you set one afterwards — this only fills them in in one go.
+  void _autoColorBranches() {
+    final keys = _hues.keys.toList();
+    void paint(MindNode n, String key) {
+      n.color = key;
+      for (final c in n.children) {
+        paint(c, key);
+      }
+    }
+
+    final kids = _root.children;
+    if (kids.isEmpty) {
+      // Nothing has branched yet: tint the centre so the button still responds.
+      setState(() => _root.color = keys.first);
+      _save();
+      return;
+    }
+    for (var i = 0; i < kids.length; i++) {
+      paint(kids[i], keys[i % keys.length]);
+    }
+    setState(() {});
+    _save();
+  }
+
   Future<void> _importMarkdown() async {
     XFile? file;
     try {
@@ -254,44 +282,70 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     final laid = _layout();
 
     final canvas = Shortcuts(
+      // Ctrl/Cmd+C makes a child (a modifier chord, so plain "c" still types
+      // while you name a node); Tab does too. Enter makes a sibling and lives on
+      // the field itself (onSubmitted). Our mapping sits nearer the focused field
+      // than the app's default copy shortcut, so Ctrl/Cmd+C means "child" inside
+      // the map without triggering copy.
       shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.keyC, control: true): _ChildIntent(),
+        SingleActivator(LogicalKeyboardKey.keyC, meta: true): _ChildIntent(),
         SingleActivator(LogicalKeyboardKey.tab): _ChildIntent(),
+        SingleActivator(LogicalKeyboardKey.keyC, control: true, shift: true):
+            _OutdentIntent(),
+        SingleActivator(LogicalKeyboardKey.keyC, meta: true, shift: true):
+            _OutdentIntent(),
         SingleActivator(LogicalKeyboardKey.tab, shift: true): _OutdentIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
           _ChildIntent: CallbackAction<_ChildIntent>(onInvoke: (_) {
-            if (_editingId != null) _addChild(_editingId!);
+            final id = _editingId ?? _selectedId;
+            if (id != null) _addChild(id);
             return null;
           }),
           _OutdentIntent: CallbackAction<_OutdentIntent>(onInvoke: (_) {
-            if (_editingId != null) _outdent(_editingId!);
+            final id = _editingId ?? _selectedId;
+            if (id != null) _outdent(id);
             return null;
           }),
         },
-        child: ClipRect(
-          child: InteractiveViewer(
-            constrained: false,
-            minScale: 0.4,
-            maxScale: 2.5,
-            boundaryMargin: const EdgeInsets.all(400),
-            child: SizedBox(
-              width: math.max(laid.size.width, 40),
-              height: math.max(laid.size.height, 40),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _ConnectorPainter(
-                        root: _root,
-                        rects: laid.rects,
-                        color: s.border,
+        // Keep scroll and two-finger panning inside the map: claim the pointer
+        // so PageCanvas declines to move the page under it (a wheel notch and a
+        // pinch are isolated the same way a graph block does it), while the
+        // InteractiveViewer does the actual panning and zooming.
+        child: Listener(
+          onPointerDown: (e) => widget.app.claimedPointers.add(e.pointer),
+          onPointerUp: (e) => widget.app.claimedPointers.remove(e.pointer),
+          onPointerCancel: (e) => widget.app.claimedPointers.remove(e.pointer),
+          onPointerPanZoomStart: (e) =>
+              widget.app.claimedPointers.add(e.pointer),
+          onPointerPanZoomEnd: (e) =>
+              widget.app.claimedPointers.remove(e.pointer),
+          child: ClipRect(
+            child: InteractiveViewer(
+              constrained: false,
+              minScale: 0.4,
+              maxScale: 2.5,
+              boundaryMargin: const EdgeInsets.all(400),
+              child: SizedBox(
+                width: math.max(laid.size.width, 40),
+                height: math.max(laid.size.height, 40),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _ConnectorPainter(
+                          root: _root,
+                          rects: laid.rects,
+                          color: s.border,
+                        ),
                       ),
                     ),
-                  ),
-                  for (final entry in laid.rects.entries)
-                    _positionedNode(context, s, dark, entry.key, entry.value),
-                ],
+                    for (final entry in laid.rects.entries)
+                      _positionedNode(context, s, dark, entry.key, entry.value),
+                  ],
+                ),
               ),
             ),
           ),
@@ -345,7 +399,7 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
         children: [
           Icon(Icons.account_tree_outlined, size: 16, color: s.textSecondary),
           const Spacer(),
-          btn(Icons.subdirectory_arrow_right, 'Add child  (Tab)',
+          btn(Icons.subdirectory_arrow_right, 'Add child  (Ctrl/Cmd+C)',
               sel == null ? null : () => _addChild(sel)),
           btn(Icons.add, 'Add sibling  (Enter)',
               sel == null ? null : () => _addSibling(sel)),
@@ -355,6 +409,8 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                 selNode.collapsed ? 'Expand' : 'Collapse',
                 () => _toggleCollapse(sel!)),
           _colorButton(context, s),
+          btn(Icons.auto_awesome_outlined, 'Auto-colour each branch',
+              _autoColorBranches),
           btn(Icons.delete_outline, 'Delete branch',
               (sel == null || sel == _root.id) ? null : _deleteSelected),
           btn(Icons.upload_file_outlined, 'Import a Markdown outline',
