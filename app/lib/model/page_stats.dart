@@ -26,8 +26,8 @@ class PageStats {
     required this.blocks,
   });
 
-  static const PageStats empty = PageStats(
-      words: 0, characters: 0, charactersNoSpaces: 0, blocks: 0);
+  static const PageStats empty =
+      PageStats(words: 0, characters: 0, charactersNoSpaces: 0, blocks: 0);
 
   final int words;
 
@@ -182,6 +182,8 @@ List<String> _sourceOf(Block b) {
     case BlockType.quiz:
     // A mind map's labels are a diagram, not page prose.
     case BlockType.mindmap:
+    // A presentation is an imported PDF, not words written on the page.
+    case BlockType.presentation:
     case BlockType.unknown:
       return const [];
   }

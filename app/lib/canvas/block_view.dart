@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../editor/board_block_view.dart';
 import '../editor/quiz_block_view.dart';
 import '../editor/mindmap_block_view.dart';
+import '../editor/presentation_block_view.dart';
 import '../editor/code_block_view.dart';
 import '../editor/file_block_view.dart';
 import '../editor/flashcard_block_view.dart';
@@ -296,6 +297,7 @@ class _BlockViewState extends State<BlockView> {
                 b.type != BlockType.graph &&
                 b.type != BlockType.quiz &&
                 b.type != BlockType.mindmap &&
+                b.type != BlockType.presentation &&
                 b.type != BlockType.substitute) ||
             HardwareKeyboard.instance.isAltPressed;
     if (_bodyDragMoves) _dragStart(d);
@@ -353,11 +355,12 @@ class _BlockViewState extends State<BlockView> {
         onPanStart: _dragStart,
         onPanUpdate: _drag,
         onPanEnd: _dragEnd,
-        onTap: () =>
-            app.select(b.id, additive: HardwareKeyboard.instance.isShiftPressed),
+        onTap: () => app.select(b.id,
+            additive: HardwareKeyboard.instance.isShiftPressed),
         // Block actions stay reachable while editing, which they were not
         // when the only right-click target was the text itself.
-        onSecondaryTapUp: (d) => showBlockMenu(context, app, b, d.globalPosition),
+        onSecondaryTapUp: (d) =>
+            showBlockMenu(context, app, b, d.globalPosition),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: _kChromePad),
           child: Container(
@@ -365,7 +368,8 @@ class _BlockViewState extends State<BlockView> {
               color: live
                   ? primaryColor.withValues(alpha: .85)
                   : (dark ? OnoteColors.night200 : OnoteColors.paper200),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
               children: [
@@ -377,8 +381,12 @@ class _BlockViewState extends State<BlockView> {
                         : OnoteColors.graphite400),
                 const Spacer(),
                 if (primary) ...[
-                  _barButton(context, Icons.copy_all_outlined,
-                      'Duplicate (Ctrl+D)', () => app.duplicateBlock(b.id), live),
+                  _barButton(
+                      context,
+                      Icons.copy_all_outlined,
+                      'Duplicate (Ctrl+D)',
+                      () => app.duplicateBlock(b.id),
+                      live),
                   _barButton(context, Icons.close, 'Delete (Del)',
                       () => app.removeSelected(), live),
                   const SizedBox(width: 2),
@@ -411,21 +419,20 @@ class _BlockViewState extends State<BlockView> {
   String _a11yLabel() {
     final t = switch (b.type) {
       BlockType.text => b.content['text'] as String? ?? '',
-      BlockType.code =>
-        'Code block. ${b.content['source'] as String? ?? ''}',
+      BlockType.code => 'Code block. ${b.content['source'] as String? ?? ''}',
       BlockType.math =>
         'Equation. ${b.content['linearSource'] ?? b.content['latex'] ?? ''}',
       BlockType.image => 'Image',
       BlockType.file => 'Attachment: ${b.content['name'] ?? 'file'}',
-      BlockType.flashcard =>
-        'Flashcard: ${b.content['front'] ?? 'empty'}',
+      BlockType.flashcard => 'Flashcard: ${b.content['front'] ?? 'empty'}',
       BlockType.embed => 'Window to another page',
       BlockType.board => 'Task board',
       BlockType.quiz => 'Quiz: ${b.content['name'] ?? 'quiz'}',
       BlockType.mindmap => 'Mind map',
+      BlockType.presentation =>
+        'Presentation: ${b.content['name'] ?? 'slides'}',
       BlockType.graph => 'Graph of ${b.content['latex'] ?? 'an equation'}',
-      BlockType.substitute =>
-        'Evaluate ${b.content['latex'] ?? 'an equation'}',
+      BlockType.substitute => 'Evaluate ${b.content['latex'] ?? 'an equation'}',
       _ => '${b.type.name} block',
     };
     return t.trim().isEmpty ? '${b.type.name} block' : t;
@@ -446,6 +453,7 @@ class _BlockViewState extends State<BlockView> {
       // it can be dragged both wider AND taller (the first height drag reads the
       // measured height from renderSizes, since a fresh map has no stored one).
       b.type == BlockType.mindmap ||
+      b.type == BlockType.presentation ||
       b.h != null;
 
   void _resize(DragUpdateDetails d) => _resizeBy(d, width: true, height: false);
@@ -578,6 +586,7 @@ class _BlockViewState extends State<BlockView> {
       BlockType.board => BoardBlockView(block: b, app: app),
       BlockType.quiz => QuizBlockView(block: b, app: app),
       BlockType.mindmap => MindmapBlockView(block: b, app: app),
+      BlockType.presentation => PresentationBlockView(block: b, app: app),
       BlockType.graph => GraphBlockView(block: b, app: app),
       BlockType.substitute => SubstituteBlockView(block: b, app: app),
       _ => Padding(
@@ -819,7 +828,8 @@ class _BlockViewState extends State<BlockView> {
                     child: MouseRegion(
                       cursor: SystemMouseCursors.resizeUpDown,
                       child: GestureDetector(
-                        behavior: HitTestBehavior.opaque, // whole strip, as above
+                        behavior:
+                            HitTestBehavior.opaque, // whole strip, as above
                         supportedDevices: devices,
                         onPanUpdate: (d) =>
                             _resizeBy(d, width: false, height: true),

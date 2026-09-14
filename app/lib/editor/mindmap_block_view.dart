@@ -222,6 +222,34 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     _save();
   }
 
+  /// Fold the map down to its main branches: the centre and its direct
+  /// children stay visible, everything under them is hidden. The teaching
+  /// move — collapse all, then open one branch at a time.
+  void _collapseAll() {
+    void walk(MindNode n, int depth) {
+      n.collapsed = depth >= 1 && n.children.isNotEmpty;
+      for (final c in n.children) {
+        walk(c, depth + 1);
+      }
+    }
+
+    setState(() => walk(_root, 0));
+    _save();
+  }
+
+  /// Open every branch back up.
+  void _expandAll() {
+    void walk(MindNode n) {
+      n.collapsed = false;
+      for (final c in n.children) {
+        walk(c);
+      }
+    }
+
+    setState(() => walk(_root));
+    _save();
+  }
+
   void _setColor(String color) {
     final id = _selectedId;
     if (id == null) return;
@@ -584,6 +612,9 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                 selNode.collapsed ? Icons.unfold_more : Icons.unfold_less,
                 selNode.collapsed ? 'Expand' : 'Collapse',
                 () => _toggleCollapse(sel!)),
+          btn(Icons.close_fullscreen, 'Collapse all to the main branches',
+              _collapseAll),
+          btn(Icons.open_in_full, 'Expand all branches', _expandAll),
           _colorButton(context, s),
           btn(Icons.auto_awesome_outlined, 'Generate with AI', _generateWithAi),
           btn(Icons.delete_outline, 'Delete branch',

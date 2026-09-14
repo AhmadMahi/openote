@@ -363,6 +363,10 @@ enum BlockType {
   // An auto-laid-out mind map (tree of labels). Same `rawType` safety: an
   // older build shows "Unsupported block: mindmap" and round-trips it.
   mindmap,
+  // A presentation: a stored PDF paged through one slide at a time. Same
+  // `rawType` safety: an older build shows "Unsupported block: presentation"
+  // and round-trips it untouched.
+  presentation,
   unknown
 }
 
