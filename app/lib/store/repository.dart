@@ -2953,6 +2953,19 @@ class Repository {
     }
   }
 
+  /// Epoch-ms of the notebook's most recent edit (max `updated_at` over its live
+  /// nodes), or 0 when it has none or the file is unreadable. Powers the
+  /// "Updated 2 minutes ago" line in the notebook manager.
+  int notebookUpdatedAt(String id) {
+    try {
+      final r = _db(id).select(
+          'SELECT MAX(updated_at) AS m FROM nodes WHERE deleted_at IS NULL');
+      return (r.first['m'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> renameNotebook(String id, String title) async {
     final ref = notebooks.firstWhere((n) => n.id == id);
     ref.title = title;

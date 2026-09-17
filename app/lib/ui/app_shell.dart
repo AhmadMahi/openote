@@ -28,6 +28,7 @@ import 'save_problem_dialog.dart';
 import 'shortcut_overlay.dart';
 import 'focus_palette.dart';
 import 'sidebar.dart';
+import 'tab_strip.dart';
 import '../export/print_page.dart';
 import 'study_panel.dart';
 import 'sync_dialog.dart';
@@ -1515,6 +1516,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
+                                            // The open-page tabs sit above the
+                                            // toolbar; empty until the first
+                                            // "Open in new tab", so it costs no
+                                            // height for people who never use it.
+                                            TabStrip(app: app),
                                             _regionWrap(_Region.toolbar,
                                                 CommandBar(app: app)),
                                             // **The object row.** With nothing

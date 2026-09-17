@@ -144,7 +144,7 @@ void main() {
 
       await t.tap(find.text('First').first);
       await t.pumpAndSettle();
-      await t.tap(find.text('New'));
+      await t.tap(find.text('New Notebook'));
       await t.pumpAndSettle();
       await t.enterText(find.byType(TextField).last, 'Second');
       await t.testTextInput.receiveAction(TextInputAction.done);

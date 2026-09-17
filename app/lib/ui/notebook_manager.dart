@@ -87,10 +87,33 @@ class _NotebookManagerState extends State<_NotebookManager> {
 
   final _renameCtl = TextEditingController();
 
+  /// Search + sort for the active-notebook list.
+  final _searchCtl = TextEditingController();
+  String _query = '';
+  _NbSort _sort = _NbSort.updated;
+
   @override
   void dispose() {
     _renameCtl.dispose();
+    _searchCtl.dispose();
     super.dispose();
+  }
+
+  /// Active notebooks after the search box and the chosen sort.
+  List<NotebookRef> _visibleNotebooks() {
+    final q = _query.trim().toLowerCase();
+    final list = [
+      for (final nb in app.notebooks)
+        if (q.isEmpty || nb.title.toLowerCase().contains(q)) nb
+    ];
+    if (_sort == _NbSort.name) {
+      list.sort(
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    } else {
+      list.sort((a, b) =>
+          app.notebookUpdatedAt(b.id).compareTo(app.notebookUpdatedAt(a.id)));
+    }
+    return list;
   }
 
   void _startRename(NotebookRef nb) {
@@ -153,34 +176,44 @@ class _NotebookManagerState extends State<_NotebookManager> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final notebooks = app.notebooks;
+    final s = context.surfaces;
+    final notebooks = _visibleNotebooks();
     final trashed = app.trashedNotebooks;
     return AlertDialog(
-      title: Row(children: [
-        Icon(Icons.menu_book_outlined, size: 18, color: scheme.primary),
-        const SizedBox(width: 9),
-        const Text('Notebooks'),
-        const Spacer(),
-        Text('${notebooks.length} open',
-            style:
-                TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
-      ]),
-      contentPadding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 16, 8),
+      title: _header(context, scheme, s),
+      contentPadding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
       content: SizedBox(
-        width: 520,
+        width: 560,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 460),
+          constraints: const BoxConstraints(maxHeight: 480),
           child: ListView(
             children: [
+              _sectionHeader('Active notebooks',
+                  trailing: '${app.notebooks.length} open'),
+              const SizedBox(height: 6),
+              if (notebooks.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Center(
+                    child: Text(
+                        _query.trim().isEmpty
+                            ? 'No notebooks yet.'
+                            : 'No notebooks match “${_query.trim()}”.',
+                        style: TextStyle(fontSize: 13, color: s.textSecondary)),
+                  ),
+                ),
               for (final nb in notebooks) _row(nb, scheme),
               if (trashed.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                _sectionLabel(
-                    'In the recycle bin · deleted after ${app.recycleRetentionDays} days'),
+                const SizedBox(height: 18),
+                _sectionHeader('Recycle bin',
+                    icon: Icons.delete_outline,
+                    trailing: 'Deleted after ${app.recycleRetentionDays} days'),
+                const SizedBox(height: 6),
                 for (final nb in trashed) _trashRow(nb),
               ],
               if (_importOpen) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 12),
                 _sectionLabel('Import into a new notebook'),
                 _importRow(),
               ],
@@ -196,67 +229,197 @@ class _NotebookManagerState extends State<_NotebookManager> {
           ),
         ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
       // ONE Row as the single action, because `AlertDialog.actions` is an
       // OverflowBar — a `Spacer` there throws ("applying parent data"), since
       // Spacer needs a Flex parent.
       actions: [
         Row(children: [
-          TextButton.icon(
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('New'),
-            onPressed: () async {
-              // Through the shared prompt, which owns the field's controller in
-              // the dialog's own State. This used to build the field and
-              // dispose its controller in a `finally` right after the await —
-              // 150 ms before the route's exit transition had finished
-              // unmounting the field. That is what crashed the app on Enter;
-              // see [promptForText].
-              final title = await promptForText(context,
-                  title: 'New notebook',
-                  okLabel: 'Create',
-                  hintText: 'Notebook name');
-              if (title == null || !mounted) return;
-              await app.createNotebook(title);
-              if (mounted) setState(() {});
-            },
+          // The left group scrolls horizontally rather than overflowing when
+          // the dialog is narrow — the footer must never clip a button.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('New Notebook'),
+                  onPressed: () async {
+                    // Through the shared prompt, which owns the field's
+                    // controller in the dialog's own State. This used to build
+                    // the field and dispose its controller in a `finally` right
+                    // after the await — 150 ms before the route's exit
+                    // transition had finished unmounting the field. That is what
+                    // crashed the app on Enter; see [promptForText].
+                    final title = await promptForText(context,
+                        title: 'New notebook',
+                        okLabel: 'Create',
+                        hintText: 'Notebook name');
+                    if (title == null || !mounted) return;
+                    await app.createNotebook(title);
+                    if (mounted) setState(() {});
+                  },
+                ),
+                const SizedBox(width: 8),
+                // Import expands INLINE rather than opening a popup menu: a
+                // popup here would be the second kind of menu this panel exists
+                // to remove.
+                _footerButton(
+                  _importOpen ? Icons.expand_less : Icons.download_outlined,
+                  'Import',
+                  () => setState(() => _importOpen = !_importOpen),
+                ),
+                const SizedBox(width: 8),
+                _footerButton(Icons.healing_outlined, 'Repair',
+                    () => _repairWithProgress(context, app)),
+                const SizedBox(width: 8),
+                // The welcome flow is where "open the notebook that's already in
+                // my Drive" lives, and it should not be a one-shot you can never
+                // get back to — that path matters most on a machine you set up
+                // months after the first one.
+                _footerButton(Icons.explore_outlined, 'Get started', () async {
+                  // Root navigator's context, captured before the pop — the
+                  // same trap as the import row below: `showDialog` on a route
+                  // that has just been popped has no live Navigator.
+                  final root =
+                      Navigator.of(context, rootNavigator: true).context;
+                  Navigator.pop(context);
+                  await showOnboarding(root, app);
+                }),
+              ]),
+            ),
           ),
-          // Import expands INLINE rather than opening a popup menu: a popup here
-          // would be the second kind of menu this panel exists to remove.
-          TextButton.icon(
-            icon: Icon(
-                _importOpen ? Icons.expand_less : Icons.download_outlined,
-                size: 18),
-            label: const Text('Import'),
-            onPressed: () => setState(() => _importOpen = !_importOpen),
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.healing_outlined, size: 18),
-            label: const Text('Repair'),
-            onPressed: () => _repairWithProgress(context, app),
-          ),
-          // The welcome flow is where "open the notebook that's already in my
-          // Drive" lives, and it should not be a one-shot you can never get
-          // back to — that path matters most on a machine you set up months
-          // after the first one.
-          TextButton.icon(
-            icon: const Icon(Icons.explore_outlined, size: 18),
-            label: const Text('Get started'),
-            onPressed: () async {
-              // Root navigator's context, captured before the pop — the same
-              // trap as the import row below: `showDialog` on a route that has
-              // just been popped has no live Navigator to attach to.
-              final root = Navigator.of(context, rootNavigator: true).context;
-              Navigator.pop(context);
-              await showOnboarding(root, app);
-            },
-          ),
-          const Spacer(),
+          const SizedBox(width: 8),
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Done')),
         ]),
       ],
+    );
+  }
+
+  /// A footer button — outlined and compact, to sit beside the filled
+  /// "New Notebook".
+  Widget _footerButton(IconData icon, String label, VoidCallback onTap) =>
+      OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        onPressed: onTap,
+      );
+
+  /// The dialog's header: a gradient book tile, the title and subtitle, a
+  /// search box and a sort control.
+  Widget _header(BuildContext context, ColorScheme scheme, OnoteSurfaces s) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                scheme.primary,
+                Color.lerp(scheme.primary, scheme.secondary, 0.6) ??
+                    scheme.primary,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.menu_book_rounded,
+              color: Colors.white, size: 24),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Notebooks',
+                  style: OnoteType.headline.copyWith(
+                      color: s.textPrimary, fontWeight: FontWeight.w700)),
+              Text('Organize your ideas, all in one place.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OnoteType.ui.copyWith(color: s.textSecondary)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 170,
+          height: 38,
+          child: TextField(
+            controller: _searchCtl,
+            style: const TextStyle(fontSize: 12.5),
+            onChanged: (v) => setState(() => _query = v),
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 16),
+              prefixIconConstraints:
+                  BoxConstraints(minWidth: 32, minHeight: 32),
+              hintText: 'Search notebooks…',
+              hintStyle: TextStyle(fontSize: 12.5),
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        PopupMenuButton<_NbSort>(
+          tooltip: 'Sort',
+          initialValue: _sort,
+          position: PopupMenuPosition.under,
+          onSelected: (v) => setState(() => _sort = v),
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+                value: _NbSort.updated, child: Text('Recently updated')),
+            PopupMenuItem(value: _NbSort.name, child: Text('Name (A→Z)')),
+          ],
+          child: Container(
+            width: 40,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border.all(color: s.border),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.tune, size: 18, color: s.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A section heading with an optional leading icon and a trailing note
+  /// (the count, or the recycle-bin retention).
+  Widget _sectionHeader(String label, {IconData? icon, String? trailing}) {
+    final s = context.surfaces;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 8, 2, 2),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: s.textSecondary),
+            const SizedBox(width: 6),
+          ],
+          Text(label.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .6,
+                  color: s.textSecondary)),
+          const Spacer(),
+          if (trailing != null)
+            Text(trailing,
+                style: TextStyle(fontSize: 11.5, color: s.textSecondary)),
+        ],
+      ),
     );
   }
 
@@ -432,174 +595,214 @@ class _NotebookManagerState extends State<_NotebookManager> {
     final counts = app.notebookCounts(nb.id);
     final highlight = _highlightId == nb.id;
 
-    return InkWell(
-      // Clicking the row opens that notebook — the switching the dropdown did.
-      borderRadius: BorderRadius.circular(8),
-      onTap: current || renaming || confirming
-          ? null
-          : () async {
-              Navigator.pop(context);
-              await app.selectNotebook(nb.id);
-            },
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        decoration: BoxDecoration(
-          color: current
-              ? scheme.primary.withValues(alpha: .07)
-              : highlight
-                  ? scheme.secondary.withValues(alpha: .10)
-                  : null,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: current
-                  ? scheme.primary.withValues(alpha: .35)
-                  : scheme.outline,
-              width: current ? 1.2 : .6),
-        ),
-        padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(current ? Icons.menu_book : Icons.menu_book_outlined,
-                    size: 18,
-                    color: current
-                        ? scheme.primary
-                        : context.surfaces.textSecondary),
-                const SizedBox(width: 6),
-                // Which of these is safe if this laptop dies — answerable by
-                // scanning the list, rather than by opening each one in turn.
-                SyncDot(app: app, notebookId: nb.id),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: renaming
-                      ? TextField(
-                          controller: _renameCtl,
-                          autofocus: true,
-                          style: const TextStyle(fontSize: 13),
-                          decoration: const InputDecoration(
-                              isDense: true, border: OutlineInputBorder()),
-                          onSubmitted: (_) => _commitRename(nb),
-                          onTapOutside: (_) => _commitRename(nb),
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(nb.title,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: current
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
-                                    color: current ? scheme.primary : null)),
-                            Text(
-                                '${counts.sections} section${counts.sections == 1 ? '' : 's'} · '
-                                '${counts.pages} page${counts.pages == 1 ? '' : 's'}'
-                                '${current ? ' · open' : ''}',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: context.surfaces.textSecondary)),
-                          ],
-                        ),
-                ),
-                if (busy)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: SizedBox(
-                        width: 15,
-                        height: 15,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                else if (!renaming && !confirming) ...[
-                  if (!current)
-                    _act(Icons.open_in_new, 'Open this notebook', () async {
-                      Navigator.pop(context);
-                      await app.selectNotebook(nb.id);
-                    }),
-                  _act(Icons.edit_outlined, 'Rename', () => _startRename(nb)),
-                  _act(Icons.copy_all_outlined, 'Duplicate',
-                      () => _duplicate(nb)),
-                  _act(
-                      Icons.delete_outline,
-                      'Move to recycle bin',
-                      () => setState(() {
-                            _confirmDeleteId = nb.id;
-                            _renamingId = null;
-                          }),
-                      danger: true),
+    final s = context.surfaces;
+    final updated = app.notebookUpdatedAt(nb.id);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        // Clicking the row opens that notebook — the switching the dropdown did.
+        borderRadius: BorderRadius.circular(12),
+        onTap: current || renaming || confirming
+            ? null
+            : () async {
+                Navigator.pop(context);
+                await app.selectNotebook(nb.id);
+              },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            color: current
+                ? scheme.primary.withValues(alpha: .06)
+                : highlight
+                    ? scheme.secondary.withValues(alpha: .10)
+                    : s.raised.withValues(alpha: .35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color:
+                    current ? scheme.primary.withValues(alpha: .5) : s.border,
+                width: current ? 1.4 : 1),
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // The book tile — primary-tinted for the open notebook.
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: current
+                          ? scheme.primary.withValues(alpha: .14)
+                          : s.well,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.menu_book_rounded,
+                        size: 20,
+                        color: current ? scheme.primary : s.textSecondary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: renaming
+                        ? TextField(
+                            controller: _renameCtl,
+                            autofocus: true,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: const InputDecoration(
+                                isDense: true, border: OutlineInputBorder()),
+                            onSubmitted: (_) => _commitRename(nb),
+                            onTapOutside: (_) => _commitRename(nb),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(nb.title,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: OnoteType.uiStrong.copyWith(
+                                            color: current
+                                                ? scheme.primary
+                                                : s.textPrimary,
+                                            fontWeight: FontWeight.w600)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Which of these is safe if this laptop dies —
+                                  // answerable at a glance rather than by
+                                  // opening each one in turn.
+                                  SyncDot(app: app, notebookId: nb.id),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                  '${counts.sections} section${counts.sections == 1 ? '' : 's'} · '
+                                  '${counts.pages} page${counts.pages == 1 ? '' : 's'}'
+                                  '${current ? ' · open' : ''}',
+                                  style: TextStyle(
+                                      fontSize: 12, color: s.textSecondary)),
+                              if (updated > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 1),
+                                  child: Text('Updated ${_ago(updated)}',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: s.textSecondary
+                                              .withValues(alpha: .8))),
+                                ),
+                            ],
+                          ),
+                  ),
+                  if (busy)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  else if (!renaming && !confirming) ...[
+                    if (!current)
+                      _act(Icons.open_in_new, 'Open this notebook', () async {
+                        Navigator.pop(context);
+                        await app.selectNotebook(nb.id);
+                      }),
+                    _act(Icons.edit_outlined, 'Rename', () => _startRename(nb)),
+                    _act(Icons.copy_all_outlined, 'Duplicate',
+                        () => _duplicate(nb)),
+                    _act(
+                        Icons.delete_outline,
+                        'Move to recycle bin',
+                        () => setState(() {
+                              _confirmDeleteId = nb.id;
+                              _renamingId = null;
+                            }),
+                        danger: true),
+                  ],
                 ],
-              ],
-            ),
-            // Inline confirm — no second dialog, and the list stays put so you can
-            // change your mind or delete another one straight after.
-            if (confirming)
-              Padding(
-                padding: const EdgeInsets.only(top: 8, left: 28),
-                child: Row(children: [
-                  const Expanded(
-                    child: Text(
-                        'Move to the recycle bin? You can restore it from here.',
-                        style: TextStyle(fontSize: 13)),
-                  ),
-                  TextButton(
-                      onPressed: () => setState(() => _confirmDeleteId = null),
-                      child: const Text('Cancel')),
-                  const SizedBox(width: 4),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                        backgroundColor: OnoteColors.danger,
-                        visualDensity: VisualDensity.compact),
-                    onPressed: () => _delete(nb),
-                    child: const Text('Delete'),
-                  ),
-                ]),
               ),
-          ],
+              // Inline confirm — no second dialog, and the list stays put so you can
+              // change your mind or delete another one straight after.
+              if (confirming)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 28),
+                  child: Row(children: [
+                    const Expanded(
+                      child: Text(
+                          'Move to the recycle bin? You can restore it from here.',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                    TextButton(
+                        onPressed: () =>
+                            setState(() => _confirmDeleteId = null),
+                        child: const Text('Cancel')),
+                    const SizedBox(width: 4),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: OnoteColors.danger,
+                          visualDensity: VisualDensity.compact),
+                      onPressed: () => _delete(nb),
+                      child: const Text('Delete'),
+                    ),
+                  ]),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _trashRow(NotebookRef nb) {
+    final s = context.surfaces;
     final days = _daysLeft(nb.deletedAt ?? 0, app.recycleRetentionDays);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Row(children: [
-        const SizedBox(width: 10),
-        Icon(Icons.delete_outline,
-            size: 16, color: context.surfaces.textSecondary),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(nb.title,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 13, color: OnoteColors.graphite500)),
-              Text(days,
-                  style: TextStyle(
-                      fontSize: 11, color: context.surfaces.textSecondary)),
-            ],
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        decoration: BoxDecoration(
+          color: s.raised.withValues(alpha: .25),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: s.border),
+        ),
+        child: Row(children: [
+          Icon(Icons.description_outlined, size: 20, color: s.textSecondary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(nb.title,
+                    overflow: TextOverflow.ellipsis,
+                    style: OnoteType.uiStrong.copyWith(color: s.textSecondary)),
+                const SizedBox(height: 1),
+                Text(days,
+                    style: TextStyle(fontSize: 11, color: s.textSecondary)),
+              ],
+            ),
           ),
-        ),
-        TextButton(
-          onPressed: () async {
-            await app.restoreNotebook(nb.id);
-            if (mounted) setState(() => _highlightId = nb.id);
-          },
-          child: const Text('Restore'),
-        ),
-        _act(Icons.delete_forever, 'Delete permanently', () async {
-          final ok =
-              await _confirmPurge(context, nb, caveat: app.purgeCaveat(nb.id));
-          if (!ok || !mounted) return;
-          await app.purgeNotebook(nb.id);
-          if (mounted) setState(() {});
-        }, danger: true),
-      ]),
+          OutlinedButton.icon(
+            style:
+                OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+            icon: const Icon(Icons.restore, size: 16),
+            label: const Text('Restore'),
+            onPressed: () async {
+              await app.restoreNotebook(nb.id);
+              if (mounted) setState(() => _highlightId = nb.id);
+            },
+          ),
+          const SizedBox(width: 4),
+          _act(Icons.delete_forever, 'Delete permanently', () async {
+            final ok = await _confirmPurge(context, nb,
+                caveat: app.purgeCaveat(nb.id));
+            if (!ok || !mounted) return;
+            await app.purgeNotebook(nb.id);
+            if (mounted) setState(() {});
+          }, danger: true),
+        ]),
+      ),
     );
   }
 
@@ -622,6 +825,35 @@ String _daysLeft(int deletedAt, int retentionDays) {
   return days <= 0
       ? 'Deletes soon'
       : 'Deletes in $days day${days == 1 ? '' : 's'}';
+}
+
+/// How the active-notebook list is ordered.
+enum _NbSort { updated, name }
+
+/// A short "how long ago" for the "Updated …" line — "just now", "5 minutes
+/// ago", "3 days ago". [ms] is epoch milliseconds; 0 means unknown.
+String _ago(int ms) {
+  if (ms <= 0) return 'a while ago';
+  final d = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ms));
+  if (d.inSeconds < 45) return 'just now';
+  if (d.inMinutes < 60) {
+    final m = d.inMinutes;
+    return '$m minute${m == 1 ? '' : 's'} ago';
+  }
+  if (d.inHours < 24) {
+    final h = d.inHours;
+    return '$h hour${h == 1 ? '' : 's'} ago';
+  }
+  if (d.inDays < 30) {
+    final n = d.inDays;
+    return '$n day${n == 1 ? '' : 's'} ago';
+  }
+  if (d.inDays < 365) {
+    final n = (d.inDays / 30).floor();
+    return '$n month${n == 1 ? '' : 's'} ago';
+  }
+  final n = (d.inDays / 365).floor();
+  return '$n year${n == 1 ? '' : 's'} ago';
 }
 
 Future<bool> _confirmPurge(BuildContext context, NotebookRef nb,

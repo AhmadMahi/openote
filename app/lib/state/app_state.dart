@@ -88,6 +88,39 @@ enum Tool {
   rectangle
 }
 
+/// One open page in the editor's tab strip. Identified by its notebook and
+/// page ids; the title is a cached label so a tab whose notebook is not the
+/// open one can still be named without loading it. Equality ignores the title —
+/// a tab IS its (notebook, page).
+class PageTab {
+  const PageTab(this.notebookId, this.pageId, this.title);
+  final String notebookId;
+  final String pageId;
+  final String title;
+
+  PageTab withTitle(String t) => PageTab(notebookId, pageId, t);
+
+  Map<String, dynamic> toJson() =>
+      {'nb': notebookId, 'page': pageId, 'title': title};
+
+  static PageTab? fromJson(Object? j) {
+    if (j is Map && j['nb'] is String && j['page'] is String) {
+      return PageTab(j['nb'] as String, j['page'] as String,
+          (j['title'] ?? '').toString());
+    }
+    return null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is PageTab &&
+      other.notebookId == notebookId &&
+      other.pageId == pageId;
+
+  @override
+  int get hashCode => Object.hash(notebookId, pageId);
+}
+
 /// What the drawing cursor looks like (INK-11).
 ///
 /// A preference because the right answer depends on how you work rather than
@@ -408,6 +441,20 @@ class AppState extends ChangeNotifier
   /// at every mutation site, importers included.
   void reloadNodes() {
     if (notebookId != null) nodes = _repo.loadNodes(notebookId!);
+    _pruneTabsForCurrentNotebook();
+  }
+
+  /// Drop tabs whose page has been deleted from the notebook now in view, so a
+  /// deleted page does not leave a dead tab behind. Only touches the current
+  /// notebook's tabs; a tab in another notebook is checked when it is opened.
+  void _pruneTabsForCurrentNotebook() {
+    final nb = notebookId;
+    if (nb == null || openTabs.isEmpty) return;
+    final before = openTabs.length;
+    openTabs.removeWhere((t) =>
+        t.notebookId == nb &&
+        !nodes.any((n) => n.id == t.pageId && n.kind == NodeKind.page));
+    if (openTabs.length != before) _persistTabs();
   }
 
   // ── Read access to ANY notebook, for the external API (spec 14) ───────
@@ -6819,6 +6866,9 @@ class AppState extends ChangeNotifier
         ? lastPage
         : nodes.where((n) => n.kind == NodeKind.page).firstOrNull?.id;
     await selectPage(target);
+    // Restore the tab strip now that the notebook list is known (tabs for a
+    // notebook that no longer exists are dropped here).
+    _loadTabs();
     // The app opens on Home. The last page is loaded and one click away —
     // the navigator and Home's recents both lead to it — but the first thing
     // on screen is the workspace, at the owner's request.
@@ -7215,6 +7265,10 @@ class AppState extends ChangeNotifier
   ({int sections, int pages}) notebookCounts(String id) =>
       _repo.notebookCounts(id);
 
+  /// Epoch-ms of a notebook's most recent edit, for the manager's "Updated …"
+  /// line. 0 when unknown.
+  int notebookUpdatedAt(String id) => _repo.notebookUpdatedAt(id);
+
   /// Soft-delete a notebook to the recycle bin. Refuses the last one (there's
   /// always somewhere to be). Returns false if it couldn't (only notebook).
   Future<bool> deleteNotebook(String id) async {
@@ -7328,11 +7382,106 @@ class AppState extends ChangeNotifier
       _recordRecent(id);
     }
     docRevision++;
+    _refreshActiveTabTitle();
     _persistSession();
     // "Fit new pages to width" is applied by PageCanvas.initState's post-frame
     // (the viewport is not laid out yet here), so a page reliably opens filled
     // to the window when that default is on.
     notifyListeners();
+  }
+
+  // ── Open page tabs (the editor's tab strip) ────────────────────────────
+  //
+  // A short, explicit set of open pages the user builds with "Open in new tab"
+  // and switches between at the top of the editor. Not the same as navigating:
+  // an ordinary sidebar click still just changes the page. Persisted so the set
+  // is there again next launch.
+
+  /// The most tabs to keep — the owner's cap ("two, three, four … not more").
+  static const int maxTabs = 4;
+
+  final List<PageTab> openTabs = [];
+
+  /// True when [t] is the page currently on screen.
+  bool isActiveTab(PageTab t) =>
+      t.notebookId == notebookId && t.pageId == pageId;
+
+  void _loadTabs() {
+    openTabs.clear();
+    final raw = _repo.getSetting('openTabs');
+    if (raw is! List) return;
+    for (final e in raw) {
+      final t = PageTab.fromJson(e);
+      // Drop a tab whose notebook is gone; a page deleted inside a still-present
+      // notebook is caught when the tab is activated.
+      if (t == null || !hasNotebook(t.notebookId)) continue;
+      if (!openTabs.contains(t) && openTabs.length < maxTabs) openTabs.add(t);
+    }
+  }
+
+  void _persistTabs() =>
+      _repo.setSetting('openTabs', [for (final t in openTabs) t.toJson()]);
+
+  /// Keep the active page's tab label in step with a rename.
+  void _refreshActiveTabTitle() {
+    final nb = notebookId, pid = pageId;
+    if (nb == null || pid == null) return;
+    final title = nodes.where((n) => n.id == pid).firstOrNull?.title;
+    if (title == null) return;
+    final i = openTabs.indexWhere((t) => t.notebookId == nb && t.pageId == pid);
+    if (i >= 0 && openTabs[i].title != title) {
+      openTabs[i] = openTabs[i].withTitle(title);
+      _persistTabs();
+    }
+  }
+
+  /// Open [pageId] (in the current notebook) as a tab and switch to it. Adding
+  /// a fifth tab drops the oldest, keeping the cap.
+  Future<void> openInNewTab(String pageId) async {
+    final nb = notebookId;
+    if (nb == null) return;
+    final title =
+        nodes.where((n) => n.id == pageId).firstOrNull?.title ?? 'Page';
+    final t = PageTab(nb, pageId, title);
+    if (!openTabs.contains(t)) {
+      if (openTabs.length >= maxTabs) openTabs.removeAt(0);
+      openTabs.add(t);
+      _persistTabs();
+    }
+    await activateTab(t);
+  }
+
+  /// Switch to [t], loading its notebook first when it lives in another one.
+  Future<void> activateTab(PageTab t) async {
+    if (t.notebookId != notebookId) {
+      if (!hasNotebook(t.notebookId)) {
+        closeTab(t);
+        return;
+      }
+      await selectNotebook(t.notebookId);
+    }
+    final exists =
+        nodes.any((n) => n.id == t.pageId && n.kind == NodeKind.page);
+    if (!exists) {
+      // The page was deleted since the tab was opened — retire the tab quietly.
+      closeTab(t);
+      return;
+    }
+    await selectPage(t.pageId);
+  }
+
+  /// Remove [t]; if it was the page on screen, move to a neighbouring tab.
+  void closeTab(PageTab t) {
+    final i = openTabs.indexOf(t);
+    if (i < 0) return;
+    final wasActive = isActiveTab(t);
+    openTabs.removeAt(i);
+    _persistTabs();
+    if (wasActive && openTabs.isNotEmpty) {
+      unawaited(activateTab(openTabs[i.clamp(0, openTabs.length - 1)]));
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Heal Word/OneNote field codes left in an already-imported page.

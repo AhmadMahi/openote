@@ -2001,6 +2001,7 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
         _nodeItem('outdent', Icons.arrow_back, 'Move back out'),
       if (isPage) ...[
         const PopupMenuDivider(),
+        _nodeItem('newtab', Icons.tab_outlined, 'Open in new tab'),
         _nodeItem(
             'favourite',
             app.isFavourite(node.id) ? Icons.star : Icons.star_border,
@@ -2062,6 +2063,8 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
       await pickExamDate(context, app, node.id);
     case 'examclear':
       if (context.mounted) clearExamDate(context, app, node.id);
+    case 'newtab':
+      await app.openInNewTab(node.id);
     case 'favourite':
       app.toggleFavourite(node.id);
     // **These five VISIT another page and come home.**

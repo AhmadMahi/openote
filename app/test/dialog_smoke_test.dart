@@ -46,8 +46,8 @@ void main() {
       final nb = await repo.createNotebook('Smoke');
       app = AppState(repo)..notebookId = nb.id;
       app.reloadNodes();
-      await app.selectPage(
-          app.nodes.where((n) => n.kind == NodeKind.page).first.id);
+      await app
+          .selectPage(app.nodes.where((n) => n.kind == NodeKind.page).first.id);
     });
     return app;
   }
@@ -96,9 +96,10 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Notebooks'), findsOneWidget);
-      expect(find.text('Smoke'), findsWidgets, reason: 'the notebook is listed');
+      expect(find.text('Smoke'), findsWidgets,
+          reason: 'the notebook is listed');
       // Every action it offers must be reachable, not clipped off the edge.
-      for (final label in ['New', 'Import', 'Get started', 'Done']) {
+      for (final label in ['New Notebook', 'Import', 'Get started', 'Done']) {
         expect(find.text(label), findsOneWidget, reason: '"$label" is missing');
       }
     });
