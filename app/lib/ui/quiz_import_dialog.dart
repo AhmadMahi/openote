@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../ai/ai_prompts.dart';
 import '../model/models.dart';
@@ -41,6 +41,29 @@ class _QuizDraft {
   final String name;
   final List<QuizQuestion> questions;
 }
+
+/// A ready-to-use prompt plus the exact row format the parser accepts, copied
+/// to the clipboard by "Copy sample schema and prompt" so the user can paste it
+/// into any AI, get rows back, and paste those into the box above. Kept in one
+/// place next to the parser's rules (and public so it can be tested directly).
+const String quizSchemaPrompt = '''
+Generate a multiple-choice quiz as CSV rows I can paste into a quiz tool.
+
+Format: one row per question, comma-separated, with these 7 columns in order:
+question, option 1, option 2, option 3, option 4, correct answer, explanation
+
+Rules:
+- "correct answer" is 1-4, A-D, or the exact text of the right option.
+- "explanation" is one short line (it may be left empty).
+- Wrap any field that contains a comma in double quotes.
+- Between 1 and 20 questions.
+- Reply with only the rows. Do not include a header line or any other text.
+
+Example:
+"What is 2 + 2?","3","4","5","6","B","Because 2 + 2 = 4."
+
+Topic: <describe the topic and level, e.g. photosynthesis for grade 8>
+Number of questions: <how many>''';
 
 class QuizImportDialog extends StatefulWidget {
   const QuizImportDialog({super.key, required this.app});
@@ -120,6 +143,15 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
         _status = null;
         _error = r.parse.error;
       }
+    });
+  }
+
+  void _copySchema() {
+    Clipboard.setData(const ClipboardData(text: quizSchemaPrompt));
+    setState(() {
+      _error = null;
+      _status = 'Sample schema and prompt copied. Paste it into any AI, then '
+          'paste the rows it returns above.';
     });
   }
 
@@ -267,16 +299,24 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
                     'correct answer, explanation',
               ),
             ),
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _loadPaste,
-                icon: const Icon(Icons.playlist_add_check, size: 18),
-                label: const Text('Use pasted questions'),
-              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _loadPaste,
+                  icon: const Icon(Icons.playlist_add_check, size: 18),
+                  label: const Text('Use pasted questions'),
+                ),
+                TextButton.icon(
+                  onPressed: _copySchema,
+                  icon: const Icon(Icons.content_copy_outlined, size: 16),
+                  label: const Text('Copy sample schema and prompt'),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 20),
             const Row(
               children: [
                 Icon(Icons.auto_awesome_outlined, size: 15),
@@ -286,7 +326,7 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
                         TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             TextField(
               controller: _topic,
               minLines: 2,
@@ -295,15 +335,17 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
               decoration: const InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(),
+                labelText: 'Topic',
                 hintText: 'What should the quiz be about? '
                     'e.g. photosynthesis for grade 8',
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(
-                  width: 88,
+                  width: 116,
                   child: TextField(
                     controller: _count,
                     keyboardType: TextInputType.number,
@@ -311,11 +353,11 @@ class _QuizImportDialogState extends State<QuizImportDialog> {
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      labelText: 'How many',
+                      labelText: 'Questions',
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const Spacer(),
                 FilledButton.tonalIcon(
                   onPressed: _generating ? null : _generate,
                   icon: _generating

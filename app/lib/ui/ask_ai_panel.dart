@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../ai/ai_prompts.dart';
 import '../ai/ai_provider.dart';
+import '../export/markdown_export.dart';
+import '../markdown/md_render.dart';
 import '../mindmap/mindmap_ai.dart';
 import '../model/models.dart';
 import '../quiz/quiz_ai.dart';
@@ -80,8 +82,10 @@ class _AskAiPanelState extends State<AskAiPanel> {
       _sending = true;
     });
     _toEnd();
+    final context = _pageContext();
     final history = <AiMessage>[
       AiMessage.system(app.askAiSystemPrompt),
+      if (context != null) AiMessage.system(context),
       for (final t in _turns)
         if (t.role == 'user' || t.role == 'assistant')
           AiMessage(t.role, t.text),
@@ -96,6 +100,28 @@ class _AskAiPanelState extends State<AskAiPanel> {
           : _Turn('note', res.error ?? 'Something went wrong.'));
     });
     _toEnd();
+  }
+
+  /// The current page's text, as Markdown, to hand the model as context — the
+  /// same content the "words" counter measures. This is what makes "generate a
+  /// quiz/mind map for this session" and questions about the page work: the
+  /// chat answers from what is actually on the page. Capped so a very long page
+  /// cannot blow the request size, and null when the page is empty.
+  String? _pageContext() {
+    try {
+      if (app.pageId == null) return null;
+      final page = app.nodes.firstWhere((n) => n.id == app.pageId);
+      final md = pageMarkdownOf(app, page.title, app.blocks).trim();
+      if (md.isEmpty) return null;
+      const cap = 12000;
+      final body =
+          md.length > cap ? '${md.substring(0, cap)}\n…(truncated)' : md;
+      return 'The user is working on this notebook page. Use its content as '
+          'context when answering, and when asked to make a quiz, summary or '
+          'mind map "for this page/session", base it on this text:\n\n$body';
+    } catch (_) {
+      return null;
+    }
   }
 
   // ── Doing something with an answer ──────────────────────────────────────
@@ -392,8 +418,18 @@ class _AskAiPanelState extends State<AskAiPanel> {
                   child: Text('…',
                       style: TextStyle(fontSize: 16, color: s.textSecondary)),
                 )
-              : SelectableText(turn.text,
-                  style: TextStyle(fontSize: 12.5, height: 1.35, color: fg)),
+              // An answer is rendered as Markdown so bold, headings and lists
+              // read as formatting instead of showing their `#`/`**` marks. A
+              // user's own message is plain text and stays selectable.
+              : isAnswer
+                  ? MarkdownView(
+                      text: turn.text,
+                      baseStyle:
+                          TextStyle(fontSize: 12.5, height: 1.4, color: fg),
+                    )
+                  : SelectableText(turn.text,
+                      style:
+                          TextStyle(fontSize: 12.5, height: 1.35, color: fg)),
         ),
       ),
     );

@@ -114,6 +114,10 @@ class _QuizBlockViewState extends State<QuizBlockView> {
   @override
   Widget build(BuildContext context) {
     final s = context.surfaces;
+    // The full-screen "present" view is its own scaffold: a fixed header and
+    // footer with a scrolling middle, so the Back/Next buttons never jump.
+    if (_present) return _presentScaffold(context, s);
+
     final questions = _questions;
     if (questions.isEmpty) {
       return _shell(
@@ -131,9 +135,7 @@ class _QuizBlockViewState extends State<QuizBlockView> {
 
   bool get _present => widget.presentation;
 
-  /// The card the quiz sits in: name at the top, body below. In present mode it
-  /// fills its fixed box and the body scrolls, so the card size never jumps
-  /// (the results celebration plays inside the same frame).
+  /// The in-page card: name at the top with a Present button, body below.
   Widget _shell(OnoteSurfaces s, Widget body) {
     return Container(
       decoration: BoxDecoration(
@@ -143,7 +145,7 @@ class _QuizBlockViewState extends State<QuizBlockView> {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        mainAxisSize: _present ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
@@ -160,124 +162,257 @@ class _QuizBlockViewState extends State<QuizBlockView> {
                       overflow: TextOverflow.ellipsis,
                       style: OnoteType.title.copyWith(color: s.textPrimary)),
                 ),
-                // Present: fill the screen and dim everything else so the room
-                // looks at the quiz. Close: come back to the in-page card, the
-                // same size it was before, with every answer preserved.
-                _present
-                    ? IconButton(
-                        tooltip: 'Back',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.close_fullscreen,
-                            size: 18, color: s.textSecondary),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      )
-                    : IconButton(
-                        tooltip: 'Present',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.open_in_full,
-                            size: 18, color: s.textSecondary),
-                        onPressed: () => showQuizPresentation(
-                            context, widget.app, widget.block),
-                      ),
+                // Fill the screen and dim everything else so the room looks at
+                // the quiz.
+                IconButton(
+                  tooltip: 'Present',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.open_in_full,
+                      size: 18, color: s.textSecondary),
+                  onPressed: () =>
+                      showQuizPresentation(context, widget.app, widget.block),
+                ),
               ],
             ),
           ),
-          if (_present)
-            Expanded(child: SingleChildScrollView(child: body))
-          else
-            Flexible(child: body),
+          Flexible(child: body),
         ],
       ),
     );
   }
 
-  Widget _questionCard(BuildContext context, OnoteSurfaces s) {
-    final questions = _questions;
-    final q = questions[_current];
-    final answers = _answers;
-    final revealed = _revealed[_current];
-    final chosen = answers[_current];
-    final isLast = _current == questions.length - 1;
+  // ── The full-screen present view ────────────────────────────────────────
 
-    return Padding(
-      padding: const EdgeInsets.all(OnoteSpace.x4),
+  /// A fixed-frame card: header (name + progress + close), a scrolling middle
+  /// (question and options, or the results), and a pinned footer (Back / Next,
+  /// or Retake). The footer never moves as an answer reveals or the question
+  /// grows, which is the whole point of the redesign.
+  Widget _presentScaffold(BuildContext context, OnoteSurfaces s) {
+    final questions = _questions;
+    final empty = questions.isEmpty;
+    return Container(
+      decoration: BoxDecoration(
+        color: s.raised,
+        borderRadius: OnoteRadius.lgAll,
+        border: Border.all(color: s.border),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Question ${_current + 1} of ${questions.length}',
-              style: OnoteType.caption.copyWith(color: s.textSecondary)),
-          const SizedBox(height: OnoteSpace.x2),
-          Text(q.prompt,
-              style: OnoteType.uiStrong
-                  .copyWith(color: s.textPrimary, fontWeight: FontWeight.w600)),
-          const SizedBox(height: OnoteSpace.x3),
-          for (var i = 0; i < q.options.length; i++)
-            _option(context, s, q, i, chosen, revealed),
-          if (revealed && q.explanation.isNotEmpty) ...[
-            const SizedBox(height: OnoteSpace.x3),
-            Container(
-              padding: const EdgeInsets.all(OnoteSpace.x3),
-              decoration: BoxDecoration(
-                color: s.well,
-                borderRadius: OnoteRadius.mdAll,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: s.textSecondary),
-                  const SizedBox(width: OnoteSpace.x2),
-                  Expanded(
-                    child: Text(q.explanation,
-                        style: OnoteType.ui.copyWith(color: s.textSecondary)),
-                  ),
-                ],
-              ),
+          _presentHeader(context, s),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+              child: empty
+                  ? Text('This quiz has no questions.',
+                      style: TextStyle(color: s.textSecondary))
+                  : _showResults
+                      ? _resultsContent(context, s)
+                      : _questionContent(context, s),
             ),
-          ],
-          const SizedBox(height: OnoteSpace.x4),
-          Row(
-            children: [
-              TextButton.icon(
-                onPressed:
-                    _current > 0 ? () => setState(() => _current--) : null,
-                icon: const Icon(Icons.chevron_left, size: 18),
-                label: const Text('Back'),
+          ),
+          if (!empty)
+            Container(
+              padding: const EdgeInsets.fromLTRB(28, 14, 28, 18),
+              decoration: BoxDecoration(
+                color: s.raised,
+                border: Border(top: BorderSide(color: s.border)),
               ),
-              const Spacer(),
-              if (!revealed)
-                FilledButton(
-                  onPressed: chosen >= 0 ? _submit : null,
-                  child: const Text('Submit'),
-                )
-              else if (isLast)
-                FilledButton.icon(
-                  onPressed: () => setState(() => _showResults = true),
-                  icon: const Icon(Icons.flag_outlined, size: 18),
-                  label: const Text('See results'),
-                )
-              else
-                FilledButton.icon(
-                  onPressed: () => setState(() => _current++),
-                  icon: const Icon(Icons.chevron_right, size: 18),
-                  label: const Text('Next'),
+              child: _showResults
+                  ? _resultsNav(context, s)
+                  : _questionNav(context, s),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _presentHeader(BuildContext context, OnoteSurfaces s) {
+    final scheme = Theme.of(context).colorScheme;
+    final total = _questions.length;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: s.well,
+        border: Border(bottom: BorderSide(color: s.border)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.12),
+              borderRadius: OnoteRadius.mdAll,
+            ),
+            child: Icon(Icons.quiz_outlined, size: 20, color: scheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(_name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: OnoteType.headline.copyWith(
+                    color: s.textPrimary, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 12),
+          if (!_showResults && total > 0)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Question ${_current + 1} of $total',
+                    style: OnoteType.caption.copyWith(
+                        color: s.textSecondary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    width: 150,
+                    height: 6,
+                    child: LinearProgressIndicator(
+                      value: total == 0 ? 0 : (_current + 1) / total,
+                      backgroundColor: scheme.primary.withValues(alpha: 0.14),
+                      valueColor: AlwaysStoppedAnimation(scheme.primary),
+                    ),
+                  ),
                 ),
-            ],
+              ],
+            )
+          else if (_showResults)
+            Text('Results',
+                style: OnoteType.caption.copyWith(
+                    color: s.textSecondary, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: 'Back',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.close, size: 20, color: s.textSecondary),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
         ],
       ),
+    );
+  }
+
+  /// In-page: the question, its options and the nav in one scrolling column.
+  Widget _questionCard(BuildContext context, OnoteSurfaces s) => Padding(
+        padding: const EdgeInsets.all(OnoteSpace.x4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _questionContent(context, s),
+            const SizedBox(height: OnoteSpace.x4),
+            _questionNav(context, s),
+          ],
+        ),
+      );
+
+  /// The question, its options and (once checked) the explanation — no nav, so
+  /// the present view can scroll this while the buttons stay pinned below. The
+  /// "Question X of Y" caption is shown here only in the in-page card; in
+  /// present mode the header carries it.
+  Widget _questionContent(BuildContext context, OnoteSurfaces s) {
+    final scheme = Theme.of(context).colorScheme;
+    final questions = _questions;
+    final q = questions[_current];
+    final revealed = _revealed[_current];
+    final chosen = _answers[_current];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!_present) ...[
+          Text('Question ${_current + 1} of ${questions.length}',
+              style: OnoteType.caption.copyWith(color: s.textSecondary)),
+          const SizedBox(height: OnoteSpace.x2),
+        ],
+        Text(q.prompt,
+            style: (_present ? OnoteType.headline : OnoteType.uiStrong)
+                .copyWith(color: s.textPrimary, fontWeight: FontWeight.w700)),
+        SizedBox(height: _present ? 20 : OnoteSpace.x3),
+        for (var i = 0; i < q.options.length; i++)
+          _option(context, s, q, i, chosen, revealed, large: _present),
+        if (revealed && q.explanation.isNotEmpty) ...[
+          SizedBox(height: _present ? 14 : OnoteSpace.x3),
+          Container(
+            padding: EdgeInsets.all(_present ? 16 : OnoteSpace.x3),
+            decoration: BoxDecoration(
+              // A soft blue note in present mode, matching the polished look;
+              // the neutral well in the compact in-page card.
+              color: _present ? scheme.primary.withValues(alpha: 0.10) : s.well,
+              borderRadius: OnoteRadius.mdAll,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline,
+                    size: _present ? 18 : 16,
+                    color: _present ? scheme.primary : s.textSecondary),
+                SizedBox(width: _present ? 10 : OnoteSpace.x2),
+                Expanded(
+                  child: Text(q.explanation,
+                      style: (_present ? OnoteType.ui : OnoteType.ui)
+                          .copyWith(color: s.textSecondary)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Back / Submit / Next / See results — the row that is pinned to the footer
+  /// in present mode and sits at the bottom of the column in the in-page card.
+  Widget _questionNav(BuildContext context, OnoteSurfaces s) {
+    final revealed = _revealed[_current];
+    final chosen = _answers[_current];
+    final isLast = _current == _questions.length - 1;
+    return Row(
+      children: [
+        TextButton.icon(
+          onPressed: _current > 0 ? () => setState(() => _current--) : null,
+          icon: const Icon(Icons.chevron_left, size: 18),
+          label: const Text('Back'),
+        ),
+        const Spacer(),
+        if (!revealed)
+          FilledButton(
+            onPressed: chosen >= 0 ? _submit : null,
+            child: const Text('Submit'),
+          )
+        else if (isLast)
+          FilledButton.icon(
+            onPressed: () => setState(() => _showResults = true),
+            icon: const Icon(Icons.flag_outlined, size: 18),
+            label: const Text('See results'),
+          )
+        else
+          FilledButton.icon(
+            onPressed: () => setState(() => _current++),
+            icon: const Icon(Icons.chevron_right, size: 18),
+            label: const Text('Next'),
+          ),
+      ],
     );
   }
 
   /// One answer row. Plain and tappable before the check; after it, the right
-  /// option turns green and a wrong pick turns red.
+  /// option turns green and a wrong pick turns red. [large] gives the roomier,
+  /// card-like option used in the present view.
   Widget _option(BuildContext context, OnoteSurfaces s, QuizQuestion q, int i,
-      int chosen, bool revealed) {
+      int chosen, bool revealed,
+      {bool large = false}) {
     final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final isChosen = chosen == i;
     final isCorrect = q.correct == i;
 
-    Color bg = Colors.transparent;
+    // In present mode an untouched option sits on a raised card so the list
+    // reads as the polished mockup rather than four bare outlines.
+    Color bg = large ? (dark ? s.raised : Colors.white) : Colors.transparent;
     Color border = s.border;
     Color fg = s.textPrimary;
     IconData? mark;
@@ -285,7 +420,7 @@ class _QuizBlockViewState extends State<QuizBlockView> {
 
     if (!revealed) {
       if (isChosen) {
-        bg = scheme.primary.withValues(alpha: .12);
+        bg = scheme.primary.withValues(alpha: large ? .10 : .12);
         border = scheme.primary;
       }
       mark =
@@ -308,30 +443,33 @@ class _QuizBlockViewState extends State<QuizBlockView> {
     }
 
     final letter = String.fromCharCode('A'.codeUnitAt(0) + i);
+    final radius = large ? OnoteRadius.lgAll : OnoteRadius.mdAll;
+    final textStyle = (large ? OnoteType.uiStrong : OnoteType.ui)
+        .copyWith(color: fg, fontWeight: FontWeight.w500);
     return Padding(
-      padding: const EdgeInsets.only(bottom: OnoteSpace.x2),
+      padding: EdgeInsets.only(bottom: large ? 12 : OnoteSpace.x2),
       child: InkWell(
-        borderRadius: OnoteRadius.mdAll,
+        borderRadius: radius,
         onTap: revealed ? null : () => _choose(i),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: OnoteSpace.x3, vertical: OnoteSpace.x3),
+          padding: EdgeInsets.symmetric(
+              horizontal: large ? 18 : OnoteSpace.x3,
+              vertical: large ? 16 : OnoteSpace.x3),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: OnoteRadius.mdAll,
-            border: Border.all(color: border),
+            borderRadius: radius,
+            border: Border.all(
+                color: border, width: large && border != s.border ? 1.5 : 1),
           ),
           child: Row(
             children: [
-              Icon(mark, size: 18, color: markColor),
-              const SizedBox(width: OnoteSpace.x3),
-              Text('$letter.  ',
-                  style: OnoteType.ui.copyWith(
+              Icon(mark, size: large ? 22 : 18, color: markColor),
+              SizedBox(width: large ? 14 : OnoteSpace.x3),
+              Text('$letter.',
+                  style: (large ? OnoteType.uiStrong : OnoteType.ui).copyWith(
                       color: s.textSecondary, fontWeight: FontWeight.w600)),
-              Expanded(
-                child:
-                    Text(q.options[i], style: OnoteType.ui.copyWith(color: fg)),
-              ),
+              SizedBox(width: large ? 12 : OnoteSpace.x2),
+              Expanded(child: Text(q.options[i], style: textStyle)),
             ],
           ),
         ),
@@ -339,76 +477,89 @@ class _QuizBlockViewState extends State<QuizBlockView> {
     );
   }
 
-  Widget _results(BuildContext context, OnoteSurfaces s) {
+  /// In-page: the celebration, the per-question grid and Retake in one column.
+  Widget _results(BuildContext context, OnoteSurfaces s) => Padding(
+        padding: const EdgeInsets.all(OnoteSpace.x4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _resultsContent(context, s),
+            const SizedBox(height: OnoteSpace.x4),
+            _resultsNav(context, s),
+          ],
+        ),
+      );
+
+  /// The score celebration and the tap-to-review grid — no nav.
+  Widget _resultsContent(BuildContext context, OnoteSurfaces s) {
     final questions = _questions;
     final score = _score;
     final total = questions.length;
     final answers = _answers;
-    return Padding(
-      padding: const EdgeInsets.all(OnoteSpace.x4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The finish: the score counts up over a short confetti burst, with
-          // a line that matches how it went. Plays once, the moment results
-          // are shown, in both the in-page card and the present overlay.
-          _QuizCelebration(
-            key: ValueKey('celebrate-$score-$total'),
-            score: score,
-            total: total,
-            pass: _green,
-            fail: _red,
-            large: _present,
-            textSecondary: s.textSecondary,
-          ),
-          const SizedBox(height: OnoteSpace.x3),
-          Wrap(
-            spacing: OnoteSpace.x2,
-            runSpacing: OnoteSpace.x2,
-            children: [
-              for (var i = 0; i < total; i++)
-                GestureDetector(
-                  onTap: () => setState(() {
-                    _current = i;
-                    _showResults = false;
-                  }),
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color:
-                          (answers[i] == questions[i].correct ? _green : _red)
-                              .withValues(alpha: .15),
-                      borderRadius: OnoteRadius.smAll,
-                      border: Border.all(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // The finish: the score counts up over a short confetti burst, with a
+        // line that matches how it went. Plays once, the moment results show.
+        _QuizCelebration(
+          key: ValueKey('celebrate-$score-$total'),
+          score: score,
+          total: total,
+          pass: _green,
+          fail: _red,
+          large: _present,
+          textSecondary: s.textSecondary,
+        ),
+        const SizedBox(height: OnoteSpace.x3),
+        Wrap(
+          spacing: OnoteSpace.x2,
+          runSpacing: OnoteSpace.x2,
+          alignment: WrapAlignment.center,
+          children: [
+            for (var i = 0; i < total; i++)
+              GestureDetector(
+                onTap: () => setState(() {
+                  _current = i;
+                  _showResults = false;
+                }),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: (answers[i] == questions[i].correct ? _green : _red)
+                        .withValues(alpha: .15),
+                    borderRadius: OnoteRadius.smAll,
+                    border: Border.all(
+                        color:
+                            answers[i] == questions[i].correct ? _green : _red),
+                  ),
+                  child: Text('${i + 1}',
+                      style: OnoteType.caption.copyWith(
                           color: answers[i] == questions[i].correct
                               ? _green
-                              : _red),
-                    ),
-                    child: Text('${i + 1}',
-                        style: OnoteType.caption.copyWith(
-                            color: answers[i] == questions[i].correct
-                                ? _green
-                                : _red)),
-                  ),
+                              : _red)),
                 ),
-            ],
-          ),
-          const SizedBox(height: OnoteSpace.x4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _retake,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Retake'),
-            ),
-          ),
-        ],
-      ),
+              ),
+          ],
+        ),
+      ],
     );
   }
+
+  /// Retake — pinned in the footer in present mode.
+  Widget _resultsNav(BuildContext context, OnoteSurfaces s) => Row(
+        children: [
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: _retake,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Retake'),
+          ),
+        ],
+      );
 
   // Readable in both themes: the tint carries the meaning, over a faint fill.
   static const _green = Color(0xFF2E9E5B);

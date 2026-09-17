@@ -63,11 +63,30 @@ abstract final class SecretStore {
   /// [debugBackend].
   static bool debugRefuseWrites = false;
 
+  /// A process-lifetime cache of what the platform store holds, so a secret is
+  /// read from the OS **at most once per launch**. On macOS every keychain read
+  /// from an unsigned build can raise the "Slate wants to use your confidential
+  /// information" prompt, and the token/key are read on every notebook switch
+  /// and, indirectly, during UI rebuilds — so without this the prompt appears
+  /// again and again. The cache holds the value (or null for "there is none"),
+  /// is written through on [write]/[delete], and is never used under
+  /// `flutter test` (the [_memory] path owns that). It is not a security
+  /// boundary — the OS store still is — only a way to stop asking twice for the
+  /// same answer.
+  static final Map<String, String?> _cache = {};
+
+  /// Drop the cache — for a test, or if a caller ever needs the next read to
+  /// hit the OS again.
+  static void clearCache() => _cache.clear();
+
   /// The secret stored under [key], or null if there is none (or no store).
   static String? read(String key) {
     final m = _memory;
     if (m != null) return m[key];
-    return _platformRead(key);
+    if (_cache.containsKey(key)) return _cache[key];
+    final v = _platformRead(key);
+    _cache[key] = v;
+    return v;
   }
 
   /// Store [value] under [key], replacing any previous value.
@@ -81,7 +100,9 @@ abstract final class SecretStore {
       m[key] = value;
       return true;
     }
-    return _platformWrite(key, value);
+    final ok = await _platformWrite(key, value);
+    if (ok) _cache[key] = value;
+    return ok;
   }
 
   /// Remove [key]. True when it is gone (including "was never there" on
@@ -92,7 +113,11 @@ abstract final class SecretStore {
       m.remove(key);
       return true;
     }
-    return _platformDelete(key);
+    final ok = _platformDelete(key);
+    // Whether or not the platform confirmed, the next read must not serve a
+    // stale value from before the delete.
+    _cache[key] = null;
+    return ok;
   }
 
   // ── The real platform store, reachable from a test on purpose ────────
@@ -158,8 +183,8 @@ abstract final class SecretStore {
       int Function(Pointer<_CredentialW>, int)>('CredWriteW');
 
   static final _credReadW = _advapi32.lookupFunction<
-      Int32 Function(Pointer<Utf16>, Uint32, Uint32,
-          Pointer<Pointer<_CredentialW>>),
+      Int32 Function(
+          Pointer<Utf16>, Uint32, Uint32, Pointer<Pointer<_CredentialW>>),
       int Function(Pointer<Utf16>, int, int,
           Pointer<Pointer<_CredentialW>>)>('CredReadW');
 
@@ -168,8 +193,7 @@ abstract final class SecretStore {
       int Function(Pointer<Utf16>, int, int)>('CredDeleteW');
 
   static final _credFree = _advapi32.lookupFunction<
-      Void Function(Pointer<Void>),
-      void Function(Pointer<Void>)>('CredFree');
+      Void Function(Pointer<Void>), void Function(Pointer<Void>)>('CredFree');
 
   static bool _winWrite(String key, String value) {
     final target = _winTarget(key).toNativeUtf16();
@@ -246,16 +270,34 @@ abstract final class SecretStore {
   static final _secAdd = _security.lookupFunction<
       Int32 Function(Pointer<Void>, Uint32, Pointer<Utf8>, Uint32,
           Pointer<Utf8>, Uint32, Pointer<Uint8>, Pointer<Pointer<Void>>),
-      int Function(Pointer<Void>, int, Pointer<Utf8>, int, Pointer<Utf8>, int,
+      int Function(
+          Pointer<Void>,
+          int,
+          Pointer<Utf8>,
+          int,
+          Pointer<Utf8>,
+          int,
           Pointer<Uint8>,
           Pointer<Pointer<Void>>)>('SecKeychainAddGenericPassword');
 
   static final _secFind = _security.lookupFunction<
-      Int32 Function(Pointer<Void>, Uint32, Pointer<Utf8>, Uint32,
-          Pointer<Utf8>, Pointer<Uint32>, Pointer<Pointer<Uint8>>,
+      Int32 Function(
+          Pointer<Void>,
+          Uint32,
+          Pointer<Utf8>,
+          Uint32,
+          Pointer<Utf8>,
+          Pointer<Uint32>,
+          Pointer<Pointer<Uint8>>,
           Pointer<Pointer<Void>>),
-      int Function(Pointer<Void>, int, Pointer<Utf8>, int, Pointer<Utf8>,
-          Pointer<Uint32>, Pointer<Pointer<Uint8>>,
+      int Function(
+          Pointer<Void>,
+          int,
+          Pointer<Utf8>,
+          int,
+          Pointer<Utf8>,
+          Pointer<Uint32>,
+          Pointer<Pointer<Uint8>>,
           Pointer<Pointer<Void>>)>('SecKeychainFindGenericPassword');
 
   static final _secItemDelete = _security.lookupFunction<
@@ -267,8 +309,92 @@ abstract final class SecretStore {
       int Function(Pointer<Void>, Pointer<Void>)>('SecKeychainItemFreeContent');
 
   static final _cfRelease = _coreFoundation.lookupFunction<
-      Void Function(Pointer<Void>),
-      void Function(Pointer<Void>)>('CFRelease');
+      Void Function(Pointer<Void>), void Function(Pointer<Void>)>('CFRelease');
+
+  // ── Making an item readable by any app, so no prompt ever ────────────
+  //
+  // A generic password added the plain way is bound to the code signature of
+  // the app that created it. Slate is unsigned, so every new build looks like
+  // a different app and the login Keychain re-prompts "Slate wants to use your
+  // confidential information". The fix the user asked for: give the item an ACL
+  // that trusts EVERY application, so the OS never prompts. That is what an
+  // empty/NULL trusted-application list means in `SecACLSetContents`. This is a
+  // deliberate trade — any app on the machine can then read the stored key —
+  // and it is best-effort: if any of these deprecated calls fails, the secret
+  // is still saved (just with the default per-app ACL) and the app carries on.
+
+  static final _secItemCopyAccess = _security.lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>),
+      int Function(
+          Pointer<Void>, Pointer<Pointer<Void>>)>('SecKeychainItemCopyAccess');
+
+  static final _secItemSetAccess = _security.lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Void>),
+      int Function(Pointer<Void>, Pointer<Void>)>('SecKeychainItemSetAccess');
+
+  static final _secAccessCopyACLList = _security.lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>),
+      int Function(
+          Pointer<Void>, Pointer<Pointer<Void>>)>('SecAccessCopyACLList');
+
+  static final _secACLSetContents = _security.lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Void>, Pointer<Void>, Uint32),
+      int Function(Pointer<Void>, Pointer<Void>, Pointer<Void>,
+          int)>('SecACLSetContents');
+
+  static final _cfArrayGetCount = _coreFoundation.lookupFunction<
+      IntPtr Function(Pointer<Void>),
+      int Function(Pointer<Void>)>('CFArrayGetCount');
+
+  static final _cfArrayGetValueAtIndex = _coreFoundation.lookupFunction<
+      Pointer<Void> Function(Pointer<Void>, IntPtr),
+      Pointer<Void> Function(Pointer<Void>, int)>('CFArrayGetValueAtIndex');
+
+  static final _cfStringCreate = _coreFoundation.lookupFunction<
+      Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>, Uint32),
+      Pointer<Void> Function(
+          Pointer<Void>, Pointer<Utf8>, int)>('CFStringCreateWithCString');
+
+  static const int _kCFStringEncodingUTF8 = 0x08000100;
+
+  /// Rewrite [item]'s ACLs so any application can read it without a prompt.
+  /// Best-effort: any failure leaves the item as it was and returns quietly.
+  static void _macAllowAllApps(Pointer<Void> item) {
+    final accessOut = calloc<Pointer<Void>>();
+    Pointer<Void> desc = nullptr;
+    final descC = 'Slate'.toNativeUtf8();
+    try {
+      if (_secItemCopyAccess(item, accessOut) != 0) return;
+      final access = accessOut.value;
+      final aclOut = calloc<Pointer<Void>>();
+      try {
+        if (_secAccessCopyACLList(access, aclOut) != 0) {
+          _cfRelease(access);
+          return;
+        }
+        final aclList = aclOut.value;
+        desc = _cfStringCreate(nullptr, descC, _kCFStringEncodingUTF8);
+        final count = _cfArrayGetCount(aclList);
+        for (var i = 0; i < count; i++) {
+          final acl = _cfArrayGetValueAtIndex(aclList, i);
+          // NULL application list = "any application"; 0 = no passphrase prompt.
+          _secACLSetContents(acl, nullptr, desc, 0);
+        }
+        // Persist the loosened ACLs back onto the item.
+        _secItemSetAccess(item, access);
+        _cfRelease(aclList);
+      } finally {
+        calloc.free(aclOut);
+      }
+      _cfRelease(access);
+    } catch (_) {
+      // best-effort — the secret is already stored
+    } finally {
+      if (desc != nullptr) _cfRelease(desc);
+      calloc.free(descC);
+      calloc.free(accessOut);
+    }
+  }
 
   static String? _macRead(String key) {
     final svc = _macService.toNativeUtf8();
@@ -302,11 +428,21 @@ abstract final class SecretStore {
     final bytes = utf8.encode(value);
     final blob = calloc<Uint8>(bytes.length);
     blob.asTypedList(bytes.length).setAll(0, bytes);
+    final itemOut = calloc<Pointer<Void>>();
     try {
       final status = _secAdd(nullptr, utf8.encode(_macService).length, svc,
-          utf8.encode(key).length, acc, bytes.length, blob, nullptr);
-      return status == 0;
+          utf8.encode(key).length, acc, bytes.length, blob, itemOut);
+      if (status != 0) return false;
+      // Loosen the ACL so a later, differently-signed build (or any other app)
+      // reads it without the OS prompt. Best-effort; the item is already saved.
+      final item = itemOut.value;
+      if (item != nullptr) {
+        _macAllowAllApps(item);
+        _cfRelease(item);
+      }
+      return true;
     } finally {
+      calloc.free(itemOut);
       calloc.free(blob);
       calloc.free(acc);
       calloc.free(svc);
@@ -338,8 +474,7 @@ abstract final class SecretStore {
 
   static String? _linuxRead(String key) {
     try {
-      final r = Process.runSync(
-          'secret-tool', ['lookup', ..._linuxAttrs(key)]);
+      final r = Process.runSync('secret-tool', ['lookup', ..._linuxAttrs(key)]);
       if (r.exitCode != 0) return null;
       // `lookup` prints the secret bare; a trailing newline appears on some
       // versions. GitHub tokens cannot contain whitespace, so trimming is
@@ -367,8 +502,8 @@ abstract final class SecretStore {
 
   static bool _linuxDelete(String key) {
     try {
-      return Process.runSync(
-                  'secret-tool', ['clear', ..._linuxAttrs(key)]).exitCode ==
+      return Process.runSync('secret-tool', ['clear', ..._linuxAttrs(key)])
+                  .exitCode ==
               0 ||
           _linuxRead(key) == null;
     } on ProcessException {
