@@ -281,8 +281,17 @@ abstract final class InkCodec {
       final hasP = s.p.isNotEmpty;
       final hasT = s.t.isNotEmpty;
       final hasTilt = s.tx.isNotEmpty || s.ty.isNotEmpty;
+      // Bit 8 carries `sharp` (a drawn rectangle/shape that must keep square
+      // corners). Without it, a shape externalised to a blob came back with
+      // sharp=false and the renderer bevelled its corners on reopen, while the
+      // PDF export — reading the in-memory strokes — stayed square. Non-sharp
+      // strokes leave the bit clear, so ordinary handwriting encodes to the
+      // exact same bytes as before.
       body
-        ..u8((hasP ? 1 : 0) | (hasT ? 2 : 0) | (hasTilt ? 4 : 0))
+        ..u8((hasP ? 1 : 0) |
+            (hasT ? 2 : 0) |
+            (hasTilt ? 4 : 0) |
+            (s.sharp ? 8 : 0))
         ..uvar(brushIx['${s.tool}|${s.colorHex}|${s.size}|${s.opacity}']!)
         ..uvar(math.max(0, s.strokeStart - baseTime))
         ..uvar(s.x.length);
@@ -336,8 +345,7 @@ abstract final class InkCodec {
         for (final list in [s.tx, s.ty]) {
           var prev = 0;
           for (var i = 0; i < s.x.length; i++) {
-            final q =
-                i < list.length ? (list[i] * _tiltScale).round() : prev;
+            final q = i < list.length ? (list[i] * _tiltScale).round() : prev;
             body.svar(q - prev);
             prev = q;
           }
@@ -365,7 +373,10 @@ abstract final class InkCodec {
     r.u8(); // flags
     final scale = r.uvar();
     final count = r.uvar();
-    final minQx = r.svar(), minQy = r.svar(), maxQx = r.svar(), maxQy = r.svar();
+    final minQx = r.svar(),
+        minQy = r.svar(),
+        maxQx = r.svar(),
+        maxQy = r.svar();
     return InkHeader(
       strokeCount: count,
       minX: minQx / scale,
@@ -419,7 +430,11 @@ abstract final class InkCodec {
     final anyTilt = flags & 4 != 0;
     final scale = r.uvar();
     final count = r.uvar();
-    r..svar()..svar()..svar()..svar(); // bounds — see decodeHeader
+    r
+      ..svar()
+      ..svar()
+      ..svar()
+      ..svar(); // bounds — see decodeHeader
 
     final brushCount = r.uvar();
     final tools = <String>[];
@@ -432,9 +447,9 @@ abstract final class InkCodec {
       if (kind == 1) {
         final rr = r.u8(), gg = r.u8(), bb = r.u8();
         colors.add('#'
-            '${rr.toRadixString(16).padLeft(2, '0')}'
-            '${gg.toRadixString(16).padLeft(2, '0')}'
-            '${bb.toRadixString(16).padLeft(2, '0')}'
+                '${rr.toRadixString(16).padLeft(2, '0')}'
+                '${gg.toRadixString(16).padLeft(2, '0')}'
+                '${bb.toRadixString(16).padLeft(2, '0')}'
             .toUpperCase()
             .replaceFirst('#', '#'));
       } else if (kind == 2) {
@@ -548,6 +563,9 @@ abstract final class InkCodec {
           ty: tys[i],
           t: ts[i],
           strokeStart: starts[i],
+          // Bit 8 of the per-stroke flags: a sharp shape keeps its square
+          // corners on reopen (older blobs have the bit clear → false).
+          sharp: sflags[i] & 8 != 0,
         )
     ];
   }
