@@ -389,6 +389,10 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         _row('Spell check', _toggle(app.spellCheckEnabled, app.setSpellCheck)),
         _row('Pen near the page switches to inking',
             _toggle(app.penProximitySwitch, app.setPenProximitySwitch)),
+        // Pasted text and images wear a shadowed card so they read as
+        // pasted-in. Off keeps them plain (and shows no white slab).
+        _row('Show pasted content as a card',
+            _toggle(app.pasteAsCard, app.setPasteAsCard)),
       ];
 
   List<Widget> _defaultPage(BuildContext context) => [

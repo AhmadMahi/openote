@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../model/models.dart';
@@ -20,9 +23,18 @@ import '../theme/tokens.dart';
 /// The questions come from a CSV or Excel file (see `quiz_import.dart`); this
 /// view never edits them, it only asks and marks them.
 class QuizBlockView extends StatefulWidget {
-  const QuizBlockView({super.key, required this.block, required this.app});
+  const QuizBlockView({
+    super.key,
+    required this.block,
+    required this.app,
+    this.presentation = false,
+  });
   final Block block;
   final AppState app;
+
+  /// True inside the full-screen "present" overlay: the card fills its fixed
+  /// box and scrolls, and the header offers a close instead of an expand.
+  final bool presentation;
 
   @override
   State<QuizBlockView> createState() => _QuizBlockViewState();
@@ -117,7 +129,11 @@ class _QuizBlockViewState extends State<QuizBlockView> {
         s, _showResults ? _results(context, s) : _questionCard(context, s));
   }
 
-  /// The card the quiz sits in: name at the top, body below.
+  bool get _present => widget.presentation;
+
+  /// The card the quiz sits in: name at the top, body below. In present mode it
+  /// fills its fixed box and the body scrolls, so the card size never jumps
+  /// (the results celebration plays inside the same frame).
   Widget _shell(OnoteSurfaces s, Widget body) {
     return Container(
       decoration: BoxDecoration(
@@ -127,7 +143,7 @@ class _QuizBlockViewState extends State<QuizBlockView> {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: _present ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
@@ -144,10 +160,32 @@ class _QuizBlockViewState extends State<QuizBlockView> {
                       overflow: TextOverflow.ellipsis,
                       style: OnoteType.title.copyWith(color: s.textPrimary)),
                 ),
+                // Present: fill the screen and dim everything else so the room
+                // looks at the quiz. Close: come back to the in-page card, the
+                // same size it was before, with every answer preserved.
+                _present
+                    ? IconButton(
+                        tooltip: 'Back',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.close_fullscreen,
+                            size: 18, color: s.textSecondary),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      )
+                    : IconButton(
+                        tooltip: 'Present',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.open_in_full,
+                            size: 18, color: s.textSecondary),
+                        onPressed: () => showQuizPresentation(
+                            context, widget.app, widget.block),
+                      ),
               ],
             ),
           ),
-          Flexible(child: body),
+          if (_present)
+            Expanded(child: SingleChildScrollView(child: body))
+          else
+            Flexible(child: body),
         ],
       ),
     );
@@ -312,12 +350,18 @@ class _QuizBlockViewState extends State<QuizBlockView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Your score',
-              style: OnoteType.caption.copyWith(color: s.textSecondary)),
-          const SizedBox(height: OnoteSpace.x1),
-          Text('$score / $total',
-              style: OnoteType.headline
-                  .copyWith(color: score * 2 >= total ? _green : _red)),
+          // The finish: the score counts up over a short confetti burst, with
+          // a line that matches how it went. Plays once, the moment results
+          // are shown, in both the in-page card and the present overlay.
+          _QuizCelebration(
+            key: ValueKey('celebrate-$score-$total'),
+            score: score,
+            total: total,
+            pass: _green,
+            fail: _red,
+            large: _present,
+            textSecondary: s.textSecondary,
+          ),
           const SizedBox(height: OnoteSpace.x3),
           Wrap(
             spacing: OnoteSpace.x2,
@@ -369,4 +413,218 @@ class _QuizBlockViewState extends State<QuizBlockView> {
   // Readable in both themes: the tint carries the meaning, over a faint fill.
   static const _green = Color(0xFF2E9E5B);
   static const _red = Color(0xFFE5484D);
+}
+
+/// Open [block]'s quiz full-screen: the same quiz, larger and centred, with the
+/// page behind it blurred and dimmed so a room can focus on it. The card is a
+/// fixed size, so the results celebration does not resize it; closing returns
+/// to the in-page card, the same size, with every answer preserved (the state
+/// lives on the block).
+Future<void> showQuizPresentation(
+    BuildContext context, AppState app, Block block) {
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Quiz',
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    transitionDuration: const Duration(milliseconds: 200),
+    pageBuilder: (ctx, _, __) {
+      final size = MediaQuery.sizeOf(ctx);
+      final w = math.min(760.0, size.width * 0.92);
+      final h = math.min(560.0, size.height * 0.86);
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Center(
+          child: SizedBox(
+            width: w,
+            height: h,
+            // A touch larger type than the in-page card, so the answers read
+            // from across a room.
+            child: MediaQuery(
+              data: MediaQuery.of(ctx)
+                  .copyWith(textScaler: const TextScaler.linear(1.15)),
+              child: Material(
+                type: MaterialType.transparency,
+                child:
+                    QuizBlockView(block: block, app: app, presentation: true),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (ctx, anim, _, child) => FadeTransition(
+      opacity: anim,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.96, end: 1.0)
+            .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+        child: child,
+      ),
+    ),
+  );
+}
+
+/// The results flourish: a count-up to the score over a short confetti fall,
+/// with a line that matches how it went. Deliberately restrained — a burst
+/// that settles in about a second and a half, not a party that keeps going.
+class _QuizCelebration extends StatefulWidget {
+  const _QuizCelebration({
+    super.key,
+    required this.score,
+    required this.total,
+    required this.pass,
+    required this.fail,
+    required this.large,
+    required this.textSecondary,
+  });
+
+  final int score;
+  final int total;
+  final Color pass;
+  final Color fail;
+  final bool large;
+  final Color textSecondary;
+
+  @override
+  State<_QuizCelebration> createState() => _QuizCelebrationState();
+}
+
+class _QuizCelebrationState extends State<_QuizCelebration>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  bool get _passed => widget.total > 0 && widget.score * 2 >= widget.total;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1500))
+      ..forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  String get _message {
+    final t = widget.total;
+    final s = widget.score;
+    if (t == 0) return '';
+    if (s == t) return 'Perfect score!';
+    if (s * 2 >= t) return 'Well done!';
+    return 'Keep practising.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _passed ? widget.pass : widget.fail;
+    final scoreStyle = (widget.large ? OnoteType.display : OnoteType.headline)
+        .copyWith(color: color, fontWeight: FontWeight.w700);
+    return SizedBox(
+      height: widget.large ? 168 : 120,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          // Count the score up over the first two thirds, then hold.
+          final countT =
+              Curves.easeOutCubic.transform((_c.value / 0.66).clamp(0.0, 1.0));
+          final shown = (widget.score * countT).round();
+          // A gentle pop as the number lands.
+          final pop =
+              0.9 + 0.1 * Curves.easeOut.transform((_c.value).clamp(0, 1));
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Confetti only when it went well — a red result should not throw
+              // a party. Fades out as it falls.
+              if (_passed)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _ConfettiPainter(
+                          progress: _c.value, seed: widget.total * 31 + 7),
+                    ),
+                  ),
+                ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Your score',
+                      style: OnoteType.caption
+                          .copyWith(color: widget.textSecondary)),
+                  const SizedBox(height: OnoteSpace.x1),
+                  Transform.scale(
+                    scale: pop,
+                    child: Text('$shown / ${widget.total}', style: scoreStyle),
+                  ),
+                  const SizedBox(height: OnoteSpace.x1),
+                  Opacity(
+                    opacity: Curves.easeIn
+                        .transform(((_c.value - 0.5) / 0.5).clamp(0.0, 1.0)),
+                    child: Text(_message,
+                        style: OnoteType.uiStrong.copyWith(
+                            color: color, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A short, tasteful confetti fall painted over the score. No package: a fixed
+/// set of seeded particles drift down and fade, driven by a single 0..1
+/// progress value so it stays cheap and deterministic.
+class _ConfettiPainter extends CustomPainter {
+  _ConfettiPainter({required this.progress, required this.seed});
+  final double progress;
+  final int seed;
+
+  static const _colors = [
+    Color(0xFF2E9E5B),
+    Color(0xFF3B82F6),
+    Color(0xFFF59E0B),
+    Color(0xFFEC4899),
+    Color(0xFF8B5CF6),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    final rnd = math.Random(seed);
+    const count = 28;
+    final paint = Paint();
+    for (var i = 0; i < count; i++) {
+      final startX = rnd.nextDouble() * size.width;
+      final drift = (rnd.nextDouble() - 0.5) * 40;
+      final delay = rnd.nextDouble() * 0.25;
+      final speed = 0.8 + rnd.nextDouble() * 0.5;
+      final t = ((progress - delay) / speed).clamp(0.0, 1.0);
+      if (t <= 0) continue;
+      final x = startX + drift * t;
+      final y = -8 + (size.height + 16) * t;
+      final fade = (1.0 - t).clamp(0.0, 1.0);
+      if (fade <= 0) continue;
+      final c = _colors[i % _colors.length];
+      paint.color = c.withValues(alpha: fade);
+      final w = 4.0 + rnd.nextDouble() * 3;
+      final h = 6.0 + rnd.nextDouble() * 4;
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate((rnd.nextDouble() * 2 - 1) * math.pi + t * 6);
+      canvas.drawRect(
+          Rect.fromCenter(center: Offset.zero, width: w, height: h), paint);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter old) =>
+      old.progress != progress || old.seed != seed;
 }

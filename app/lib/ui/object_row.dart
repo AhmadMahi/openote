@@ -298,17 +298,6 @@ class _WordCountState extends State<WordCount> {
   }
 }
 
-class _Sep extends StatelessWidget {
-  const _Sep();
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 1,
-        height: 20,
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        color: context.surfaces.border,
-      );
-}
-
 /// A row wider than the window must SCROLL, not clip: clipped pixels do not
 /// hit-test, so on a narrow window the rightmost controls simply stop
 /// responding with no visible reason. Mouse and trackpad are added to the drag

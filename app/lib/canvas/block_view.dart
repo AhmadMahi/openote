@@ -606,17 +606,19 @@ class _BlockViewState extends State<BlockView> {
       child: content,
     );
 
-    // While an ink tool is active, blocks are inert — the pen draws OVER
-    // them instead of dragging/editing them (fixes ink-over-block dragging).
-    final inkToolActive = app.tool == Tool.pen ||
-        app.tool == Tool.highlighter ||
-        app.tool == Tool.eraser;
+    // While a canvas draw tool is active, blocks are inert — the tool draws
+    // OVER them instead of dragging/editing them (fixes ink-over-block
+    // dragging, and lets an arrow or rectangle be drawn straight across a
+    // pasted text box instead of the click landing in the text). Every tool
+    // that isn't Select or Text works on the canvas surface, so anything but
+    // those two makes the blocks pass their pointers through.
+    final drawToolActive = app.tool != Tool.select && app.tool != Tool.text;
 
     // Chrome is only live for its OWN block, so two abutting blocks can never
     // both offer a bar at once even though the reserved strips overlap.
     // Suppressed entirely while _pendingEmpty — the box does not exist yet,
     // as far as the eye can tell, until the first character lands in it.
-    final showChrome = !inkToolActive &&
+    final showChrome = !drawToolActive &&
         !_locked &&
         !_pendingEmpty &&
         (_hover || selected || editing);
@@ -632,6 +634,17 @@ class _BlockViewState extends State<BlockView> {
       PointerDeviceKind.stylus,
       PointerDeviceKind.invertedStylus,
     };
+
+    // Pasted content (text or an image dropped in from the clipboard) can wear
+    // a card: a soft shadow, a rounded edge and a faint standing border, so it
+    // reads at a glance as "this was pasted in" rather than as part of the
+    // note. On by default (`app.pasteAsCard`); turned off, a pasted block
+    // behaves like any other AND drops the solid white selection fill that
+    // otherwise showed as "a lot of white boundary" around a short paste.
+    final pasted = b.content['pasted'] == true;
+    final pastedCard = pasted && app.pasteAsCard;
+    final cardSurface = dark ? OnoteColors.night50 : OnoteColors.paper0;
+    final faintBorder = dark ? OnoteColors.night300 : OnoteColors.paper300;
 
     final body = MouseRegion(
       onEnter: (_) => setState(() => _hoverBody = true),
@@ -668,17 +681,34 @@ class _BlockViewState extends State<BlockView> {
                   // stored: this must not dirty the page or survive the click.
                   color: app.graphLinkHighlight(b)?.withValues(alpha: 0.14) ??
                       onoteColorFromHex(b.content['bg'] as String?) ??
-                      // **Hover does not fill.** The owner: *"Hovering over a box
-                      // makes its background solid, this makes aligning with other
-                      // objects more difficult and is different to how it will be
-                      // rendered."* Both halves are true — a solid ground hides the
-                      // gridline and the box beside it just as you are lining them
-                      // up, and it is a shape the page will never print. The border
-                      // below already says "this one", which is what hover is for.
-                      (editing || selected
-                          ? (dark ? OnoteColors.night50 : OnoteColors.paper0)
-                          : Colors.transparent),
+                      // A pasted card always carries the surface so its shadow
+                      // reads; a pasted block with the card OFF stays fully
+                      // transparent even when selected, so no white slab shows.
+                      (pastedCard
+                          ? cardSurface
+                          : pasted
+                              ? Colors.transparent
+                              // **Hover does not fill.** The owner: *"Hovering
+                              // over a box makes its background solid, this makes
+                              // aligning with other objects more difficult and is
+                              // different to how it will be rendered."* A solid
+                              // ground hides the gridline and the box beside it
+                              // just as you are lining them up. The border below
+                              // already says "this one", which is what hover is for.
+                              : (editing || selected
+                                  ? cardSurface
+                                  : Colors.transparent)),
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: pastedCard
+                      ? [
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: dark ? 0.38 : 0.14),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
                   border: Border.all(
                     width: primary && !editing ? 2 : 1,
                     color: editing
@@ -686,10 +716,12 @@ class _BlockViewState extends State<BlockView> {
                         : selected
                             ? primaryColor
                             : _hover
-                                ? (dark
-                                    ? OnoteColors.night300
-                                    : OnoteColors.paper300)
-                                : Colors.transparent,
+                                ? faintBorder
+                                // A card keeps a faint edge even at rest so it
+                                // still reads as a card when nothing is selected.
+                                : pastedCard
+                                    ? faintBorder.withValues(alpha: .6)
+                                    : Colors.transparent,
                   ),
                 )
               // OneNote-style: no visible box at all until the first
@@ -722,7 +754,7 @@ class _BlockViewState extends State<BlockView> {
       left: b.x - _kChromePad,
       top: b.y - _kBarH,
       child: IgnorePointer(
-        ignoring: inkToolActive,
+        ignoring: drawToolActive,
         // Raw pointer stream: claims the pointer so the canvas ignores it, and
         // drives text drag-selection. `deferToChild` (the default) means the
         // reserved margin does NOT claim clicks that miss the content — a
@@ -768,7 +800,7 @@ class _BlockViewState extends State<BlockView> {
               // block. Suppressed entirely for the ink tools and for locked
               // blocks, matching `showChrome`, so hovering never competes with
               // the pen.
-              if (!inkToolActive && !_locked)
+              if (!drawToolActive && !_locked)
                 Positioned(
                   left: 0,
                   right: 0,

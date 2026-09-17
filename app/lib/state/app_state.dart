@@ -4714,11 +4714,6 @@ class AppState extends ChangeNotifier
     return true;
   }
 
-  static List<String> _sanitisedList(List<dynamic> raw, int length) => [
-        for (var i = 0; i < length; i++)
-          sanitiseShortcut(i < raw.length ? raw[i] as String? : null)
-      ];
-
   /// A user-chosen key for a TOOL, as a printable character. Keyed by
   /// [Tool.name] so a new tool cannot silently inherit somebody's binding.
   ///
@@ -6622,6 +6617,8 @@ class AppState extends ChangeNotifier
     if (dss is bool) defaultStretchToScreen = dss;
     final dpb = _repo.getSetting('defaultPdfBackground');
     if (dpb is bool) defaultPdfBackground = dpb;
+    final pac = _repo.getSetting('pasteAsCard');
+    if (pac is bool) pasteAsCard = pac;
     final nsw = _repo.getSetting('navSectionsW');
     if (nsw is num) navSectionsW = nsw.toDouble().clamp(96, 220);
     final npw = _repo.getSetting('navPagesW');
@@ -9633,6 +9630,20 @@ class AppState extends ChangeNotifier
   /// One flag for every PDF path — Export, push-to-repo and the central backup
   /// all build the PDF the same way.
   bool defaultPdfBackground = false;
+
+  /// Whether pasted content (text or an image from the clipboard) lands wearing
+  /// a card — a soft shadow, a rounded edge and a faint border — so it reads at
+  /// a glance as pasted-in. On by default. Turned off, a pasted block looks and
+  /// behaves like any other block (and shows no white selection slab). Only the
+  /// look is governed here; the block still stores `content['pasted']` either
+  /// way, so toggling this restyles existing pastes without a re-paste.
+  bool pasteAsCard = true;
+
+  void setPasteAsCard(bool v) {
+    pasteAsCard = v;
+    _repo.setSetting('pasteAsCard', v);
+    notifyListeners();
+  }
 
   void setDefaultBackground(String v) {
     defaultBackground = v;

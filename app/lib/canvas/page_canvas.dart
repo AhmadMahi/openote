@@ -1071,13 +1071,19 @@ class _PageCanvasState extends State<PageCanvas>
     switch (mode) {
       case _DragMode.pending:
         final pagePt = controller.screenToPage(e.localPosition);
-        if (app.tool == Tool.text) {
-          _createTextAt(pagePt); // Text tool: always create
-        } else if (app.selectedIds.isNotEmpty || app.editingBlockId != null) {
-          app.select(null); // first click clears; next click creates
+        if (app.selectedIds.isNotEmpty || app.editingBlockId != null) {
+          // A click OUTSIDE the box you were editing finishes it: commit and
+          // deselect, and if the Text tool is still armed drop back to Select
+          // so this same click does not immediately drop another empty box.
+          // (Before: with Text armed, clicking away from a box you had tapped
+          // into spawned a fresh one every time.)
+          app.select(null);
+          if (app.tool == Tool.text) app.setTool(Tool.select);
         } else {
-          // Click-anywhere-to-type (CANVAS-3). The seamless backdrop is part
-          // of the page, so this also works out in the margin when zoomed out.
+          // Nothing was open, so this is "click anywhere to type" (CANVAS-3) —
+          // and the Text tool's explicit "click to place a box". The seamless
+          // backdrop is part of the page, so it also works in the margin when
+          // zoomed out. `_createTextAt` itself reverts the Text tool to Select.
           _createTextAt(pagePt);
         }
       case _DragMode.marquee:
@@ -2293,10 +2299,6 @@ class _PenCursorPainter extends CustomPainter {
   final double penSize;
   final double scale;
   final bool dark;
-
-  /// The stroke width the pen will actually lay down, on screen, clamped so
-  /// the ring stays a readable cursor at both zoom extremes.
-  double get _nib => (penSize * scale).clamp(3.0, 44.0);
 
   @override
   void paint(Canvas canvas, Size size) {

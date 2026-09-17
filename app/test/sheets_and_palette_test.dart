@@ -14,7 +14,6 @@
 // crosses a page break is not torn in half.
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:openote/model/models.dart';
@@ -177,7 +176,8 @@ void main() {
       app.blocks = [];
       final rev = app.docRevision;
       app.deleteSheet(app.scrollableSheetCount - 1);
-      expect(app.docRevision, rev, reason: 'a spare is scroll room, not a page');
+      expect(app.docRevision, rev,
+          reason: 'a spare is scroll room, not a page');
     });
   });
 

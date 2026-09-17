@@ -52,7 +52,7 @@ bool _looksLikeImage(String name) =>
 /// block referencing bytes nothing holds would render as a broken picture
 /// that LOOKS like the paste worked.
 Block? insertImageBytes(AppState app, Uint8List bytes, String mime, Offset at,
-    {double width = 320}) {
+    {double width = 320, bool pasted = false}) {
   final hash = app.tryAddBlob(bytes, mime);
   if (hash == null) return null;
   final b = app.addBlock(Block(
@@ -60,7 +60,13 @@ Block? insertImageBytes(AppState app, Uint8List bytes, String mime, Offset at,
     x: at.dx - width / 2,
     y: at.dy - width * 0.375,
     w: width,
-    content: {'blob': 'sha256:$hash', 'mime': mime},
+    content: {
+      'blob': 'sha256:$hash',
+      'mime': mime,
+      // A clipboard paste gets the "pasted card" look; a drop or an inserted
+      // file does not. Display hint only — see [insertPastedText].
+      if (pasted) 'pasted': true,
+    },
   ));
   // Selected AND handed the Select tool, so it can be moved and resized the
   // moment it lands — see `AppState.selectPlaced`.
@@ -156,8 +162,8 @@ Block? _textBlockAt(AppState app, Offset pagePt) {
   final hits = [
     for (final b in app.blocks)
       if (b.type == BlockType.text &&
-          Rect.fromLTWH(b.x, b.y, b.w,
-                  b.h ?? app.renderSizes[b.id]?.height ?? 60)
+          Rect.fromLTWH(
+                  b.x, b.y, b.w, b.h ?? app.renderSizes[b.id]?.height ?? 60)
               .contains(pagePt))
         b
   ]..sort((a, b) => b.z.compareTo(a.z));
@@ -205,8 +211,7 @@ int _offsetInBlock(Block b, String text, Offset pagePt, {required bool dark}) {
   final needsLeading = head.isNotEmpty && !head.endsWith('\n');
   final needsTrailing = tail.isNotEmpty && !tail.startsWith('\n');
   final insert = '${needsLeading ? '\n' : ''}$ref${needsTrailing ? '\n' : ''}';
-  final refLine =
-      '\n'.allMatches(needsLeading ? '$head\n' : head).length;
+  final refLine = '\n'.allMatches(needsLeading ? '$head\n' : head).length;
   return (
     head + insert + tail,
     (line: refLine, linesAdded: '\n'.allMatches(insert).length),
@@ -237,8 +242,7 @@ void _rebaseTags(Block b, {required int fromLine, required int by}) {
 ///
 /// Null on a failed write, like [insertImageBytes] — an attachment chip whose
 /// bytes were never stored is a file the user believes is kept and is not.
-Block? insertFileBytes(
-    AppState app, Uint8List bytes, String name, Offset at) {
+Block? insertFileBytes(AppState app, Uint8List bytes, String name, Offset at) {
   final mime = mimeForExtension(name);
   final hash = app.tryAddBlob(bytes, mime);
   if (hash == null) return null;
@@ -282,8 +286,9 @@ Future<PasteResult> pasteOntoCanvas(AppState app, Offset at,
     if (bytes == null || bytes.isEmpty) continue;
     // Into the text box under the cursor when there is one — a screenshot
     // pasted onto a note belongs IN the note, not floating over it.
-    if (insertImageIntoTextAt(app, bytes, _mimeOf(fmt), at, dark: dark) == null) {
-      insertImageBytes(app, bytes, _mimeOf(fmt), at);
+    if (insertImageIntoTextAt(app, bytes, _mimeOf(fmt), at, dark: dark) ==
+        null) {
+      insertImageBytes(app, bytes, _mimeOf(fmt), at, pasted: true);
     }
     return PasteResult.image;
   }
@@ -350,7 +355,10 @@ Block insertPastedText(AppState app, String text, Offset at) {
     x: at.dx,
     y: at.dy,
     w: 360,
-    content: {'text': text},
+    // Marked as pasted so BlockView can give it the "pasted card" look when
+    // that preference is on. Purely a display hint — it changes nothing about
+    // the text itself, and toggling the preference restyles it in place.
+    content: {'text': text, 'pasted': true},
   ));
   app.select(b.id, edit: true);
   return b;
@@ -426,8 +434,8 @@ Future<Uint8List?> _readFile(ClipboardReader reader, FileFormat fmt) async {
 /// Images become image blocks, everything else an attachment — dropping a PDF
 /// or a lab handout onto a page and having it just be there is most of why
 /// drag-and-drop matters.
-Future<int> dropFilesOntoCanvas(
-    AppState app, List<String> paths, Offset at, {bool dark = false}) async {
+Future<int> dropFilesOntoCanvas(AppState app, List<String> paths, Offset at,
+    {bool dark = false}) async {
   var placed = 0;
   var offset = 0.0;
   for (final path in paths) {
@@ -453,7 +461,7 @@ Future<int> dropFilesOntoCanvas(
       landed = insertFileBytes(app, bytes, name, where) != null;
     } else {
       landed = insertImageIntoTextAt(app, bytes, mimeForExtension(name), where,
-              dark: dark) !=
+                  dark: dark) !=
               null ||
           insertImageBytes(app, bytes, mimeForExtension(name), where) != null;
     }
