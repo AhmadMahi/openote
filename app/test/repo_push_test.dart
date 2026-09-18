@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:openote/export/mindmap_pdf.dart';
+import 'package:openote/export/mindmap_md.dart';
 import 'package:openote/export/quiz_pdf.dart';
 import 'package:openote/mindmap/mindmap.dart';
 import 'package:openote/quiz/quiz_import.dart';
@@ -59,14 +59,18 @@ void main() {
       expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
     });
 
-    test('a mind map outline becomes a real PDF', () async {
+    test('a mind map becomes a structured Markdown outline', () {
       final root = MindNode(text: 'Centre', children: [
         MindNode(text: 'Branch A', children: [MindNode(text: 'leaf')]),
         MindNode(text: 'Branch B'),
       ]);
-      final bytes = await buildMindmapOutlinePdf('Map', root);
-      expect(bytes.length, greaterThan(300));
-      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+      final md = mindmapToMarkdown('Map', root);
+      // The central topic is the H1; branches are nested bullets, indented by
+      // depth, and the map is written out fully expanded.
+      expect(md, startsWith('# Centre'));
+      expect(md, contains('\n- Branch A\n'));
+      expect(md, contains('\n  - leaf\n'));
+      expect(md, contains('\n- Branch B\n'));
     });
   });
 

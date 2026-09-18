@@ -7,16 +7,18 @@
 /// `Whiteboards/<page>/`:
 ///
 /// - `<page> - whiteboard.pdf`   the page itself
-/// - `<page> - mindmap.pdf`      each mind map, fully expanded
+/// - `<page> - mindmap.md`       each mind map, fully expanded, as an outline
 /// - `<page> - quiz.pdf`         each quiz (questions, then all answers)
 /// - `<page> - <name>.pdf`       each presentation / imported PDF
 ///
-/// **PDFs only** — images and non-PDF files are deliberately not uploaded, so
-/// the repo stays a clean set of readable documents. It uploads through
-/// GitHub's Contents API and never touches the notebook's own sync. Re-pushing
-/// overwrites the same files, so a session taught twice does not pile up copies.
+/// **Readable documents only** — the page, quizzes and presentations as PDFs
+/// and each mind map as Markdown; images and raw non-PDF files are deliberately
+/// not uploaded, so the repo stays clean. It uploads through GitHub's Contents
+/// API and never touches the notebook's own sync. Re-pushing overwrites the
+/// same files, so a session taught twice does not pile up copies.
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import '../mindmap/mindmap.dart';
@@ -24,7 +26,7 @@ import '../model/models.dart';
 import '../quiz/quiz_import.dart';
 import '../state/app_state.dart';
 import '../sync/github_api.dart';
-import 'mindmap_pdf.dart';
+import 'mindmap_md.dart';
 import 'pdf_export.dart' show buildPageRasterPdf;
 import 'pdf_vector_export.dart' show buildPagePdf;
 import 'quiz_pdf.dart';
@@ -93,9 +95,9 @@ Future<RepoPushResult> pushPageToRepo(AppState app) async {
       _Upload('$dir/$base - whiteboard.pdf', pageBytes, 'Slate: $pageTitle'));
 
   // 2) The blocks on the page, each turned into a PDF of its own. PDFs only:
-  //    mind maps and quizzes are rendered to PDF; presentations and imported
-  //    files ride along only when they are already PDFs. Images and other file
-  //    types are deliberately skipped.
+  //    a mind map goes up as a Markdown outline, a quiz as a PDF; presentations
+  //    and imported files ride along only when they are already PDFs. Images and
+  //    other file types are deliberately skipped.
   var mind = 0, quiz = 0, doc = 0;
   for (final b in app.blocks) {
     switch (b.type) {
@@ -103,11 +105,14 @@ Future<RepoPushResult> pushPageToRepo(AppState app) async {
         final raw = b.content['root'];
         if (raw is! Map) break;
         final root = MindNode.fromJson(raw.cast<String, dynamic>());
-        final bytes = await buildMindmapOutlinePdf(pageTitle, root);
+        // A structured, fully-expanded Markdown outline rather than a PDF —
+        // it reads far better on GitHub than the outline rendered to a page.
+        final bytes =
+            Uint8List.fromList(utf8.encode(mindmapToMarkdown(pageTitle, root)));
         mind++;
         final s = mind == 1 ? 'mindmap' : 'mindmap-$mind';
-        uploads.add(_Upload(
-            '$dir/$base - $s.pdf', bytes, 'Slate: $pageTitle mind map'));
+        uploads.add(
+            _Upload('$dir/$base - $s.md', bytes, 'Slate: $pageTitle mind map'));
       case BlockType.quiz:
         final qs = <QuizQuestion>[
           for (final q in (b.content['questions'] as List? ?? const []))
