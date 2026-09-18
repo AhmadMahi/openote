@@ -540,6 +540,16 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                       for (final entry in laid.rects.entries)
                         _positionedNode(
                             context, s, dark, entry.key, entry.value),
+                      // The collapse/expand knob is a SIBLING of the nodes for
+                      // the same reason as the AI badge below: a knob drawn just
+                      // outside a node's own box (a negative offset) is painted
+                      // but only half hit-testable, so the tap landed only
+                      // sometimes. In the map's own space it has full bounds and
+                      // a generous target, so every tap counts.
+                      for (final entry in laid.rects.entries)
+                        if (_find(entry.key)?.children.isNotEmpty ?? false)
+                          _collapseKnob(
+                              context, s, laid.size, entry.key, entry.value),
                       // The "grow this branch with AI" badge is a sibling of the
                       // nodes, not a child of one: a badge painted just outside
                       // a node's own box (a negative offset) is drawn but NOT
@@ -696,7 +706,6 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
     final selected = _selectedId == id;
     final editing = _editingId == id;
     final st = _nodeStyle(node.color, dark, s);
-    final hasChildren = node.children.isNotEmpty;
 
     return Positioned(
       left: r.left,
@@ -755,30 +764,53 @@ class _MindmapBlockViewState extends State<MindmapBlockView> {
                     ),
             ),
           ),
-          // Collapse / expand knob on the right edge, where the children hang.
-          if (hasChildren)
-            Positioned(
-              right: -9,
-              top: r.height / 2 - 9,
-              child: GestureDetector(
-                onTap: () => _toggleCollapse(id),
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: s.raised,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: s.border),
-                  ),
-                  child: Icon(
-                    node.collapsed ? Icons.add : Icons.remove,
-                    size: 12,
-                    color: s.textSecondary,
-                  ),
-                ),
-              ),
-            ),
+          // The collapse/expand knob is emitted separately, in the map's own
+          // coordinate space — see `_collapseKnob` and the note at its call
+          // site — so its tap target is fully hit-testable.
         ],
+      ),
+    );
+  }
+
+  /// The collapse/expand knob for a parent node, placed in the map's own space
+  /// (a sibling of the nodes) so the whole target takes a tap. A generous 26px
+  /// hit area straddles the node's right edge, where the branch hangs, with the
+  /// small circle centred in it.
+  Widget _collapseKnob(
+      BuildContext context, OnoteSurfaces s, Size mapSize, String id, Rect r) {
+    final node = _find(id)!;
+    const hit = 26.0;
+    // Straddle the right edge, then clamp so the target stays inside the map.
+    final left = (r.right - hit / 2)
+        .clamp(0.0, math.max(0.0, mapSize.width - hit))
+        .toDouble();
+    final top = (r.center.dy - hit / 2)
+        .clamp(0.0, math.max(0.0, mapSize.height - hit))
+        .toDouble();
+    return Positioned(
+      left: left,
+      top: top,
+      width: hit,
+      height: hit,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _toggleCollapse(id),
+        child: Center(
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: s.raised,
+              shape: BoxShape.circle,
+              border: Border.all(color: s.border),
+            ),
+            child: Icon(
+              node.collapsed ? Icons.add : Icons.remove,
+              size: 12,
+              color: s.textSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }

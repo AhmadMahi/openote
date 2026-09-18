@@ -229,73 +229,82 @@ class _NotebookManagerState extends State<_NotebookManager> {
           ),
         ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      // The footer owns its own padding and a divider line above it, so
+      // AlertDialog's default action padding is cleared.
+      actionsPadding: EdgeInsets.zero,
       // ONE Row as the single action, because `AlertDialog.actions` is an
       // OverflowBar — a `Spacer` there throws ("applying parent data"), since
       // Spacer needs a Flex parent.
       actions: [
-        Row(children: [
-          // The left group scrolls horizontally rather than overflowing when
-          // the dialog is narrow — the footer must never clip a button.
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Notebook'),
-                  onPressed: () async {
-                    // Through the shared prompt, which owns the field's
-                    // controller in the dialog's own State. This used to build
-                    // the field and dispose its controller in a `finally` right
-                    // after the await — 150 ms before the route's exit
-                    // transition had finished unmounting the field. That is what
-                    // crashed the app on Enter; see [promptForText].
-                    final title = await promptForText(context,
-                        title: 'New notebook',
-                        okLabel: 'Create',
-                        hintText: 'Notebook name');
-                    if (title == null || !mounted) return;
-                    await app.createNotebook(title);
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const SizedBox(width: 8),
-                // Import expands INLINE rather than opening a popup menu: a
-                // popup here would be the second kind of menu this panel exists
-                // to remove.
-                _footerButton(
-                  _importOpen ? Icons.expand_less : Icons.download_outlined,
-                  'Import',
-                  () => setState(() => _importOpen = !_importOpen),
-                ),
-                const SizedBox(width: 8),
-                _footerButton(Icons.healing_outlined, 'Repair',
-                    () => _repairWithProgress(context, app)),
-                const SizedBox(width: 8),
-                // The welcome flow is where "open the notebook that's already in
-                // my Drive" lives, and it should not be a one-shot you can never
-                // get back to — that path matters most on a machine you set up
-                // months after the first one.
-                _footerButton(Icons.explore_outlined, 'Get started', () async {
-                  // Root navigator's context, captured before the pop — the
-                  // same trap as the import row below: `showDialog` on a route
-                  // that has just been popped has no live Navigator.
-                  final root =
-                      Navigator.of(context, rootNavigator: true).context;
-                  Navigator.pop(context);
-                  await showOnboarding(root, app);
-                }),
-              ]),
-            ),
+        Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: s.border)),
           ),
-          const SizedBox(width: 8),
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done')),
-        ]),
+          padding: const EdgeInsets.fromLTRB(20, 12, 16, 14),
+          child: Row(children: [
+            // The left group scrolls horizontally rather than overflowing when
+            // the dialog is narrow — the footer must never clip a button.
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('New Notebook'),
+                    onPressed: () async {
+                      // Through the shared prompt, which owns the field's
+                      // controller in the dialog's own State. This used to build
+                      // the field and dispose its controller in a `finally` right
+                      // after the await — 150 ms before the route's exit
+                      // transition had finished unmounting the field. That is what
+                      // crashed the app on Enter; see [promptForText].
+                      final title = await promptForText(context,
+                          title: 'New notebook',
+                          okLabel: 'Create',
+                          hintText: 'Notebook name');
+                      if (title == null || !mounted) return;
+                      await app.createNotebook(title);
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  // Import expands INLINE rather than opening a popup menu: a
+                  // popup here would be the second kind of menu this panel exists
+                  // to remove.
+                  _footerButton(
+                    _importOpen ? Icons.expand_less : Icons.download_outlined,
+                    'Import',
+                    () => setState(() => _importOpen = !_importOpen),
+                  ),
+                  const SizedBox(width: 8),
+                  _footerButton(Icons.healing_outlined, 'Repair',
+                      () => _repairWithProgress(context, app)),
+                  const SizedBox(width: 8),
+                  // The welcome flow is where "open the notebook that's already in
+                  // my Drive" lives, and it should not be a one-shot you can never
+                  // get back to — that path matters most on a machine you set up
+                  // months after the first one.
+                  _footerButton(Icons.explore_outlined, 'Get started',
+                      () async {
+                    // Root navigator's context, captured before the pop — the
+                    // same trap as the import row below: `showDialog` on a route
+                    // that has just been popped has no live Navigator.
+                    final root =
+                        Navigator.of(context, rootNavigator: true).context;
+                    Navigator.pop(context);
+                    await showOnboarding(root, app);
+                  }),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Done')),
+          ]),
+        ),
       ],
     );
   }
