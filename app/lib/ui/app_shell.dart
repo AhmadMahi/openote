@@ -1504,14 +1504,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                     ],
                                   ),
                                 ),
-                                // The teaching agenda floats over the page,
-                                // fixed to the window — never part of a page and
-                                // never exported. Placed BELOW the top chrome so
-                                // it can never cover the toolbar.
-                                if (!app.focusMode &&
-                                    !app.navHome &&
-                                    !app.navNotebook)
-                                  StickyNote(app: app),
                                 // The top stack: one sheet of glass, measured so the
                                 // canvas can be told where its page should rest.
                                 if (!app.focusMode)
@@ -1608,6 +1600,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                       edge: ChromeEdge.top,
                                       child: _StatusBar(app: app),
                                     ),
+                                  ),
+                                // The teaching agenda floats over the page,
+                                // fixed to the window — never part of a page and
+                                // never exported. LAST in the stack, so it sits
+                                // ABOVE the toolbar and the zoom controls and is
+                                // always draggable; `topInset` clamps it below
+                                // the chrome so it can never cover the toolbar.
+                                // Shown in focus mode too (topInset 0 there,
+                                // since there is no chrome).
+                                if (!app.navHome && !app.navNotebook)
+                                  StickyNote(
+                                    app: app,
+                                    topInset: app.focusMode ? 0.0 : chromeTop,
                                   ),
                               ]),
                             ),

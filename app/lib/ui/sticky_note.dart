@@ -12,12 +12,19 @@ import '../theme/tokens.dart';
 ///
 /// It is a `Positioned.fill` overlay whose only opaque region is the note
 /// itself, so the rest of the canvas stays clickable. In any tool other than
-/// Select it ignores the pointer, so you can draw straight over it and it stays
-/// put. Minimise shows only the next unchecked item; close hides it but keeps
-/// the list until you delete it.
+/// Select its BODY ignores the pointer, so you can draw straight over it; the
+/// header stays live in every tool, so the note is always draggable — the way
+/// the focus-mode tool palette is. It shows in focus mode too. Minimise shows
+/// only the next unchecked item; close hides it but keeps the list until you
+/// delete it.
 class StickyNote extends StatelessWidget {
-  const StickyNote({super.key, required this.app});
+  const StickyNote({super.key, required this.app, this.topInset = 0});
   final AppState app;
+
+  /// How much of the window's top edge is reserved by the floating toolbar.
+  /// The note is clamped below it, so however you drag it, it can never sit
+  /// over the chrome. Zero in focus mode, where there is no chrome.
+  final double topInset;
 
   static const double _width = 300;
 
@@ -31,14 +38,21 @@ class StickyNote extends StatelessWidget {
           ? const SizedBox.shrink()
           : LayoutBuilder(
               builder: (context, cons) {
-                final x = (app.stickyX ?? (cons.maxWidth - _width - 24))
-                    .clamp(8.0, math.max(8.0, cons.maxWidth - _width - 8))
+                final top = topInset + 12;
+                final maxX = math.max(8.0, cons.maxWidth - _width - 8);
+                final maxY = math.max(top, cons.maxHeight - 60);
+                // Default spot: tucked to the right but BELOW the zoom/fit
+                // controls (which live top-right), so it never opens hidden
+                // behind them. Once dragged, it stays where it was put.
+                final x = (app.stickyX ?? (cons.maxWidth - _width - 20))
+                    .clamp(8.0, maxX)
                     .toDouble();
-                final y = (app.stickyY ?? 84.0)
-                    .clamp(8.0, math.max(8.0, cons.maxHeight - 60))
-                    .toDouble();
-                // Interactive only in Select; in a drawing tool the note ignores the
-                // pointer so a stroke lands on the canvas beneath it.
+                final y =
+                    (app.stickyY ?? (top + 220)).clamp(top, maxY).toDouble();
+                // In a drawing tool the BODY lets strokes through (so you can
+                // draw straight over the note); the HEADER stays live either
+                // way, so the note is always draggable — even mid-focus-mode
+                // with a pen in hand, the way the tool palette is.
                 final interactive = app.tool == Tool.select;
                 return Stack(
                   children: [
@@ -46,10 +60,13 @@ class StickyNote extends StatelessWidget {
                       left: x,
                       top: y,
                       width: _width,
-                      child: IgnorePointer(
-                        ignoring: !interactive,
-                        child: _NoteCard(
-                            app: app, x: x, y: y, bounds: cons.biggest),
+                      child: _NoteCard(
+                        app: app,
+                        x: x,
+                        y: y,
+                        top: top,
+                        bounds: cons.biggest,
+                        interactive: interactive,
                       ),
                     ),
                   ],
@@ -65,10 +82,20 @@ class _NoteCard extends StatefulWidget {
       {required this.app,
       required this.x,
       required this.y,
-      required this.bounds});
+      required this.top,
+      required this.bounds,
+      required this.interactive});
   final AppState app;
   final double x, y;
+
+  /// The lowest the note may be dragged (kept below the toolbar).
+  final double top;
   final Size bounds;
+
+  /// Whether the body accepts the pointer. False in a drawing tool, so a
+  /// stroke drawn across the note lands on the canvas beneath it — the header
+  /// stays live regardless, so the note is always draggable.
+  final bool interactive;
 
   @override
   State<_NoteCard> createState() => _NoteCardState();
@@ -91,7 +118,7 @@ class _NoteCardState extends State<_NoteCard> {
         .clamp(8.0, math.max(8.0, widget.bounds.width - StickyNote._width - 8))
         .toDouble();
     final ny = (widget.y + d.delta.dy)
-        .clamp(8.0, math.max(8.0, widget.bounds.height - 60))
+        .clamp(widget.top, math.max(widget.top, widget.bounds.height - 60))
         .toDouble();
     app.setStickyPos(nx, ny);
   }
@@ -122,23 +149,39 @@ class _NoteCardState extends State<_NoteCard> {
   @override
   Widget build(BuildContext context) {
     final s = context.surfaces;
+    final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final minimized = app.stickyMinimized;
 
+    // The body passes the pointer through while a pen is up so you can draw
+    // over the note; the header (below) is never wrapped, so drag/close stay
+    // live in every tool. `Flexible` must stay a direct child of the Column,
+    // so IgnorePointer goes INSIDE it, not around it.
+    final Widget body = minimized
+        ? IgnorePointer(
+            ignoring: !widget.interactive, child: _minimizedBody(context, s))
+        : Flexible(
+            child: IgnorePointer(
+                ignoring: !widget.interactive,
+                child: _expandedBody(context, s)));
+
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           decoration: BoxDecoration(
-            color: s.raised.withValues(alpha: dark ? 0.72 : 0.82),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: s.border),
+            color: s.raised.withValues(alpha: dark ? 0.62 : 0.74),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.14)
+                    : Colors.white.withValues(alpha: 0.7)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: dark ? 0.4 : 0.16),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: Colors.black.withValues(alpha: dark ? 0.44 : 0.18),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -146,11 +189,8 @@ class _NoteCardState extends State<_NoteCard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _header(context, s),
-              if (minimized)
-                _minimizedBody(context, s)
-              else
-                Flexible(child: _expandedBody(context, s)),
+              _header(context, s, scheme),
+              body,
             ],
           ),
         ),
@@ -158,22 +198,30 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  Widget _header(BuildContext context, OnoteSurfaces s) {
+  Widget _header(BuildContext context, OnoteSurfaces s, ColorScheme scheme) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onPanUpdate: _drag,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
         decoration: BoxDecoration(
-          color: s.well.withValues(alpha: 0.6),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.primary.withValues(alpha: 0.16),
+              scheme.primary.withValues(alpha: 0.06),
+            ],
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          border: Border(
+              bottom: BorderSide(color: s.border.withValues(alpha: 0.6))),
         ),
         child: Row(
           children: [
             Icon(Icons.drag_indicator, size: 16, color: s.textSecondary),
             const SizedBox(width: 4),
-            Icon(Icons.sticky_note_2_outlined,
-                size: 15, color: s.textSecondary),
+            Icon(Icons.sticky_note_2_outlined, size: 15, color: scheme.primary),
             const SizedBox(width: 6),
             Expanded(
               child: Text('Agenda',

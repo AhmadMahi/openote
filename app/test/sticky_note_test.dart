@@ -2,10 +2,12 @@
 // minimized note shows, delete/clear, and persistence.
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:openote/state/app_state.dart';
 import 'package:openote/store/repository.dart';
+import 'package:openote/ui/sticky_note.dart';
 
 import 'support/sqlite.dart';
 
@@ -83,5 +85,42 @@ void main() {
     expect((m['items'] as List).length, 1);
     expect((m['items'] as List).first, containsPair('t', 'Persist me'));
     expect((m['items'] as List).first, containsPair('d', true));
+  });
+
+  // The bug the owner hit: the note sat behind the zoom controls and could
+  // not be grabbed, and in a drawing tool the whole card ignored the pointer
+  // so it could not be dragged at all. The header must stay draggable in EVERY
+  // tool — that is what makes it movable in focus mode with a pen in hand.
+  testWidgets('the header drags the note even while a pen is up', (t) async {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.toggleStickyOpen();
+    app.setTool(Tool.pen); // a drawing tool: the body ignores the pointer
+    app.setStickyPos(100, 100);
+
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ListenableBuilder(
+          listenable: app,
+          builder: (_, __) =>
+              Stack(children: [StickyNote(app: app, topInset: 0)]),
+        ),
+      ),
+    ));
+    await t.pump();
+
+    // The grip lives in the always-live header. Dragging it moves the note
+    // even though a pen is up — before the fix the whole card was wrapped in
+    // IgnorePointer in a drawing tool, so the note could not be grabbed at all
+    // and both coordinates would stay put.
+    final grip = find.byIcon(Icons.drag_indicator);
+    expect(grip, findsOneWidget);
+    await t.drag(grip, const Offset(40, 30));
+    await t.pump();
+    // The drag persisted through the autosave debounce; cancel it here (the
+    // widget-tree invariant runs before tearDown) so no timer outlives the test.
+    app.cancelPendingSave();
+
+    expect(app.stickyX, greaterThan(100), reason: 'header drag moved it right');
+    expect(app.stickyY, greaterThan(100), reason: 'header drag moved it down');
   });
 }
