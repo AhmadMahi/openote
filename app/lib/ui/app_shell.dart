@@ -28,6 +28,7 @@ import 'save_problem_dialog.dart';
 import 'shortcut_overlay.dart';
 import 'focus_palette.dart';
 import 'sidebar.dart';
+import 'sticky_note.dart';
 import 'tab_strip.dart';
 import '../export/print_page.dart';
 import 'study_panel.dart';
@@ -1503,6 +1504,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                     ],
                                   ),
                                 ),
+                                // The teaching agenda floats over the page,
+                                // fixed to the window — never part of a page and
+                                // never exported. Placed BELOW the top chrome so
+                                // it can never cover the toolbar.
+                                if (!app.focusMode &&
+                                    !app.navHome &&
+                                    !app.navNotebook)
+                                  StickyNote(app: app),
                                 // The top stack: one sheet of glass, measured so the
                                 // canvas can be told where its page should rest.
                                 if (!app.focusMode)

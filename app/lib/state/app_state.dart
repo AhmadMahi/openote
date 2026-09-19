@@ -121,6 +121,22 @@ class PageTab {
   int get hashCode => Object.hash(notebookId, pageId);
 }
 
+/// One line on the sticky-note agenda — a teaching to-do that can be ticked off.
+class StickyItem {
+  StickyItem(this.text, {this.done = false});
+  String text;
+  bool done;
+
+  Map<String, dynamic> toJson() => {'t': text, if (done) 'd': true};
+
+  static StickyItem? fromJson(Object? j) {
+    if (j is Map && j['t'] is String) {
+      return StickyItem(j['t'] as String, done: j['d'] == true);
+    }
+    return null;
+  }
+}
+
 /// What the drawing cursor looks like (INK-11).
 ///
 /// A preference because the right answer depends on how you work rather than
@@ -6869,6 +6885,7 @@ class AppState extends ChangeNotifier
     // Restore the tab strip now that the notebook list is known (tabs for a
     // notebook that no longer exists are dropped here).
     _loadTabs();
+    _loadSticky();
     // The app opens on Home. The last page is loaded and one click away —
     // the navigator and Home's recents both lead to it — but the first thing
     // on screen is the workspace, at the owner's request.
@@ -6936,6 +6953,8 @@ class AppState extends ChangeNotifier
         nodes.where((n) => n.kind == NodeKind.section).firstOrNull?.id;
     final firstPage = nodes.where((n) => n.kind == NodeKind.page).firstOrNull;
     await selectPage(firstPage?.id);
+    // The sticky agenda is per notebook, so it reloads whenever one opens.
+    _loadSticky();
   }
 
   Future<void> selectNotebook(String id) async {
@@ -7512,6 +7531,137 @@ class AppState extends ChangeNotifier
     } else {
       notifyListeners();
     }
+  }
+
+  // ── Sticky-note agenda (one per notebook) ──────────────────────────────
+  //
+  // A floating teaching agenda that lives over the page, fixed to the window
+  // rather than pinned into the page: it is never part of a page and never
+  // exported. One per notebook (the "session"), persisted so it is there next
+  // time. State here; the widget is `ui/sticky_note.dart`.
+
+  final List<StickyItem> stickyItems = [];
+  bool stickyOpen = false;
+  bool stickyMinimized = false;
+
+  /// Top-left of the note, in the editor area's own coordinates. Null until it
+  /// has been placed/dragged, so the widget can choose a sensible first spot.
+  double? stickyX, stickyY;
+
+  String get _stickyKey => 'sticky:${notebookId ?? ''}';
+
+  void _loadSticky() {
+    stickyItems.clear();
+    stickyOpen = false;
+    stickyMinimized = false;
+    stickyX = stickyY = null;
+    final raw = _repo.getSetting(_stickyKey);
+    if (raw is! Map) return;
+    for (final e in (raw['items'] as List? ?? const [])) {
+      final it = StickyItem.fromJson(e);
+      if (it != null) stickyItems.add(it);
+    }
+    stickyOpen = raw['open'] == true;
+    stickyMinimized = raw['min'] == true;
+    stickyX = (raw['x'] as num?)?.toDouble();
+    stickyY = (raw['y'] as num?)?.toDouble();
+  }
+
+  void _persistSticky() {
+    if (notebookId == null) return;
+    _repo.setSetting(_stickyKey, {
+      'items': [for (final it in stickyItems) it.toJson()],
+      'open': stickyOpen,
+      'min': stickyMinimized,
+      if (stickyX != null) 'x': stickyX,
+      if (stickyY != null) 'y': stickyY,
+    });
+  }
+
+  /// The next unchecked item — what the minimized note shows.
+  StickyItem? get nextStickyItem {
+    for (final it in stickyItems) {
+      if (!it.done) return it;
+    }
+    return null;
+  }
+
+  void toggleStickyOpen() {
+    stickyOpen = !stickyOpen;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void setStickyMinimized(bool v) {
+    stickyMinimized = v;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void setStickyPos(double x, double y) {
+    stickyX = x;
+    stickyY = y;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void addStickyItem(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    stickyItems.add(StickyItem(t));
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void toggleStickyItem(int i) {
+    if (i < 0 || i >= stickyItems.length) return;
+    stickyItems[i].done = !stickyItems[i].done;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void deleteStickyItem(int i) {
+    if (i < 0 || i >= stickyItems.length) return;
+    stickyItems.removeAt(i);
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void clearStickyItems() {
+    stickyItems.clear();
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void setStickyItems(List<String> lines) {
+    stickyItems
+      ..clear()
+      ..addAll([
+        for (final l in lines)
+          if (l.trim().isNotEmpty) StickyItem(l.trim())
+      ]);
+    _persistSticky();
+    notifyListeners();
+  }
+
+  /// Turn rough notes into a clean teaching agenda with AI. Returns the items
+  /// as plain lines, or null on failure (the caller shows the reason).
+  Future<List<String>?> generateStickyAgenda(String rough) async {
+    final client = aiClient();
+    if (client == null) return null;
+    final res = await client.chat([
+      AiMessage.system('${systemPromptFor(AiFeature.stickyAgenda)}\n\n'
+          'Reply with only the agenda, one item per line, no numbering, no '
+          'bullets, no Markdown — just the plain text of each item.'),
+      AiMessage.user(rough),
+    ], temperature: 0.4);
+    addAiTokens(res.totalTokens);
+    if (!res.ok) return null;
+    return [
+      for (final l in res.text.split('\n'))
+        if (l.trim().isNotEmpty)
+          l.trim().replaceFirst(RegExp(r'^\s*(?:[-*•]|\d+[.)])\s*'), '')
+    ];
   }
 
   /// Heal Word/OneNote field codes left in an already-imported page.

@@ -1074,9 +1074,22 @@ class _CommandBarState extends State<CommandBar> {
             style:
                 TextStyle(fontSize: 11, color: context.surfaces.textSecondary))
       else
-        Text('Pick the pen or highlighter to draw',
-            style:
-                TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+        // The old "pick the pen…" hint sat here doing nothing; a Sticky notes
+        // button earns the space instead — it opens the floating agenda.
+        TextButton.icon(
+          onPressed: app.toggleStickyOpen,
+          icon: Icon(Icons.sticky_note_2_outlined,
+              size: 16,
+              color: app.stickyOpen
+                  ? Theme.of(context).colorScheme.primary
+                  : context.surfaces.textSecondary),
+          style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              foregroundColor: app.stickyOpen
+                  ? Theme.of(context).colorScheme.primary
+                  : context.surfaces.textSecondary),
+          label: const Text('Sticky notes', style: TextStyle(fontSize: 12)),
+        ),
       // NO `Spacer` here, and none in any command row. Every row is built
       // inside a horizontal `SingleChildScrollView`, which offers unbounded
       // width — and a flex child (`Spacer` is `Expanded`) under an unbounded

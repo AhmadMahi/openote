@@ -85,6 +85,15 @@ enum AiFeature {
         'teacher and their class taking a short break during a lesson. Make it '
         'happy and encouraging, tie it lightly to the topic when one is given, '
         'keep it under 20 words, and reply with only the line.',
+  ),
+  stickyAgenda(
+    id: 'stickyAgenda',
+    label: 'Sticky-note agenda',
+    hint: 'How rough notes become a clean teaching to-do list on the sticky '
+        'note. The plain-list output format is added automatically.',
+    defaultPrompt: 'You turn a teacher\'s rough notes into a short, ordered '
+        'teaching agenda — clear, action-first items in the order they should '
+        'be taught. Keep each item concise.',
   );
 
   const AiFeature({
