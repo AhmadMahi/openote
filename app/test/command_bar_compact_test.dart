@@ -67,16 +67,12 @@ void main() {
       (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     await pump(tester, const Size(2600, 1200));
-    // Study and Planner carry their OWN dynamic tooltip text (how many
-    // cards are due, etc.) rather than a fixed string, so they are found
-    // by icon here — everything else has a fixed tooltip message.
-    expect(find.byIcon(Icons.school_outlined), findsOneWidget, reason: 'Study');
-    expect(find.byIcon(Icons.event_note_outlined), findsOneWidget,
-        reason: 'Planner');
+    // The five side panels now live behind one "Panels" dropdown (found by
+    // its icon, since its tooltip is dynamic), with the break timer beside it.
+    expect(find.byIcon(Icons.space_dashboard_outlined), findsOneWidget,
+        reason: 'Panels dropdown');
     for (final tip in const [
-      'Find tags',
-      'Page outline',
-      'Links & backlinks',
+      'Break timer',
       'Export page…',
       'Settings…',
     ]) {
@@ -93,7 +89,7 @@ void main() {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     // The header row no longer carries tabs, so the cluster has the whole
     // width to itself and only a genuinely narrow window makes it fold.
-    await pump(tester, const Size(300, 900));
+    await pump(tester, const Size(200, 900));
 
     expect(find.byTooltip('More'), findsOneWidget,
         reason: 'the trailing cluster does not fit at 700px — something '
@@ -110,7 +106,7 @@ void main() {
   testWidgets('a folded Settings still opens the real settings dialog',
       (tester) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-    await pump(tester, const Size(300, 900));
+    await pump(tester, const Size(200, 900));
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
 
@@ -141,7 +137,7 @@ void main() {
     await pump(tester, const Size(2600, 1200));
     final wideLeft = tester.getTopLeft(find.byTooltip('Undo  (Ctrl+Z)')).dx;
 
-    await pump(tester, const Size(300, 900));
+    await pump(tester, const Size(200, 900));
     final narrowLeft = tester.getTopLeft(find.byTooltip('Undo  (Ctrl+Z)')).dx;
 
     expect(narrowLeft, wideLeft,

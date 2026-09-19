@@ -7440,15 +7440,45 @@ class AppState extends ChangeNotifier
   Future<void> openInNewTab(String pageId) async {
     final nb = notebookId;
     if (nb == null) return;
+    // Seed the strip with the page you are already on, so opening a second page
+    // as a tab does not make the first one vanish — you end up with both.
+    final current = this.pageId;
+    if (openTabs.isEmpty && current != null && current != pageId) {
+      final curTitle =
+          nodes.where((n) => n.id == current).firstOrNull?.title ?? 'Page';
+      openTabs.add(PageTab(nb, current, curTitle));
+    }
     final title =
         nodes.where((n) => n.id == pageId).firstOrNull?.title ?? 'Page';
     final t = PageTab(nb, pageId, title);
     if (!openTabs.contains(t)) {
       if (openTabs.length >= maxTabs) openTabs.removeAt(0);
       openTabs.add(t);
-      _persistTabs();
     }
+    _persistTabs();
     await activateTab(t);
+  }
+
+  /// Open a page the tab-aware way: once any tab is open ("tab mode"), a page
+  /// opened from the navigator lands in a new tab and the others stay; with no
+  /// tabs open it just navigates, as before. This is what makes tab mode sticky
+  /// without turning every internal `selectPage` into a tab.
+  Future<void> openPage(String id) async {
+    if (openTabs.isNotEmpty) {
+      await openInNewTab(id);
+    } else {
+      await selectPage(id);
+    }
+  }
+
+  /// Open a notebook the tab-aware way: switch to it, and in tab mode drop the
+  /// page it lands on into a tab so switching notebooks keeps the others.
+  Future<void> openNotebook(String id) async {
+    final wasTabMode = openTabs.isNotEmpty;
+    await selectNotebook(id);
+    if (wasTabMode && pageId != null) {
+      await openInNewTab(pageId!);
+    }
   }
 
   /// Switch to [t], loading its notebook first when it lives in another one.

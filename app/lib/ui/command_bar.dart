@@ -16,11 +16,11 @@ import '../editor/list_editing.dart';
 import '../markdown/md_syntax.dart';
 import '../model/models.dart' show PaperSize;
 import '../model/tags.dart';
-import '../planner/agenda.dart';
 import '../state/app_state.dart';
 import '../study/study_stats.dart';
 import '../theme/ink_palettes.dart';
 import '../theme/onote_theme.dart';
+import 'break_timer.dart';
 import 'color_picker.dart';
 import 'command_button.dart';
 import 'compacting_toolbar.dart';
@@ -104,67 +104,31 @@ class _CommandBarState extends State<CommandBar> {
                       // not about the page.
                       // Study: the due count is the whole nudge, so it's on the
                       // badge rather than hidden behind the panel.
+                      // The five side panels — Study, Planner, Tags, Outline,
+                      // Links — used to be five separate toolbar buttons. They
+                      // are one "Panels" dropdown now, to declutter the top bar;
+                      // Study's due count rides along as a badge on the button
+                      // and a note in the menu.
                       ToolbarControl(
                         width: 40,
-                        icon: Icons.school_outlined,
-                        label: 'Study',
-                        selected: app.showStudyPanel,
-                        onPressed: app.toggleStudyPanel,
-                        inline: _StudyButton(app: app),
+                        icon: Icons.space_dashboard_outlined,
+                        label: 'Panels',
+                        selected: app.openPanel != null,
+                        inline: _PanelsButton(app: app),
+                        submenu: _panelsSubmenu(),
                       ),
-                      // The planner sits beside Study rather than in a menu:
-                      // it is the other half of the same daily question, and
-                      // the whole complaint it answers was that dates were
-                      // reachable only from places you had to already be in.
+                      // A teaching break: pick a length, and the window becomes
+                      // a full-screen countdown until the class returns.
                       ToolbarControl(
                         width: 40,
-                        icon: Icons.event_note_outlined,
-                        label: 'Planner',
-                        selected: app.showPlannerPanel,
-                        onPressed: app.togglePlannerPanel,
-                        inline: _PlannerButton(app: app),
-                      ),
-                      ToolbarControl(
-                        width: 40,
-                        icon: Icons.label_outline,
-                        label: 'Find tags',
-                        selected: app.showTagsPanel,
-                        onPressed: app.toggleTagsPanel,
+                        icon: Icons.timer_outlined,
+                        label: 'Break timer',
+                        onPressed: () => showBreakTimer(context, app),
                         inline: IconButton(
-                          icon: const Icon(Icons.label_outline, size: 18),
-                          tooltip: 'Find tags',
-                          isSelected: app.showTagsPanel,
+                          icon: const Icon(Icons.timer_outlined, size: 18),
+                          tooltip: 'Break timer',
                           visualDensity: VisualDensity.compact,
-                          onPressed: app.toggleTagsPanel,
-                        ),
-                      ),
-                      ToolbarControl(
-                        width: 40,
-                        icon: Icons.toc,
-                        label: 'Page outline',
-                        selected: app.showTocPanel,
-                        onPressed: app.toggleTocPanel,
-                        inline: IconButton(
-                          icon: const Icon(Icons.toc, size: 18),
-                          tooltip: 'Page outline',
-                          isSelected: app.showTocPanel,
-                          visualDensity: VisualDensity.compact,
-                          onPressed: app.toggleTocPanel,
-                        ),
-                      ),
-                      ToolbarControl(
-                        width: 40,
-                        icon: Icons.account_tree_outlined,
-                        label: 'Links & backlinks',
-                        selected: app.showLinksPanel,
-                        onPressed: app.toggleLinksPanel,
-                        inline: IconButton(
-                          icon:
-                              const Icon(Icons.account_tree_outlined, size: 18),
-                          tooltip: 'Links & backlinks',
-                          isSelected: app.showLinksPanel,
-                          visualDensity: VisualDensity.compact,
-                          onPressed: app.toggleLinksPanel,
+                          onPressed: () => showBreakTimer(context, app),
                         ),
                       ),
                       ToolbarControl(
@@ -480,6 +444,28 @@ class _CommandBarState extends State<CommandBar> {
       messenger?.showSnackBar(SnackBar(content: Text('Exported to $path')));
     }
   }
+
+  /// The Panels dropdown, folded into the command bar's own "More" menu.
+  List<ToolbarSubmenuItem> _panelsSubmenu() => [
+        ToolbarSubmenuItem(
+            icon: Icons.school_outlined,
+            label: 'Study',
+            onPressed: app.toggleStudyPanel),
+        ToolbarSubmenuItem(
+            icon: Icons.event_note_outlined,
+            label: 'Planner',
+            onPressed: app.togglePlannerPanel),
+        ToolbarSubmenuItem(
+            icon: Icons.label_outline,
+            label: 'Tags',
+            onPressed: app.toggleTagsPanel),
+        ToolbarSubmenuItem(
+            icon: Icons.toc, label: 'Outline', onPressed: app.toggleTocPanel),
+        ToolbarSubmenuItem(
+            icon: Icons.account_tree_outlined,
+            label: 'Links',
+            onPressed: app.toggleLinksPanel),
+      ];
 
   /// The Export menu's own items — pulled out so the inline `MenuAnchor`
   /// (shown while there's room) and the folded `ToolbarSubmenuItem` list
@@ -1479,147 +1465,89 @@ class _MakeCardButton extends StatelessWidget {
   }
 }
 
-/// Study button with a due badge.
-///
-/// The count is the feature's entire nudge — "12 due" the week before an exam
-/// is what turns notes into revision, and a bare icon says nothing.
-class _StudyButton extends StatelessWidget {
-  const _StudyButton({required this.app});
+/// The "Panels" dropdown: one button that opens the Study, Planner, Tags,
+/// Outline and Links side panels, in place of five separate toolbar buttons.
+/// Study's due count still rides on the button as a badge — the nudge that
+/// turns notes into revision — and appears again beside Study in the menu.
+class _PanelsButton extends StatelessWidget {
+  const _PanelsButton({required this.app});
   final AppState app;
 
-  /// How close an exam has to be before the badge changes colour. A week is
-  /// when revision stops being a good intention, and it keeps the accent rare
-  /// enough to still mean something when it appears.
   static const _urgentDays = 7;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final (due, total) = app.study.deckCounts(sectionId: app.activeSectionId);
-    // Read from the date map and the counts already in hand — deliberately not
-    // through `examPlanFor`, which would walk the deck a second time on a
-    // widget that rebuilds with every keystroke.
     final exam = app.study.examDate(app.activeSectionId);
     final daysLeft = exam == null ? null : daysBetween(DateTime.now(), exam);
     final urgent =
         daysLeft != null && daysLeft >= 0 && daysLeft <= _urgentDays && due > 0;
-    final countdown = daysLeft == null || daysLeft < 0
-        ? ''
-        : ' · exam ${formatCountdown(daysLeft)}';
-    return Tooltip(
-      message: total == 0
-          ? 'Study — tag a line Question or Definition to make a card'
-          : '$due of $total card${total == 1 ? '' : 's'} due in this section'
-              '$countdown',
-      child: Stack(clipBehavior: Clip.none, children: [
-        IconButton(
-          icon: const Icon(Icons.school_outlined, size: 18),
-          isSelected: app.showStudyPanel,
-          visualDensity: VisualDensity.compact,
-          onPressed: app.toggleStudyPanel,
-        ),
-        if (due > 0)
-          Positioned(
-            right: 2,
-            top: 2,
-            child: IgnorePointer(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  // Brass once the exam is inside a week. Colour never carries
-                  // this alone (style guide §3.5) — the tooltip says how many
-                  // days, and the count itself is unchanged.
-                  color: urgent
-                      ? OnoteColors.brass500
-                      : Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(8),
+    final anyOpen = app.openPanel != null;
+
+    MenuItemButton item(
+            IconData icon, String label, bool on, VoidCallback onTap,
+            {String? note}) =>
+        MenuItemButton(
+          leadingIcon: Icon(icon, size: 18),
+          trailingIcon: on
+              ? Icon(Icons.check, size: 16, color: scheme.primary)
+              : (note != null
+                  ? Text(note,
+                      style: TextStyle(fontSize: 11, color: scheme.primary))
+                  : null),
+          onPressed: onTap,
+          child: Text(label),
+        );
+
+    return MenuAnchor(
+      menuChildren: [
+        item(Icons.school_outlined, 'Study', app.showStudyPanel,
+            app.toggleStudyPanel,
+            note: due > 0 ? '$due due' : null),
+        item(Icons.event_note_outlined, 'Planner', app.showPlannerPanel,
+            app.togglePlannerPanel),
+        item(Icons.label_outline, 'Tags', app.showTagsPanel,
+            app.toggleTagsPanel),
+        item(Icons.toc, 'Outline', app.showTocPanel, app.toggleTocPanel),
+        item(Icons.account_tree_outlined, 'Links', app.showLinksPanel,
+            app.toggleLinksPanel),
+      ],
+      builder: (context, controller, _) => Tooltip(
+        message: total == 0
+            ? 'Panels — Study, Planner, Tags, Outline, Links'
+            : 'Panels · $due of $total card${total == 1 ? '' : 's'} due',
+        child: Stack(clipBehavior: Clip.none, children: [
+          IconButton(
+            icon: const Icon(Icons.space_dashboard_outlined, size: 18),
+            isSelected: anyOpen,
+            visualDensity: VisualDensity.compact,
+            onPressed: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+          ),
+          if (due > 0)
+            Positioned(
+              right: 2,
+              top: 2,
+              child: IgnorePointer(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: urgent ? OnoteColors.brass500 : scheme.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('$due',
+                      style: TextStyle(
+                          fontSize: 11,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: urgent ? Colors.white : scheme.onPrimary)),
                 ),
-                child: Text('$due',
-                    style: TextStyle(
-                        fontSize: 11,
-                        height: 1.2,
-                        fontWeight: FontWeight.w700,
-                        color: urgent
-                            ? Colors.white
-                            : Theme.of(context).colorScheme.onPrimary)),
               ),
             ),
-          ),
-      ]),
-    );
-  }
-}
-
-/// Opens the planner, and says what is on today without opening it.
-///
-/// The badge counts **today's and overdue** rows, not everything dated. A
-/// number that included next month's exam would be permanently non-zero, and a
-/// badge that is always lit stops being read — the same reasoning that keeps
-/// the study badge on cards *due* rather than on the whole deck.
-class _PlannerButton extends StatelessWidget {
-  const _PlannerButton({required this.app});
-  final AppState app;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final sections = app.planner.sections(now: now);
-    var count = 0;
-    var overdue = false;
-    for (final s in sections) {
-      if (s.bucket == AgendaBucket.overdue) {
-        overdue = true;
-        count += s.items.length;
-      } else if (s.bucket == AgendaBucket.today) {
-        count += s.items.length;
-      }
-    }
-    final alerts = app.planner.pendingAlerts.length;
-    return Tooltip(
-      message: alerts > 0
-          ? '$alerts reminder${alerts == 1 ? '' : 's'} waiting'
-          : count == 0
-              ? 'Planner — every date you have, in one place'
-              : overdue
-                  ? 'Planner — $count today or overdue'
-                  : 'Planner — $count today',
-      child: Stack(clipBehavior: Clip.none, children: [
-        IconButton(
-          icon: const Icon(Icons.event_note_outlined, size: 18),
-          isSelected: app.showPlannerPanel,
-          visualDensity: VisualDensity.compact,
-          onPressed: app.togglePlannerPanel,
-        ),
-        if (count > 0 || alerts > 0)
-          Positioned(
-            right: 2,
-            top: 2,
-            child: IgnorePointer(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  // Red only for something already late; a waiting reminder is
-                  // brass, and an ordinary "3 today" is the primary accent.
-                  // Colour never carries this alone (style guide §3.5) — the
-                  // tooltip says which it is.
-                  color: overdue
-                      ? OnoteColors.danger
-                      : alerts > 0
-                          ? OnoteColors.brass500
-                          : Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text('${alerts > 0 ? alerts : count}',
-                    style: TextStyle(
-                        fontSize: 11,
-                        height: 1.2,
-                        fontWeight: FontWeight.w700,
-                        color: overdue || alerts > 0
-                            ? Colors.white
-                            : Theme.of(context).colorScheme.onPrimary)),
-              ),
-            ),
-          ),
-      ]),
+        ]),
+      ),
     );
   }
 }

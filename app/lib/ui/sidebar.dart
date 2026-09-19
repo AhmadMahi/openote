@@ -305,7 +305,7 @@ class _SidebarState extends State<Sidebar> {
                 : null,
             onTap: () {
               if (n.kind == NodeKind.page) {
-                app.selectPage(n.id);
+                app.openPage(n.id);
               } else {
                 app.activateSection(n.id);
               }
@@ -336,7 +336,7 @@ class _SidebarState extends State<Sidebar> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 11)),
               onTap: () {
-                app.selectPage(h.pageId);
+                app.openPage(h.pageId);
                 _clearSearch();
               },
             ),
@@ -757,7 +757,7 @@ class _HomePane extends StatelessWidget {
         );
 
     Widget row(TreeNode page, IconData icon, {Color? iconColor}) => InkWell(
-          onTap: () => app.selectPage(page.id),
+          onTap: () => app.openPage(page.id),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(children: [
@@ -899,7 +899,7 @@ class _ComingUp extends StatelessWidget {
           InkWell(
             onTap: () {
               if (it.pageId != null) {
-                app.selectPage(it.pageId!);
+                app.openPage(it.pageId!);
               } else {
                 app.openPlanner();
               }
@@ -1710,7 +1710,7 @@ class _PageTileState extends State<_PageTile> {
                 // The click is what aims the keyboard at this row; an InkWell
                 // does not take focus on tap of its own accord.
                 _rowFocus.requestFocus();
-                app.selectPage(page.id);
+                app.openPage(page.id);
               },
         onTapDown: (d) => _downPos = d.globalPosition,
         onSecondaryTapUp: (d) => showNodeMenu(context, app, page,

@@ -615,7 +615,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
             ? null
             : () async {
                 Navigator.pop(context);
-                await app.selectNotebook(nb.id);
+                await app.openNotebook(nb.id);
               },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
@@ -716,7 +716,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
                     if (!current)
                       _act(Icons.open_in_new, 'Open this notebook', () async {
                         Navigator.pop(context);
-                        await app.selectNotebook(nb.id);
+                        await app.openNotebook(nb.id);
                       }),
                     _act(Icons.edit_outlined, 'Rename', () => _startRename(nb)),
                     _act(Icons.copy_all_outlined, 'Duplicate',

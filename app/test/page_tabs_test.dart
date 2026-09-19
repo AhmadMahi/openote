@@ -90,13 +90,22 @@ void main() {
     expect(app.pageId, pages[1], reason: 'fell back to the neighbouring tab');
   });
 
+  test('opening the first tab keeps the page you were already on', () async {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    // Started on pages[0] in setUp; opening pages[1] as a tab should seed
+    // pages[0] as a tab too, so nothing you had open disappears.
+    await app.openInNewTab(pages[1]);
+    expect(app.openTabs, containsAll([tab(pages[0]), tab(pages[1])]));
+    expect(app.pageId, pages[1], reason: 'the newly opened tab is active');
+  });
+
   test('open tabs are written to the store for next launch', () async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-    await app.openInNewTab(pages[1]);
-    await app.openInNewTab(pages[2]);
+    await app.openInNewTab(pages[1]); // seeds pages[0], so [0,1]
+    await app.openInNewTab(pages[2]); // [0,1,2]
     final raw = repo.getSetting('openTabs');
     expect(raw, isA<List>());
-    expect((raw as List).length, 2);
+    expect((raw as List).length, 3);
   });
 
   test('a tab whose page was deleted is pruned on reload', () async {

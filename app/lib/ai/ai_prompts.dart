@@ -75,6 +75,16 @@ enum AiFeature {
     defaultPrompt: 'You design clean, practical page templates for a '
         'note-taking app, with a sensible layout and helpful placeholder '
         'headings.',
+  ),
+  breakMessage(
+    id: 'breakMessage',
+    label: 'Break timer message',
+    hint: 'The upbeat one-liner shown on the break-timer screen. It may use '
+        'what the current notebook is about.',
+    defaultPrompt: 'You write a single short, warm, quirky one-liner for a '
+        'teacher and their class taking a short break during a lesson. Make it '
+        'happy and encouraging, tie it lightly to the topic when one is given, '
+        'keep it under 20 words, and reply with only the line.',
   );
 
   const AiFeature({
