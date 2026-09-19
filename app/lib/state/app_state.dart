@@ -7402,6 +7402,7 @@ class AppState extends ChangeNotifier
     }
     docRevision++;
     _refreshActiveTabTitle();
+    _loadBucket();
     _persistSession();
     // "Fit new pages to width" is applied by PageCanvas.initState's post-frame
     // (the viewport is not laid out yet here), so a page reliably opens filled
@@ -7662,6 +7663,61 @@ class AppState extends ChangeNotifier
         if (l.trim().isNotEmpty)
           l.trim().replaceFirst(RegExp(r'^\s*(?:[-*•]|\d+[.)])\s*'), '')
     ];
+  }
+
+  // ── The file bucket (files to share with the class, per page) ──────────
+  //
+  // A short list of file PATHS the teacher gathers for a page — slides, PDFs,
+  // notebooks — to push alongside the page. Nothing is copied or uploaded until
+  // the push; only the paths are remembered, per page, so the bucket is there
+  // again next time. See `export/repo_push.dart` for how they are sorted into
+  // `assets/` on push, and `ui/bucket_dialog.dart` for the picker.
+
+  final List<String> bucket = [];
+
+  String get _bucketKey => 'bucket:${pageId ?? ''}';
+
+  void _loadBucket() {
+    bucket.clear();
+    if (pageId == null) return;
+    final raw = _repo.getSetting(_bucketKey);
+    if (raw is List) {
+      for (final p in raw) {
+        if (p is String && p.isNotEmpty) bucket.add(p);
+      }
+    }
+  }
+
+  void _persistBucket() {
+    if (pageId == null) return;
+    _repo.setSetting(_bucketKey, List<String>.from(bucket));
+  }
+
+  void addBucketFiles(Iterable<String> paths) {
+    var changed = false;
+    for (final p in paths) {
+      if (p.trim().isEmpty || bucket.contains(p)) continue;
+      bucket.add(p);
+      changed = true;
+    }
+    if (changed) {
+      _persistBucket();
+      notifyListeners();
+    }
+  }
+
+  void removeBucketPath(String path) {
+    if (bucket.remove(path)) {
+      _persistBucket();
+      notifyListeners();
+    }
+  }
+
+  void clearBucket() {
+    if (bucket.isEmpty) return;
+    bucket.clear();
+    _persistBucket();
+    notifyListeners();
   }
 
   /// Heal Word/OneNote field codes left in an already-imported page.

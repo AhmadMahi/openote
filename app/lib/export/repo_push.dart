@@ -10,15 +10,18 @@
 /// - `<page> - mindmap.md`       each mind map, fully expanded, as an outline
 /// - `<page> - quiz.pdf`         each quiz (questions, then all answers)
 /// - `<page> - <name>.pdf`       each presentation / imported PDF
+/// - `assets/PDF|PPT|code|other/` the teacher's bucket of shared files
 ///
-/// **Readable documents only** — the page, quizzes and presentations as PDFs
-/// and each mind map as Markdown; images and raw non-PDF files are deliberately
-/// not uploaded, so the repo stays clean. It uploads through GitHub's Contents
-/// API and never touches the notebook's own sync. Re-pushing overwrites the
-/// same files, so a session taught twice does not pile up copies.
+/// The page, quizzes and presentations go up as PDFs and each mind map as
+/// Markdown; the page's own images and non-PDF blocks are not uploaded, so the
+/// generated set stays clean. Separately, files the teacher gathered in the
+/// bucket ride along under `assets/`, sorted by kind. It uploads through
+/// GitHub's Contents API and never touches the notebook's own sync. Re-pushing
+/// overwrites the same files, so a session taught twice does not pile up copies.
 library;
 
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import '../mindmap/mindmap.dart';
@@ -48,10 +51,13 @@ class _Upload {
   final String message;
 }
 
-/// Push the current page and its contents — **PDFs only**. The page, each mind
-/// map, each quiz, and each presentation/PDF on it go up as PDF files; nothing
-/// else (no images, no non-PDF files) is uploaded. Never throws.
-Future<RepoPushResult> pushPageToRepo(AppState app) async {
+/// Push the current page and its contents. The page, each mind map, each quiz,
+/// and each presentation/PDF on it go up (page/quiz/presentation as PDF, mind
+/// maps as Markdown). Any [bucketFiles] the teacher gathered ride along into
+/// `assets/`, sorted by kind into `PDF/`, `PPT/`, `code/` and `other/`. Never
+/// throws.
+Future<RepoPushResult> pushPageToRepo(AppState app,
+    {List<String> bucketFiles = const []}) async {
   final id = app.pageId;
   if (id == null) return const RepoPushResult.fail('Open a page first.');
   if (!app.connectedForPush || (app.pushRepo?.isEmpty ?? true)) {
@@ -150,6 +156,23 @@ Future<RepoPushResult> pushPageToRepo(AppState app) async {
     }
   }
 
+  // 2b) The shared files the teacher gathered in the bucket, read from disk and
+  //     filed under assets/<KIND>/. Only the paths were held until now; a file
+  //     that has since moved or been deleted is skipped, not fatal.
+  for (final path in bucketFiles) {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) continue;
+      final bytes = await file.readAsBytes();
+      final name = path.split(Platform.pathSeparator).last;
+      final sub = assetSubfolderFor(name);
+      uploads.add(_Upload(
+          '$dir/assets/$sub/$name', bytes, 'Slate: $pageTitle shared file'));
+    } catch (_) {
+      // unreadable file — skip it, keep the rest
+    }
+  }
+
   // 3) Upload them all. One failure does not abort the rest; the summary says
   //    what happened.
   final failures = <String>[];
@@ -163,6 +186,22 @@ Future<RepoPushResult> pushPageToRepo(AppState app) async {
         '$n of ${uploads.length} pushed. ${failures.first}');
   }
   return RepoPushResult.ok('$dir ($n file${n == 1 ? '' : 's'})');
+}
+
+/// Which `assets/` subfolder a shared file belongs in, by its extension.
+String assetSubfolderFor(String name) {
+  final dot = name.lastIndexOf('.');
+  final ext = dot >= 0 ? name.substring(dot + 1).toLowerCase() : '';
+  if (ext == 'pdf') return 'PDF';
+  if (const {'ppt', 'pptx', 'key', 'odp'}.contains(ext)) return 'PPT';
+  if (const {
+    'ipynb', 'py', 'js', 'ts', 'dart', 'java', 'cpp', 'cc', 'c', 'h', 'go',
+    'rb', 'rs', 'sh', 'sql', 'json', 'yaml', 'yml', 'html', 'css', 'r', 'swift',
+    'kt', 'php', 'scala', 'jl' //
+  }.contains(ext)) {
+    return 'code';
+  }
+  return 'other';
 }
 
 /// Bytes of a `sha256:…` blob reference, or null.

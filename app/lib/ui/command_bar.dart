@@ -21,6 +21,7 @@ import '../study/study_stats.dart';
 import '../theme/ink_palettes.dart';
 import '../theme/onote_theme.dart';
 import 'break_timer.dart';
+import 'bucket_dialog.dart';
 import 'color_picker.dart';
 import 'command_button.dart';
 import 'compacting_toolbar.dart';
@@ -131,6 +132,16 @@ class _CommandBarState extends State<CommandBar> {
                           onPressed: () => showBreakTimer(context, app),
                         ),
                       ),
+                      // The share bucket: gather files to push with the page.
+                      // A badge shows how many are waiting.
+                      ToolbarControl(
+                        width: 40,
+                        icon: Icons.inventory_2_outlined,
+                        label: 'Share bucket',
+                        selected: app.bucket.isNotEmpty,
+                        onPressed: () => showBucketDialog(context, app),
+                        inline: _BucketButton(app: app),
+                      ),
                       ToolbarControl(
                         width: 40,
                         icon: Icons.search,
@@ -219,6 +230,14 @@ class _CommandBarState extends State<CommandBar> {
                               icon: Icons.cloud_upload_outlined,
                               label: 'Push this page to the repo (PDF)',
                               onPressed: () => _pushToRepo(context),
+                            ),
+                          if (_canPushToRepo && app.bucket.isNotEmpty)
+                            ToolbarSubmenuItem(
+                              icon: Icons.drive_folder_upload_outlined,
+                              label:
+                                  'Push page + shared files (${app.bucket.length})',
+                              onPressed: () =>
+                                  _pushToRepo(context, withBucket: true),
                             ),
                         ],
                       ),
@@ -528,6 +547,15 @@ class _CommandBarState extends State<CommandBar> {
             onPressed: () => _pushToRepo(context),
             child: const Text('Push this page to the repo (PDF)'),
           ),
+          // Only when the share bucket has files: push the page and them
+          // together, the bucket filed under assets/.
+          if (app.bucket.isNotEmpty)
+            MenuItemButton(
+              leadingIcon:
+                  const Icon(Icons.drive_folder_upload_outlined, size: 18),
+              onPressed: () => _pushToRepo(context, withBucket: true),
+              child: Text('Push page + shared files (${app.bucket.length})'),
+            ),
         ],
       ];
 
@@ -554,7 +582,8 @@ class _CommandBarState extends State<CommandBar> {
   /// Push the current page (and its mind maps, quizzes and PDFs) to the
   /// connected repo as PDFs — one click. If nothing is connected yet, the
   /// result explains where to connect a repo.
-  Future<void> _pushToRepo(BuildContext context) async {
+  Future<void> _pushToRepo(BuildContext context,
+      {bool withBucket = false}) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (!app.connectedForPush) {
       messenger?.showSnackBar(const SnackBar(
@@ -563,10 +592,13 @@ class _CommandBarState extends State<CommandBar> {
       ));
       return;
     }
-    messenger?.showSnackBar(const SnackBar(
-        content: Text('Pushing this page to the repo…'),
-        duration: Duration(seconds: 3)));
-    final res = await pushPageToRepo(app);
+    messenger?.showSnackBar(SnackBar(
+        content: Text(withBucket
+            ? 'Pushing this page and its shared files…'
+            : 'Pushing this page to the repo…'),
+        duration: const Duration(seconds: 3)));
+    final res = await pushPageToRepo(app,
+        bucketFiles: withBucket ? List<String>.from(app.bucket) : const []);
     if (!context.mounted) return;
     messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(SnackBar(
@@ -1561,6 +1593,51 @@ class _PanelsButton extends StatelessWidget {
             ),
         ]),
       ),
+    );
+  }
+}
+
+/// The share-bucket button, with a badge showing how many files are waiting.
+class _BucketButton extends StatelessWidget {
+  const _BucketButton({required this.app});
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final n = app.bucket.length;
+    return Tooltip(
+      message: n == 0
+          ? 'Share bucket — gather files to push with this page'
+          : '$n file${n == 1 ? '' : 's'} ready to push with this page',
+      child: Stack(clipBehavior: Clip.none, children: [
+        IconButton(
+          icon: const Icon(Icons.inventory_2_outlined, size: 18),
+          isSelected: n > 0,
+          visualDensity: VisualDensity.compact,
+          onPressed: () => showBucketDialog(context, app),
+        ),
+        if (n > 0)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('$n',
+                    style: TextStyle(
+                        fontSize: 11,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onPrimary)),
+              ),
+            ),
+          ),
+      ]),
     );
   }
 }
