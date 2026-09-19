@@ -54,19 +54,31 @@ class StickyNote extends StatelessWidget {
                 // way, so the note is always draggable — even mid-focus-mode
                 // with a pen in hand, the way the tool palette is.
                 final interactive = app.tool == Tool.select;
+                // Solidity from the setting; dimmed further in a drawing tool
+                // so the note is less in the way while you draw near it.
+                final opacity = (interactive
+                        ? app.stickyOpacity
+                        : app.stickyOpacity * AppState.stickyDrawDim)
+                    .clamp(0.0, 1.0)
+                    .toDouble();
                 return Stack(
                   children: [
                     Positioned(
                       left: x,
                       top: y,
                       width: _width,
-                      child: _NoteCard(
-                        app: app,
-                        x: x,
-                        y: y,
-                        top: top,
-                        bounds: cons.biggest,
-                        interactive: interactive,
+                      // Opacity composites the whole card; it does not change
+                      // hit-testing, so the header stays draggable at any level.
+                      child: Opacity(
+                        opacity: opacity,
+                        child: _NoteCard(
+                          app: app,
+                          x: x,
+                          y: y,
+                          top: top,
+                          bounds: cons.biggest,
+                          interactive: interactive,
+                        ),
                       ),
                     ),
                   ],
@@ -153,13 +165,14 @@ class _NoteCardState extends State<_NoteCard> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final minimized = app.stickyMinimized;
 
-    // The body passes the pointer through while a pen is up so you can draw
-    // over the note; the header (below) is never wrapped, so drag/close stay
-    // live in every tool. `Flexible` must stay a direct child of the Column,
-    // so IgnorePointer goes INSIDE it, not around it.
+    // The expanded body passes the pointer through while a pen is up so you can
+    // draw over the note; the header is never wrapped, so drag/close stay live
+    // in every tool. The MINIMIZED body stays live too (it is only a line with
+    // one check circle — its whole point is ticking the next task off, often
+    // mid-lesson with a pen in hand). `Flexible` must stay a direct child of
+    // the Column, so IgnorePointer goes INSIDE it, not around it.
     final Widget body = minimized
-        ? IgnorePointer(
-            ignoring: !widget.interactive, child: _minimizedBody(context, s))
+        ? _minimizedBody(context, s)
         : Flexible(
             child: IgnorePointer(
                 ignoring: !widget.interactive,
@@ -249,17 +262,32 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  /// Minimized: only the next thing to teach.
+  /// Minimized: only the next thing to teach, with a check circle that ticks
+  /// it off and lets the one after slide into its place.
   Widget _minimizedBody(BuildContext context, OnoteSurfaces s) {
     final next = app.nextStickyItem;
+    final idx = app.nextStickyIndex;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+      padding: const EdgeInsets.fromLTRB(8, 2, 12, 10),
       child: Row(
         children: [
-          Icon(next == null ? Icons.check_circle : Icons.arrow_forward,
-              size: 15,
-              color: next == null ? const Color(0xFF2E9E5B) : s.textSecondary),
-          const SizedBox(width: 8),
+          if (next != null)
+            IconButton(
+              icon: const Icon(Icons.radio_button_unchecked, size: 18),
+              color: s.textSecondary,
+              tooltip: 'Mark done',
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(),
+              onPressed: () => app.toggleStickyItem(idx),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.all(4),
+              child:
+                  Icon(Icons.check_circle, size: 18, color: Color(0xFF2E9E5B)),
+            ),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
               next?.text ??

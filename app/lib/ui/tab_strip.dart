@@ -87,7 +87,7 @@ class _TabState extends State<_Tab> {
         : live;
 
     final showClose = active || _hover;
-    const radius = BorderRadius.vertical(top: Radius.circular(10));
+    const radius = BorderRadius.vertical(top: Radius.circular(12));
 
     // Bottom-align so the active tab reaches the bar's bottom edge (covering
     // the divider) while inactive tabs sit a touch lower and recessed.
@@ -105,66 +105,91 @@ class _TabState extends State<_Tab> {
             borderRadius: radius,
             focusColor: accent.withValues(alpha: 0.18),
             hoverColor: Colors.transparent,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOut,
-              height: active ? widget.barHeight : widget.barHeight - 7,
-              constraints: const BoxConstraints(maxWidth: 220, minWidth: 108),
-              padding: const EdgeInsets.only(left: 12, right: 6),
-              decoration: BoxDecoration(
-                // Active matches the content surface; inactive is transparent
-                // (a faint fill on hover) so it reads as recessed.
-                color: active
-                    ? s.raised
-                    : _hover
-                        ? s.raised.withValues(alpha: dark ? 0.4 : 0.55)
-                        : Colors.transparent,
-                borderRadius: radius,
-                border: Border(
-                  // A coloured top edge is the active indicator; hairline sides
-                  // define the tab shape against the bar.
-                  top: BorderSide(
-                      color: active ? accent : Colors.transparent,
-                      width: active ? 2 : 1),
-                  left:
-                      BorderSide(color: active ? s.border : Colors.transparent),
-                  right:
-                      BorderSide(color: active ? s.border : Colors.transparent),
+            // Clip to the rounded top so the active accent strip below follows
+            // the corner radius instead of squaring off at the top edge — the
+            // "slightly off" corner the owner pointed out.
+            child: ClipRRect(
+              borderRadius: radius,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOut,
+                height: active ? widget.barHeight : widget.barHeight - 7,
+                constraints: const BoxConstraints(maxWidth: 220, minWidth: 108),
+                decoration: BoxDecoration(
+                  // Active matches the content surface; inactive is transparent
+                  // (a faint fill on hover) so it reads as recessed.
+                  color: active
+                      ? s.raised
+                      : _hover
+                          ? s.raised.withValues(alpha: dark ? 0.4 : 0.55)
+                          : Colors.transparent,
+                  border: Border(
+                    // Hairline sides define the tab shape against the bar; the
+                    // coloured top indicator is the clipped strip below, not a
+                    // border, so its ends round with the corner.
+                    left: BorderSide(
+                        color: active ? s.border : Colors.transparent),
+                    right: BorderSide(
+                        color: active ? s.border : Colors.transparent),
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.description_rounded,
-                      size: 16,
-                      color: active ? accent : accent.withValues(alpha: 0.55)),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: OnoteType.ui.copyWith(
-                        color: active ? s.textPrimary : s.textSecondary,
-                        fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12, right: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.description_rounded,
+                                size: 16,
+                                color: active
+                                    ? accent
+                                    : accent.withValues(alpha: 0.55)),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: OnoteType.ui.copyWith(
+                                  color:
+                                      active ? s.textPrimary : s.textSecondary,
+                                  fontWeight: active
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // A steady slot so the label does not shift when ×
+                            // appears; the × only shows for the active or
+                            // hovered tab.
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: showClose
+                                  ? _CloseButton(
+                                      color: s.textSecondary,
+                                      tooltip: 'Close tab',
+                                      onTap: () =>
+                                          widget.app.closeTab(widget.tab),
+                                    )
+                                  : null,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  // A steady slot so the label does not shift when × appears;
-                  // the × only shows for the active or hovered tab.
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: showClose
-                        ? _CloseButton(
-                            color: s.textSecondary,
-                            tooltip: 'Close tab',
-                            onTap: () => widget.app.closeTab(widget.tab),
-                          )
-                        : null,
-                  ),
-                ],
+                    if (active)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(height: 2.5, color: accent),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -6885,6 +6885,14 @@ class AppState extends ChangeNotifier
     // Restore the tab strip now that the notebook list is known (tabs for a
     // notebook that no longer exists are dropped here).
     _loadTabs();
+    // Sticky scope/opacity must be read BEFORE the agenda, since scope decides
+    // which key the agenda loads from.
+    final ssg = _repo.getSetting('stickyScopeGlobal');
+    if (ssg is bool) stickyScopeGlobal = ssg;
+    final sop = _repo.getSetting('stickyOpacity');
+    if (sop is num) {
+      stickyOpacity = sop.toDouble().clamp(minStickyOpacity, maxStickyOpacity);
+    }
     _loadSticky();
     // The app opens on Home. The last page is loaded and one click away —
     // the navigator and Home's recents both lead to it — but the first thing
@@ -7549,7 +7557,22 @@ class AppState extends ChangeNotifier
   /// has been placed/dragged, so the widget can choose a sensible first spot.
   double? stickyX, stickyY;
 
-  String get _stickyKey => 'sticky:${notebookId ?? ''}';
+  /// When true the agenda is ONE list shared across every notebook; when false
+  /// (the default) each notebook keeps its own. Switchable in Settings.
+  bool stickyScopeGlobal = false;
+
+  /// How solid the note is, 0.3 (barely there) to 1.0. In a drawing tool it is
+  /// dimmed further so a stroke drawn near it is not fought by an opaque card.
+  double stickyOpacity = 1.0;
+  static const double minStickyOpacity = 0.3;
+  static const double maxStickyOpacity = 1.0;
+
+  /// Extra dimming applied to [stickyOpacity] while a drawing tool is armed.
+  static const double stickyDrawDim = 0.55;
+
+  // Global scope uses one fixed key; per-notebook keys by the open notebook.
+  String get _stickyKey =>
+      stickyScopeGlobal ? 'sticky:__all__' : 'sticky:${notebookId ?? ''}';
 
   void _loadSticky() {
     stickyItems.clear();
@@ -7569,7 +7592,9 @@ class AppState extends ChangeNotifier
   }
 
   void _persistSticky() {
-    if (notebookId == null) return;
+    // Global scope has a home even with no notebook open; per-notebook scope
+    // needs one, or the empty key would collect a stray list.
+    if (!stickyScopeGlobal && notebookId == null) return;
     _repo.setSetting(_stickyKey, {
       'items': [for (final it in stickyItems) it.toJson()],
       'open': stickyOpen,
@@ -7585,6 +7610,33 @@ class AppState extends ChangeNotifier
       if (!it.done) return it;
     }
     return null;
+  }
+
+  /// Index of that next item, or -1 if all done — so the minimized note's
+  /// check circle knows which one to tick.
+  int get nextStickyIndex {
+    for (var i = 0; i < stickyItems.length; i++) {
+      if (!stickyItems[i].done) return i;
+    }
+    return -1;
+  }
+
+  /// Switch the agenda between per-notebook and shared-across-all, then reload
+  /// the list that scope points at so the note updates in place.
+  void setStickyScopeGlobal(bool v) {
+    if (stickyScopeGlobal == v) return;
+    stickyScopeGlobal = v;
+    _repo.setSetting('stickyScopeGlobal', v);
+    _loadSticky();
+    notifyListeners();
+  }
+
+  void setStickyOpacity(double v) {
+    final next = v.clamp(minStickyOpacity, maxStickyOpacity);
+    if (next == stickyOpacity) return;
+    stickyOpacity = next;
+    _repo.setSetting('stickyOpacity', next);
+    notifyListeners();
   }
 
   void toggleStickyOpen() {

@@ -1676,6 +1676,9 @@ class _InsertButton extends StatelessWidget {
   Widget _main(BuildContext context, [MenuController? menu]) {
     void press() {
       if (menu != null && menu.isOpen) menu.close();
+      // Collapse the Insert popover the moment a choice is made, so it does
+      // not linger over the page until the next click elsewhere.
+      _PopoverScope.maybeOf(context)?.close();
       _run(context, item);
     }
 
@@ -1734,7 +1737,10 @@ class _InsertButton extends StatelessWidget {
           for (final extra in item.extras)
             MenuItemButton(
               leadingIcon: Icon(extra.icon, size: 16),
-              onPressed: () => _run(context, extra),
+              onPressed: () {
+                _PopoverScope.maybeOf(context)?.close();
+                _run(context, extra);
+              },
               child: Text(extra.label),
             ),
         ],
@@ -2139,6 +2145,17 @@ class _PalettePicker extends StatelessWidget {
 /// dropdown inside the panel needs in order to open. Clicking anywhere
 /// outside closes it; the panel rebuilds with the app so a control that greys
 /// out when the caret leaves a box does so here too.
+/// Lets a button inside a [_Popover] close the popover — so Insert collapses
+/// the instant you pick something, instead of lingering until you click away.
+class _PopoverScope extends InheritedWidget {
+  const _PopoverScope({required this.close, required super.child});
+  final VoidCallback close;
+  static _PopoverScope? maybeOf(BuildContext c) =>
+      c.dependOnInheritedWidgetOfExactType<_PopoverScope>();
+  @override
+  bool updateShouldNotify(_PopoverScope old) => false;
+}
+
 class _Popover extends StatefulWidget {
   const _Popover({
     required this.icon,
@@ -2219,7 +2236,10 @@ class _PopoverState extends State<_Popover> {
                       ),
                       ListenableBuilder(
                         listenable: widget.app,
-                        builder: (context, _) => widget.builder(context),
+                        builder: (context, _) => _PopoverScope(
+                          close: _close,
+                          child: widget.builder(context),
+                        ),
                       ),
                     ],
                   ),

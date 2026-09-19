@@ -70,6 +70,56 @@ void main() {
     expect(app.stickyItems.map((e) => e.text), ['One', 'Two']);
   });
 
+  test('nextStickyIndex points at the first unchecked item, -1 when all done',
+      () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.setStickyItems(['A', 'B', 'C']);
+    expect(app.nextStickyIndex, 0);
+    app.toggleStickyItem(0); // A done
+    expect(app.nextStickyIndex, 1, reason: 'the minimized circle ticks B next');
+    app.toggleStickyItem(1);
+    app.toggleStickyItem(2);
+    expect(app.nextStickyIndex, -1);
+    expect(app.nextStickyItem, isNull);
+  });
+
+  test('opacity setting clamps and persists', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.setStickyOpacity(0.5);
+    expect(app.stickyOpacity, 0.5);
+    expect(repo.getSetting('stickyOpacity'), 0.5);
+    app.setStickyOpacity(9); // out of range → clamped to max
+    expect(app.stickyOpacity, AppState.maxStickyOpacity);
+    app.setStickyOpacity(0); // below min → clamped to min
+    expect(app.stickyOpacity, AppState.minStickyOpacity);
+  });
+
+  test('scope routes the agenda to per-notebook vs one shared key', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    // Per-notebook (default): items land under this notebook's own key.
+    app.addStickyItem('for T only');
+    expect(app.stickyScopeGlobal, isFalse);
+    final perNb = repo.getSetting('sticky:$nbId') as Map;
+    expect((perNb['items'] as List).length, 1);
+
+    // Switch to shared: the note reads/writes one fixed key and starts fresh.
+    app.setStickyScopeGlobal(true);
+    expect(app.stickyItems, isEmpty, reason: 'shared list starts empty');
+    app.addStickyItem('everywhere');
+
+    final shared = repo.getSetting('sticky:__all__') as Map;
+    expect((shared['items'] as List).first, containsPair('t', 'everywhere'));
+    // The per-notebook list is untouched by writes made in shared scope.
+    final perNbAgain = repo.getSetting('sticky:$nbId') as Map;
+    expect((perNbAgain['items'] as List).length, 1);
+    expect(
+        (perNbAgain['items'] as List).first, containsPair('t', 'for T only'));
+
+    // Switching back restores the per-notebook list in place.
+    app.setStickyScopeGlobal(false);
+    expect(app.stickyItems.map((e) => e.text), ['for T only']);
+  });
+
   test('open state, position and items are persisted per notebook', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.toggleStickyOpen();

@@ -393,6 +393,50 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         // pasted-in. Off keeps them plain (and shows no white slab).
         _row('Show pasted content as a card',
             _toggle(app.pasteAsCard, app.setPasteAsCard)),
+        _rowStacked(
+          'Sticky note agenda',
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11))),
+            segments: const [
+              ButtonSegment(
+                  value: false,
+                  label: Text('Per notebook'),
+                  tooltip: 'Each notebook keeps its own agenda'),
+              ButtonSegment(
+                  value: true,
+                  label: Text('All notebooks'),
+                  tooltip: 'One shared agenda everywhere'),
+            ],
+            selected: {app.stickyScopeGlobal},
+            onSelectionChanged: (s) => app.setStickyScopeGlobal(s.first),
+          ),
+        ),
+        _rowStacked(
+          'Sticky note opacity',
+          SizedBox(
+            width: double.infinity,
+            child: Row(children: [
+              Expanded(
+                child: Slider(
+                  value: app.stickyOpacity,
+                  min: AppState.minStickyOpacity,
+                  max: AppState.maxStickyOpacity,
+                  divisions: 14,
+                  onChanged: app.setStickyOpacity,
+                ),
+              ),
+              SizedBox(
+                width: 42,
+                child: Text('${(app.stickyOpacity * 100).round()}%',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 11)),
+              ),
+            ]),
+          ),
+        ),
       ];
 
   List<Widget> _defaultPage(BuildContext context) => [

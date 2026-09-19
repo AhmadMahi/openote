@@ -963,10 +963,10 @@ class _NavRail extends StatelessWidget {
     final sections =
         app.nodes.where((n) => n.kind == NodeKind.section).toList();
     return SizedBox(
-      width: 44,
+      width: 52,
       child: Column(
         children: [
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           IconButton(
             icon: const Icon(Icons.keyboard_double_arrow_right, size: 18),
             tooltip: 'Expand the navigator  (Ctrl+\\)',
