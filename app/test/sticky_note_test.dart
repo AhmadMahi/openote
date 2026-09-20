@@ -100,6 +100,23 @@ void main() {
     expect(app.stickyOpacity, AppState.minStickyOpacity);
   });
 
+  test('size setting clamps and persists (one preferred size everywhere)', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.setStickySize(400, 500);
+    expect(app.stickyW, 400);
+    expect(app.stickyH, 500);
+    expect(repo.getSetting('stickyW'), 400);
+    expect(repo.getSetting('stickyH'), 500);
+
+    // Too big / too small → clamped to the note's limits.
+    app.setStickySize(9999, 9999);
+    expect(app.stickyW, AppState.maxStickyW);
+    expect(app.stickyH, AppState.maxStickyH);
+    app.setStickySize(0, 0);
+    expect(app.stickyW, AppState.minStickyW);
+    expect(app.stickyH, AppState.minStickyH);
+  });
+
   test('scope routes the agenda per page vs whole notebook', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     // Per page (default): items land under this page's own key.

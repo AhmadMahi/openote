@@ -31,7 +31,9 @@ class StickyNote extends StatelessWidget {
   /// over the chrome. Zero in focus mode, where there is no chrome.
   final double topInset;
 
-  static const double _width = 320;
+  /// The note's size before it has ever been resized.
+  static const double _defaultWidth = 320;
+  static const double _defaultHeight = 360;
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +46,24 @@ class StickyNote extends StatelessWidget {
           : LayoutBuilder(
               builder: (context, cons) {
                 final top = topInset + 12;
-                final maxX = math.max(8.0, cons.maxWidth - _width - 8);
+                // Width and expanded height come from the saved size (dragged
+                // from the corner), clamped to the note's limits and to what
+                // the editor area can actually hold.
+                final maxW = math.max(AppState.minStickyW, cons.maxWidth - 16);
+                final w = (app.stickyW ?? _defaultWidth)
+                    .clamp(AppState.minStickyW, maxW)
+                    .toDouble();
+                final maxH =
+                    math.max(AppState.minStickyH, cons.maxHeight - top - 16);
+                final h = (app.stickyH ?? _defaultHeight)
+                    .clamp(AppState.minStickyH, maxH)
+                    .toDouble();
+                final maxX = math.max(8.0, cons.maxWidth - w - 8);
                 final maxY = math.max(top, cons.maxHeight - 60);
                 // Default spot: tucked to the right but BELOW the zoom/fit
                 // controls (which live top-right), so it never opens hidden
                 // behind them. Once dragged, it stays where it was put.
-                final x = (app.stickyX ?? (cons.maxWidth - _width - 20))
+                final x = (app.stickyX ?? (cons.maxWidth - w - 20))
                     .clamp(8.0, maxX)
                     .toDouble();
                 final y =
@@ -67,7 +81,7 @@ class StickyNote extends StatelessWidget {
                     Positioned(
                       left: x,
                       top: y,
-                      width: _width,
+                      width: w,
                       child: Opacity(
                         opacity: opacity,
                         child: _NoteCard(
@@ -75,6 +89,8 @@ class StickyNote extends StatelessWidget {
                           x: x,
                           y: y,
                           top: top,
+                          width: w,
+                          height: h,
                           bounds: cons.biggest,
                           interactive: interactive,
                         ),
@@ -111,10 +127,15 @@ class _NoteCard extends StatefulWidget {
       required this.x,
       required this.y,
       required this.top,
+      required this.width,
+      required this.height,
       required this.bounds,
       required this.interactive});
   final AppState app;
   final double x, y;
+
+  /// The current note size (width always; height applies when expanded).
+  final double width, height;
 
   /// The lowest the note may be dragged (kept below the toolbar).
   final double top;
@@ -180,7 +201,7 @@ class _NoteCardState extends State<_NoteCard> {
 
   void _drag(DragUpdateDetails d) {
     final nx = (widget.x + d.delta.dx)
-        .clamp(8.0, math.max(8.0, widget.bounds.width - StickyNote._width - 8))
+        .clamp(8.0, math.max(8.0, widget.bounds.width - widget.width - 8))
         .toDouble();
     final ny = (widget.y + d.delta.dy)
         .clamp(widget.top, math.max(widget.top, widget.bounds.height - 60))
@@ -268,16 +289,19 @@ class _NoteCardState extends State<_NoteCard> {
 
     final Widget body = minimized
         ? _minimizedBody(context, s, scheme)
-        : Flexible(
+        : Expanded(
             child: IgnorePointer(
                 ignoring: !widget.interactive,
                 child: _expandedBody(context, s, scheme)));
 
-    return ClipRRect(
+    final Widget card = ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
+          // Expanded: a fixed height (dragged from the corner) so the list
+          // scrolls inside it. Minimized: hug the single line.
+          height: minimized ? null : widget.height,
           decoration: BoxDecoration(
             color: s.raised.withValues(alpha: dark ? 0.62 : 0.74),
             borderRadius: BorderRadius.circular(16),
@@ -294,13 +318,44 @@ class _NoteCardState extends State<_NoteCard> {
             ],
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: minimized ? MainAxisSize.min : MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _header(context, s, scheme),
               body,
             ],
           ),
+        ),
+      ),
+    );
+
+    // The bottom-right resize grip: pull it diagonally to set width/height.
+    // Only when expanded and the Select tool is armed (the body is live).
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        card,
+        if (!minimized && widget.interactive)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: _resizeHandle(s, scheme),
+          ),
+      ],
+    );
+  }
+
+  Widget _resizeHandle(OnoteSurfaces s, ColorScheme scheme) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeUpLeftDownRight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (d) => app.setStickySize(
+            widget.width + d.delta.dx, widget.height + d.delta.dy),
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Icon(Icons.south_east_rounded,
+              size: 14, color: s.textSecondary.withValues(alpha: 0.7)),
         ),
       ),
     );
@@ -351,8 +406,9 @@ class _NoteCardState extends State<_NoteCard> {
               icon: const Icon(Icons.timer_outlined, size: 17),
               isSelected: app.stickyTimerMode,
               selectedIcon: Icon(Icons.timer, size: 17, color: scheme.primary),
-              tooltip:
-                  app.stickyTimerMode ? 'Timer mode: on' : 'Timer mode: off',
+              tooltip: app.stickyTimerMode
+                  ? 'Session timer: on'
+                  : 'Session timer: off',
               visualDensity: VisualDensity.compact,
               onPressed: app.toggleStickyTimerMode,
             ),
@@ -482,126 +538,241 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
+  /// Every control in the add bar shares this height, so the input, the minutes
+  /// field and the icon buttons line up on one baseline.
+  static const double _ctlH = 38;
+
   Widget _expandedBody(
       BuildContext context, OnoteSurfaces s, ColorScheme scheme) {
     final items = app.stickyItems;
     final timer = app.stickyTimerMode;
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (items.isEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-            child: Text(
-                timer
-                    ? 'Plan your session. Add items with a time each, or type '
-                        'rough notes and let AI shape them into a timed agenda.'
-                    : 'Your agenda for this session. Add items, or type a few '
-                        'rough words and let AI shape them into a to-do list.',
-                style: OnoteType.ui
-                    .copyWith(color: s.textSecondary, height: 1.35)),
-          )
-        else
-          Flexible(
-            child: ReorderableListView.builder(
-              shrinkWrap: true,
-              buildDefaultDragHandles: false,
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: items.length,
-              onReorder: app.reorderStickyItem,
-              itemBuilder: (context, i) => _itemRow(context, s, scheme, i),
-            ),
+        Expanded(
+          child: items.isEmpty
+              ? SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                    child: Text(
+                        timer
+                            ? 'Plan your session. Add items with a time each, or '
+                                'type rough notes and let AI shape them into a '
+                                'timed agenda.'
+                            : 'Your agenda for this session. Add items, or type a '
+                                'few rough words and let AI shape them into a '
+                                'to-do list.',
+                        style: OnoteType.ui
+                            .copyWith(color: s.textSecondary, height: 1.4)),
+                  ),
+                )
+              : ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  itemCount: items.length,
+                  onReorder: app.reorderStickyItem,
+                  itemBuilder: (context, i) => _itemRow(context, s, scheme, i),
+                ),
+        ),
+        Divider(height: 1, color: s.border.withValues(alpha: 0.6)),
+        _addBar(context, s, scheme, timer),
+        if (items.isNotEmpty) _deleteAllRow(s, scheme),
+      ],
+    );
+  }
+
+  /// The bottom add bar: input, optional minutes, copy/add, and the AI button —
+  /// all the same height. The controls top-align so the input can grow for a
+  /// pasted block without shifting the buttons.
+  Widget _addBar(
+      BuildContext context, OnoteSurfaces s, ColorScheme scheme, bool timer) {
+    final empty = _input.text.trim().isEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _inputField(s, scheme, timer)),
+          if (timer) ...[
+            const SizedBox(width: 8),
+            _minutesField(s, scheme),
+          ],
+          const SizedBox(width: 8),
+          // Empty input → offer a sample prompt to build the agenda in any LLM;
+          // once you have typed (or pasted a CSV), it becomes Add.
+          empty
+              ? _squareButton(s, scheme,
+                  icon: Icons.content_copy_outlined,
+                  tooltip: 'Copy a sample prompt for any LLM',
+                  onTap: _copySamplePrompt)
+              : _squareButton(s, scheme,
+                  icon: Icons.add,
+                  tooltip: 'Add item',
+                  onTap: _add,
+                  accent: true),
+          const SizedBox(width: 6),
+          _generating
+              ? const SizedBox(
+                  width: _ctlH,
+                  height: _ctlH,
+                  child: Center(
+                    child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                )
+              : _squareButton(s, scheme,
+                  icon: Icons.auto_awesome,
+                  tooltip: 'Shape into an agenda with AI',
+                  onTap: _generate,
+                  accent: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _inputField(OnoteSurfaces s, ColorScheme scheme, bool timer) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: _ctlH),
+      child: TextField(
+        controller: _input,
+        minLines: 1,
+        maxLines: 4,
+        style: const TextStyle(fontSize: 13),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _add(),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: s.well.withValues(alpha: 0.6),
+          prefixIcon: Icon(Icons.add, size: 17, color: s.textSecondary),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 30, minHeight: _ctlH),
+          contentPadding: const EdgeInsets.fromLTRB(0, 9, 10, 9),
+          border: OutlineInputBorder(
+            borderRadius: OnoteRadius.mdAll,
+            borderSide: BorderSide(color: s.border),
           ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  minLines: 1,
-                  maxLines: 3,
-                  style: const TextStyle(fontSize: 12.5),
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _add(),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    hintText: timer
-                        ? 'Add an item (or "break")…'
-                        : 'Add an item… or rough notes for AI',
-                    hintStyle: const TextStyle(fontSize: 12),
-                  ),
-                ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: OnoteRadius.mdAll,
+            borderSide: BorderSide(color: s.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: OnoteRadius.mdAll,
+            borderSide: BorderSide(color: scheme.primary),
+          ),
+          hintText: timer
+              ? 'Add an item (or "break")…'
+              : 'Add an item… or rough notes for AI',
+          hintStyle: TextStyle(fontSize: 12.5, color: s.textSecondary),
+        ),
+      ),
+    );
+  }
+
+  Widget _minutesField(OnoteSurfaces s, ColorScheme scheme) {
+    return SizedBox(
+      width: 76,
+      height: _ctlH,
+      child: TextField(
+        controller: _minutes,
+        keyboardType: TextInputType.number,
+        style: const TextStyle(fontSize: 13),
+        onSubmitted: (_) => _add(),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: s.well.withValues(alpha: 0.6),
+          prefixIcon:
+              Icon(Icons.timer_outlined, size: 15, color: s.textSecondary),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 26, minHeight: _ctlH),
+          contentPadding: const EdgeInsets.fromLTRB(0, 9, 6, 9),
+          border: OutlineInputBorder(
+            borderRadius: OnoteRadius.mdAll,
+            borderSide: BorderSide(color: s.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: OnoteRadius.mdAll,
+            borderSide: BorderSide(color: s.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: OnoteRadius.mdAll,
+            borderSide: BorderSide(color: scheme.primary),
+          ),
+          hintText: 'min',
+          hintStyle: TextStyle(fontSize: 12, color: s.textSecondary),
+        ),
+      ),
+    );
+  }
+
+  /// A square, bordered icon button that matches the input height.
+  Widget _squareButton(OnoteSurfaces s, ColorScheme scheme,
+      {required IconData icon,
+      required String tooltip,
+      required VoidCallback onTap,
+      bool accent = false}) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: _ctlH,
+        height: _ctlH,
+        child: Material(
+          color: Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: s.well.withValues(alpha: 0.6),
+              borderRadius: OnoteRadius.mdAll,
+              border: Border.all(color: s.border),
+            ),
+            child: InkWell(
+              borderRadius: OnoteRadius.mdAll,
+              onTap: onTap,
+              child: Center(
+                child: Icon(icon,
+                    size: 18, color: accent ? scheme.primary : s.textSecondary),
               ),
-              if (timer) ...[
-                const SizedBox(width: 4),
-                SizedBox(
-                  width: 44,
-                  child: TextField(
-                    controller: _minutes,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12.5),
-                    onSubmitted: (_) => _add(),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      hintText: 'min',
-                      hintStyle: TextStyle(fontSize: 11),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(width: 4),
-              // Empty input → offer a sample prompt to build the agenda in any
-              // LLM; once you have typed (or pasted a CSV), it becomes Add.
-              _input.text.trim().isEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.content_copy_outlined, size: 16),
-                      tooltip: 'Copy a sample prompt for any LLM',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _copySamplePrompt,
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.add, size: 18),
-                      tooltip: 'Add item',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _add,
-                    ),
-              _generating
-                  ? const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2)))
-                  : IconButton(
-                      icon: const Icon(Icons.auto_awesome, size: 17),
-                      tooltip: 'Shape into an agenda with AI',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _generate,
-                    ),
-            ],
+            ),
           ),
         ),
-        if (items.isNotEmpty)
-          Align(
-            alignment: Alignment.centerRight,
+      ),
+    );
+  }
+
+  /// The delete-all control: a compact, clearly-destructive red button, aligned
+  /// to the trailing edge under the add bar.
+  Widget _deleteAllRow(OnoteSurfaces s, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Material(
+          color: scheme.error.withValues(alpha: 0.10),
+          borderRadius: OnoteRadius.mdAll,
+          child: InkWell(
+            borderRadius: OnoteRadius.mdAll,
+            onTap: app.clearStickyItems,
             child: Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 6),
-              child: TextButton.icon(
-                onPressed: app.clearStickyItems,
-                icon: const Icon(Icons.delete_sweep_outlined, size: 16),
-                label: const Text('Delete all', style: TextStyle(fontSize: 12)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.delete_sweep_outlined,
+                      size: 16, color: scheme.error),
+                  const SizedBox(width: 6),
+                  Text('Delete all',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.error)),
+                ],
               ),
             ),
           ),
-      ],
+        ),
+      ),
     );
   }
 
@@ -610,16 +781,18 @@ class _NoteCardState extends State<_NoteCard> {
     final it = app.stickyItems[i];
     return Padding(
       key: ObjectKey(it),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.fromLTRB(6, 5, 4, 5),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        // Top-align so a long item that wraps to several lines keeps its
+        // controls beside the first line rather than floating at the middle.
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Drag handle — reorder up/down (Select tool only, since the body
           // ignores the pointer while a pen is up).
           ReorderableDragStartListener(
             index: i,
             child: Padding(
-              padding: const EdgeInsets.only(right: 2),
+              padding: const EdgeInsets.only(right: 2, top: 6),
               child: Icon(Icons.drag_indicator,
                   size: 15, color: s.textSecondary.withValues(alpha: 0.7)),
             ),
@@ -627,11 +800,15 @@ class _NoteCardState extends State<_NoteCard> {
           _leading(s, scheme, it, i),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              it.text,
-              style: OnoteType.ui.copyWith(
-                color: it.done ? s.textSecondary : s.textPrimary,
-                decoration: it.done ? TextDecoration.lineThrough : null,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                it.text,
+                style: OnoteType.ui.copyWith(
+                  height: 1.3,
+                  color: it.done ? s.textSecondary : s.textPrimary,
+                  decoration: it.done ? TextDecoration.lineThrough : null,
+                ),
               ),
             ),
           ),
@@ -727,7 +904,7 @@ class _NoteCardState extends State<_NoteCard> {
           PopupMenuItem(value: m, height: 34, child: Text(_fmtDuration(m))),
       ],
       child: Container(
-        margin: const EdgeInsets.only(right: 2),
+        margin: const EdgeInsets.only(right: 2, top: 4),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           color: s.well.withValues(alpha: 0.7),

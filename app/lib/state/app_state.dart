@@ -6942,6 +6942,10 @@ class AppState extends ChangeNotifier
     if (sop is num) {
       stickyOpacity = sop.toDouble().clamp(minStickyOpacity, maxStickyOpacity);
     }
+    final sw = _repo.getSetting('stickyW');
+    if (sw is num) stickyW = sw.toDouble().clamp(minStickyW, maxStickyW);
+    final sh = _repo.getSetting('stickyH');
+    if (sh is num) stickyH = sh.toDouble().clamp(minStickyH, maxStickyH);
     _loadSticky();
     // The app opens on Home. The last page is loaded and one click away —
     // the navigator and Home's recents both lead to it — but the first thing
@@ -7627,6 +7631,15 @@ class AppState extends ChangeNotifier
   /// Extra dimming applied to [stickyOpacity] while a drawing tool is armed.
   static const double stickyDrawDim = 0.55;
 
+  /// The note's expanded size, dragged from its bottom-right corner and kept
+  /// (like the opacity, one preferred size everywhere) so it reopens the same.
+  /// Null until first resized, so the widget uses its own default.
+  double? stickyW, stickyH;
+  static const double minStickyW = 260;
+  static const double maxStickyW = 640;
+  static const double minStickyH = 200;
+  static const double maxStickyH = 820;
+
   // Whole-notebook scope keys by the open notebook; per-page keys by the page.
   String get _stickyKey => stickyWholeNotebook
       ? 'sticky:nb:${notebookId ?? ''}'
@@ -7697,6 +7710,19 @@ class AppState extends ChangeNotifier
     if (next == stickyOpacity) return;
     stickyOpacity = next;
     _repo.setSetting('stickyOpacity', next);
+    notifyListeners();
+  }
+
+  /// Resize the expanded note (dragged from its corner). Kept as a preference,
+  /// like the opacity, so it reopens at the size you left it.
+  void setStickySize(double w, double h) {
+    final nw = w.clamp(minStickyW, maxStickyW).toDouble();
+    final nh = h.clamp(minStickyH, maxStickyH).toDouble();
+    if (nw == stickyW && nh == stickyH) return;
+    stickyW = nw;
+    stickyH = nh;
+    _repo.setSetting('stickyW', nw);
+    _repo.setSetting('stickyH', nh);
     notifyListeners();
   }
 
