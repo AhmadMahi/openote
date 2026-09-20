@@ -8,10 +8,12 @@ import '../planner/agenda.dart';
 import '../state/app_state.dart';
 import '../study/study_stats.dart';
 import '../theme/onote_theme.dart';
+import 'central_sync_dialog.dart';
 import 'exam_date.dart';
 import 'notebook_manager.dart';
 import 'page_history_dialog.dart';
 import 'protect_dialog.dart';
+import 'settings_dialog.dart';
 import 'sync_dot.dart';
 import 'planner_format.dart';
 import '../theme/tokens.dart';
@@ -949,12 +951,22 @@ class _ComingUp extends StatelessWidget {
       };
 }
 
-/// The collapsed navigator: a 44px rail that keeps every destination one
-/// click away — expand, notebooks, Home, and a chip per section.
+/// The collapsed navigator: a slim, premium floating rail. The glass shell,
+/// rounding and shadow come from the [GlassCard] this sits inside; the rail
+/// adds a soft, theme-aware accent wash and a calm top-to-bottom rhythm —
+/// brand, expand, primary navigation, the notebook's own sections, then the
+/// utility cluster and the notebook avatar anchored at the foot.
+///
+/// Colours are entirely theme-derived (accent + surface tokens), so the
+/// lavender feel on the default theme follows any accent choice and both light
+/// and dark modes. Every control maps to a real destination — nothing here is
+/// decorative.
 class _NavRail extends StatelessWidget {
   const _NavRail({required this.app, required this.dark});
   final AppState app;
   final bool dark;
+
+  static const double _width = 64;
 
   @override
   Widget build(BuildContext context) {
@@ -962,107 +974,426 @@ class _NavRail extends StatelessWidget {
     final current = app.notebooks.firstWhere((n) => n.id == app.notebookId);
     final sections =
         app.nodes.where((n) => n.kind == NodeKind.section).toList();
-    return SizedBox(
-      width: 52,
+    final (due, _) = app.study.deckCounts(sectionId: app.activeSectionId);
+
+    return Container(
+      width: _width,
+      // A whisper of the accent, fading in toward the foot — the "soft
+      // white-to-lavender" of the brief, expressed through the theme so it
+      // adapts rather than hardcoding a colour.
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            scheme.primary.withValues(alpha: dark ? 0.04 : 0.03),
+            scheme.primary.withValues(alpha: dark ? 0.10 : 0.08),
+          ],
+        ),
+      ),
       child: Column(
         children: [
-          const SizedBox(height: 8),
-          IconButton(
-            icon: const Icon(Icons.keyboard_double_arrow_right, size: 18),
-            tooltip: 'Expand the navigator  (Ctrl+\\)',
-            visualDensity: VisualDensity.compact,
-            onPressed: app.toggleNavCollapsed,
+          const SizedBox(height: 14),
+          _RailLogo(scheme: scheme, onTap: app.openHome),
+          const SizedBox(height: 12),
+          _RailButton(
+            icon: Icons.keyboard_double_arrow_right_rounded,
+            tooltip: 'Expand sidebar  (Ctrl+\\)',
+            filled: true,
+            onTap: app.toggleNavCollapsed,
           ),
-          Tooltip(
-            message: current.title,
+          const SizedBox(height: 18),
+          // Primary navigation.
+          _RailButton(
+            icon: Icons.grid_view_rounded,
+            tooltip: 'Home',
+            active: app.navHome,
+            onTap: app.openHome,
+          ),
+          _RailButton(
+            icon: Icons.description_outlined,
+            tooltip: 'Pages',
+            active: app.navNotebook,
+            onTap: app.openNotebookOverview,
+          ),
+          _RailButton(
+            icon: Icons.star_outline_rounded,
+            tooltip: 'Favourites',
+            onTap: app.openHome,
+          ),
+          _RailButton(
+            icon: Icons.folder_outlined,
+            tooltip: 'Notebooks',
+            onTap: () => showNotebookManager(context, app),
+          ),
+          const _RailDivider(),
+          // The notebook's own sections — preserved navigation, now a calm
+          // scrollable band that gives the rail its middle.
+          Expanded(
+            child: sections.isEmpty
+                ? const SizedBox.shrink()
+                : ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    children: [
+                      for (final sec in sections)
+                        _RailSectionChip(
+                          section: sec,
+                          dark: dark,
+                          active: app.activeSectionId == sec.id,
+                          onTap: () => app.activateSection(sec.id),
+                        ),
+                    ],
+                  ),
+          ),
+          const _RailDivider(),
+          const SizedBox(height: 6),
+          // Utilities, anchored at the foot.
+          _RailButton(
+            icon: Icons.notifications_none_rounded,
+            tooltip: due > 0 ? 'Reminders · $due due' : 'Reminders',
+            active: app.openPanel == SidePanelKind.planner,
+            dot: due > 0 ? scheme.error : null,
+            onTap: app.togglePlannerPanel,
+          ),
+          _RailButton(
+            icon: Icons.search_rounded,
+            tooltip: 'Search & jump to',
+            onTap: app.toggleNavCollapsed,
+          ),
+          _RailButton(
+            icon: Icons.history_rounded,
+            tooltip: 'Page history',
+            onTap: () => showPageHistory(context, app),
+          ),
+          _RailButton(
+            icon: Icons.people_alt_outlined,
+            tooltip: 'Sync & collaboration',
+            onTap: () => showCentralSyncDialog(context, app),
+          ),
+          _RailButton(
+            icon: Icons.settings_outlined,
+            tooltip: 'Settings',
+            onTap: () => showSettingsDialog(context, app),
+          ),
+          const SizedBox(height: 10),
+          _RailAvatar(
+            initial: current.title.isEmpty
+                ? '?'
+                : current.title.characters.first.toUpperCase(),
+            tooltip: current.title,
+            scheme: scheme,
+            onTap: () => showNotebookManager(context, app, focusId: current.id),
+          ),
+          const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+}
+
+/// The accent gradient's second stop: the accent nudged in hue and lightness,
+/// so a brand tile reads as a gentle two-tone (blue → indigo on a blue accent)
+/// without ever leaving the theme.
+Color _accentShift(Color base) {
+  final hsl = HSLColor.fromColor(base);
+  return hsl
+      .withHue((hsl.hue + 24) % 360)
+      .withLightness((hsl.lightness + 0.06).clamp(0.0, 1.0))
+      .withSaturation((hsl.saturation + 0.08).clamp(0.0, 1.0))
+      .toColor();
+}
+
+/// The brand tile: a rounded-square accent gradient with a white book mark, a
+/// soft accent glow and a gentle drop shadow. The one saturated element, kept
+/// distinct as the primary identity.
+class _RailLogo extends StatelessWidget {
+  const _RailLogo({required this.scheme, required this.onTap});
+  final ColorScheme scheme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Home',
+      waitDuration: const Duration(milliseconds: 500),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [scheme.primary, _accentShift(scheme.primary)],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.45),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child:
+              Icon(Icons.menu_book_rounded, size: 22, color: scheme.onPrimary),
+        ),
+      ),
+    );
+  }
+}
+
+/// One rail control: a 40×40 rounded target with a line icon, theme-aware
+/// hover / active states, an optional soft-filled resting background, and an
+/// optional status dot. Icon-only, so every one carries a tooltip.
+class _RailButton extends StatefulWidget {
+  const _RailButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.active = false,
+    this.filled = false,
+    this.dot,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool active;
+
+  /// A soft accent fill at rest (used by the expand button) so it reads as a
+  /// distinct affordance rather than a plain icon.
+  final bool filled;
+
+  /// When set, a small status dot sits at the top-right (e.g. reminders due).
+  final Color? dot;
+
+  @override
+  State<_RailButton> createState() => _RailButtonState();
+}
+
+class _RailButtonState extends State<_RailButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final s = context.surfaces;
+    final bg = widget.active
+        ? scheme.primary.withValues(alpha: 0.14)
+        : _hover
+            ? scheme.primary.withValues(alpha: 0.09)
+            : widget.filled
+                ? scheme.primary.withValues(alpha: 0.10)
+                : Colors.transparent;
+    final fg = widget.active || widget.filled
+        ? scheme.primary
+        : _hover
+            ? s.textPrimary
+            : s.textSecondary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Center(
+        child: Tooltip(
+          message: widget.tooltip,
+          waitDuration: const Duration(milliseconds: 500),
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _hover = true),
+            onExit: (_) => setState(() => _hover = false),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () => showNotebookManager(context, app),
-              child: Container(
-                width: 26,
-                height: 26,
+              onTap: widget.onTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOut,
+                width: 40,
+                height: 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: .14),
-                  shape: BoxShape.circle,
+                  color: bg,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  current.title.isEmpty
-                      ? '?'
-                      : current.title.characters.first.toUpperCase(),
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(widget.icon, size: 21, color: fg),
+                    if (widget.dot != null)
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: widget.dot,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: s.raised.withValues(alpha: 0.9),
+                                width: 1.5),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 2),
-          IconButton(
-            icon: const Icon(Icons.star_outline, size: 16),
-            color: OnoteColors.brass400,
-            tooltip: 'Home — favourites & recents',
-            visualDensity: VisualDensity.compact,
-            onPressed: () {
-              app.toggleNavCollapsed();
-              app.openHome();
-            },
-          ),
-          const Divider(height: 10, indent: 10, endIndent: 10),
-          // Initial chips, not bare colour dots: section colours only exist on
-          // imported notebooks, so dots alone would be fifteen identical grey
-          // circles. A letter is scannable either way; the colour tints it
-          // when there is one.
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 8),
-              children: [
-                for (final s in sections)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Center(
-                      child: Tooltip(
-                        message: s.title,
-                        child: InkWell(
-                          borderRadius: OnoteRadius.mdAll,
-                          onTap: () {
-                            app.toggleNavCollapsed();
-                            app.activateSection(s.id);
-                          },
-                          child: Container(
-                            width: 24,
-                            height: 24,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: _sectionColor(s.color, dark)
-                                  .withValues(alpha: .18),
-                              borderRadius: OnoteRadius.mdAll,
-                              border: app.activeSectionId == s.id
-                                  ? Border.all(color: scheme.primary)
-                                  : null,
-                            ),
-                            child: Text(
-                              s.title.isEmpty
-                                  ? '·'
-                                  : s.title.characters.first.toUpperCase(),
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: dark
-                                      ? OnoteColors.moon100
-                                      : OnoteColors.graphite700),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A section chip in the collapsed rail: the section's initial, tinted by its
+/// colour when it has one, with a soft accent background for the active one.
+class _RailSectionChip extends StatelessWidget {
+  const _RailSectionChip({
+    required this.section,
+    required this.dark,
+    required this.active,
+    required this.onTap,
+  });
+  final TreeNode section;
+  final bool dark;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tint = _sectionColor(section.color, dark);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Center(
+        child: Tooltip(
+          message: section.title,
+          waitDuration: const Duration(milliseconds: 500),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: onTap,
+            child: Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: active
+                    ? scheme.primary.withValues(alpha: 0.16)
+                    : tint.withValues(alpha: dark ? 0.20 : 0.16),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Text(
+                section.title.isEmpty
+                    ? '·'
+                    : section.title.characters.first.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: active
+                      ? scheme.primary
+                      : (dark ? OnoteColors.moon100 : OnoteColors.graphite700),
+                ),
+              ),
             ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+/// The notebook avatar at the foot: a circular accent-gradient token with the
+/// notebook's initial and a small "saved on this device" status dot. It opens
+/// the notebook manager — the real workspace switcher, restyled, no fake
+/// account.
+class _RailAvatar extends StatelessWidget {
+  const _RailAvatar({
+    required this.initial,
+    required this.tooltip,
+    required this.scheme,
+    required this.onTap,
+  });
+  final String initial;
+  final String tooltip;
+  final ColorScheme scheme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [scheme.primary, _accentShift(scheme.primary)],
+                  ),
+                ),
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onPrimary,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 3,
+                bottom: 3,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E9E5B), // saved / online
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: s.raised.withValues(alpha: 0.95), width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A short, centred hairline that separates the rail's groups without a hard
+/// full-width rule.
+class _RailDivider extends StatelessWidget {
+  const _RailDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    return Container(
+      width: 24,
+      height: 1,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      color: s.border.withValues(alpha: 0.7),
     );
   }
 }
