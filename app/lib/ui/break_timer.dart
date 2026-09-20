@@ -7,6 +7,7 @@ import '../ai/ai_prompts.dart';
 import '../ai/ai_provider.dart';
 import '../export/markdown_export.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
 import 'onote_dialog.dart';
 
 /// A teaching break: pick how long, and whether to show a message, then the
@@ -38,7 +39,7 @@ const List<String> _cannedMessages = [
 Future<void> showBreakTimer(BuildContext context, AppState app) async {
   final setup = await showOnoteDialog<_BreakSetup>(
     context: context,
-    builder: (_) => const _BreakSetupDialog(),
+    builder: (_) => _BreakSetupDialog(app),
   );
   if (setup == null || !context.mounted) return;
   await _runBreakScreen(context, app, setup.minutes, setup.mode);
@@ -49,9 +50,10 @@ Future<void> showBreakTimer(BuildContext context, AppState app) async {
 /// the screen is dismissed (finished, or ended early), so the caller can mark
 /// the break complete.
 Future<void> showBreakCountdown(BuildContext context, AppState app,
-    {required int minutes,
-    BreakMessageMode mode = BreakMessageMode.motivating}) {
-  return _runBreakScreen(context, app, minutes.clamp(1, 180), mode);
+    {required int minutes, BreakMessageMode? mode}) {
+  // Default to the style the user last picked in the break-timer dialog.
+  final m = mode ?? BreakMessageMode.values[app.breakMessageMode.clamp(0, 2)];
+  return _runBreakScreen(context, app, minutes.clamp(1, 180), m);
 }
 
 Future<void> _runBreakScreen(
@@ -70,14 +72,18 @@ Future<void> _runBreakScreen(
 }
 
 class _BreakSetupDialog extends StatefulWidget {
-  const _BreakSetupDialog();
+  const _BreakSetupDialog(this.app);
+  final AppState app;
   @override
   State<_BreakSetupDialog> createState() => _BreakSetupDialogState();
 }
 
 class _BreakSetupDialogState extends State<_BreakSetupDialog> {
   int _minutes = 5;
-  BreakMessageMode _mode = BreakMessageMode.motivating;
+  // Start on the style the user last chose, so it is remembered dialog to
+  // dialog (and shared with the agenda's breaks).
+  late BreakMessageMode _mode =
+      BreakMessageMode.values[widget.app.breakMessageMode.clamp(0, 2)];
   final _custom = TextEditingController();
 
   @override
@@ -100,27 +106,38 @@ class _BreakSetupDialogState extends State<_BreakSetupDialog> {
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 for (final m in const [5, 10, 15, 20])
                   ChoiceChip(
                     label: Text('$m min'),
                     selected: _custom.text.isEmpty && _minutes == m,
+                    // Comfortable, even padding (design guide §5.1) so the
+                    // options are easy to tap and do not look cramped.
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: OnoteRadius.mdAll),
                     onSelected: (_) => setState(() {
                       _minutes = m;
                       _custom.clear();
                     }),
                   ),
                 SizedBox(
-                  width: 96,
+                  width: 104,
                   child: TextField(
                     controller: _custom,
                     keyboardType: TextInputType.number,
                     style: const TextStyle(fontSize: 12.5),
                     decoration: const InputDecoration(
                       isDense: true,
-                      border: OutlineInputBorder(),
+                      border:
+                          OutlineInputBorder(borderRadius: OnoteRadius.mdAll),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       labelText: 'Custom',
                       suffixText: 'min',
                     ),
@@ -146,12 +163,17 @@ class _BreakSetupDialogState extends State<_BreakSetupDialog> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel')),
         FilledButton.icon(
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          ),
           icon: const Icon(Icons.timer_outlined, size: 18),
           label: const Text('Start break'),
           onPressed: () {
             final custom = int.tryParse(_custom.text.trim());
             final minutes = (custom != null && custom > 0 ? custom : _minutes)
                 .clamp(1, 180);
+            // Remember the message style for next time and for agenda breaks.
+            widget.app.setBreakMessageMode(_mode.index);
             Navigator.pop(context, _BreakSetup(minutes, _mode));
           },
         ),

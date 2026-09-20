@@ -117,6 +117,14 @@ void main() {
     expect(app.stickyH, AppState.minStickyH);
   });
 
+  test('break message mode is remembered (shared with agenda breaks)', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    expect(app.breakMessageMode, 1, reason: 'default is a motivating line');
+    app.setBreakMessageMode(2); // AI-from-notebook
+    expect(app.breakMessageMode, 2);
+    expect(repo.getSetting('breakMessageMode'), 2);
+  });
+
   test('scope routes the agenda per page vs whole notebook', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     // Per page (default): items land under this page's own key.

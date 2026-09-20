@@ -90,6 +90,20 @@ void main() {
     expect(app.pageId, pages[1], reason: 'fell back to the neighbouring tab');
   });
 
+  test('closing the last tab returns to Home', () async {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    await app.openInNewTab(pages[1]); // seeds pages[0], so [0,1]
+    app.closeTab(tab(pages[0]));
+    await Future<void>.delayed(Duration.zero);
+    expect(app.openTabs, [tab(pages[1])],
+        reason: 'one tab left, still on a page');
+    expect(app.navHome, isFalse);
+    app.closeTab(tab(pages[1])); // now none left
+    await Future<void>.delayed(Duration.zero);
+    expect(app.openTabs, isEmpty);
+    expect(app.navHome, isTrue, reason: 'no tabs left → land on Home');
+  });
+
   test('opening the first tab keeps the page you were already on', () async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     // Started on pages[0] in setUp; opening pages[1] as a tab should seed

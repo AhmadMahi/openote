@@ -346,22 +346,15 @@ class _NoteCardState extends State<_NoteCard> {
   }
 
   Widget _resizeHandle(OnoteSurfaces s, ColorScheme scheme) {
+    // No visible grip — the cursor change on hover is the only hint. Kept small
+    // so it sits in the very corner and never steals the AI button's clicks.
     return MouseRegion(
       cursor: SystemMouseCursors.resizeUpLeftDownRight,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanUpdate: (d) => app.setStickySize(
             widget.width + d.delta.dx, widget.height + d.delta.dy),
-        child: SizedBox(
-          // A generous, invisible hit area so the corner is easy to grab.
-          width: 24,
-          height: 24,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 4, bottom: 4),
-            child: Icon(Icons.south_east_rounded,
-                size: 15, color: s.textSecondary.withValues(alpha: 0.8)),
-          ),
-        ),
+        child: const SizedBox(width: 16, height: 16),
       ),
     );
   }
@@ -576,12 +569,15 @@ class _NoteCardState extends State<_NoteCard> {
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: items.length,
                   onReorder: app.reorderStickyItem,
+                  // Delete-all only earns its place once the list is long
+                  // enough to need it — and it lives at the BOTTOM of the list
+                  // (scroll to reach it), not floating under the add bar.
+                  footer: items.length > 5 ? _deleteAllItem(s, scheme) : null,
                   itemBuilder: (context, i) => _itemRow(context, s, scheme, i),
                 ),
         ),
         Divider(height: 1, color: s.border.withValues(alpha: 0.6)),
         _addBar(context, s, scheme, timer),
-        if (items.isNotEmpty) _deleteAllRow(s, scheme),
       ],
     );
   }
@@ -749,34 +745,33 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  /// The delete-all control: a compact, clearly-destructive red button, aligned
-  /// to the trailing edge under the add bar.
-  Widget _deleteAllRow(OnoteSurfaces s, ColorScheme scheme) {
+  /// The delete-all control: the LAST row of a long list (shown only past five
+  /// items), a clearly-destructive red bar you reach by scrolling to the end.
+  Widget _deleteAllItem(OnoteSurfaces s, ColorScheme scheme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: Material(
-          color: scheme.error.withValues(alpha: 0.10),
+      // A key so the ReorderableListView footer is happy alongside keyed items.
+      key: const ValueKey('sticky-delete-all'),
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+      child: Material(
+        color: scheme.error.withValues(alpha: 0.10),
+        borderRadius: OnoteRadius.mdAll,
+        child: InkWell(
           borderRadius: OnoteRadius.mdAll,
-          child: InkWell(
-            borderRadius: OnoteRadius.mdAll,
-            onTap: app.clearStickyItems,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.delete_sweep_outlined,
-                      size: 16, color: scheme.error),
-                  const SizedBox(width: 6),
-                  Text('Delete all',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.error)),
-                ],
-              ),
+          onTap: app.clearStickyItems,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.delete_sweep_outlined,
+                    size: 16, color: scheme.error),
+                const SizedBox(width: 8),
+                Text('Delete all',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.error)),
+              ],
             ),
           ),
         ),

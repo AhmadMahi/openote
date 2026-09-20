@@ -6946,6 +6946,8 @@ class AppState extends ChangeNotifier
     if (sw is num) stickyW = sw.toDouble().clamp(minStickyW, maxStickyW);
     final sh = _repo.getSetting('stickyH');
     if (sh is num) stickyH = sh.toDouble().clamp(minStickyH, maxStickyH);
+    final bmm = _repo.getSetting('breakMessageMode');
+    if (bmm is num) breakMessageMode = bmm.toInt().clamp(0, 2);
     _loadSticky();
     // The app opens on Home. The last page is loaded and one click away —
     // the navigator and Home's recents both lead to it — but the first thing
@@ -7593,6 +7595,9 @@ class AppState extends ChangeNotifier
     _persistTabs();
     if (wasActive && openTabs.isNotEmpty) {
       unawaited(activateTab(openTabs[i.clamp(0, openTabs.length - 1)]));
+    } else if (openTabs.isEmpty) {
+      // Closing the last tab returns to Home rather than stranding a page.
+      openHome();
     } else {
       notifyListeners();
     }
@@ -7635,6 +7640,12 @@ class AppState extends ChangeNotifier
   /// (like the opacity, one preferred size everywhere) so it reopens the same.
   /// Null until first resized, so the widget uses its own default.
   double? stickyW, stickyH;
+
+  /// The last break-message style chosen in the break-timer dialog, remembered
+  /// so a break started from the agenda uses the same one. Stored as the
+  /// `BreakMessageMode` enum index (0 off, 1 motivating, 2 AI); default 1.
+  int breakMessageMode = 1;
+
   static const double minStickyW = 300;
   static const double maxStickyW = 640;
   static const double minStickyH = 200;
@@ -7710,6 +7721,14 @@ class AppState extends ChangeNotifier
     if (next == stickyOpacity) return;
     stickyOpacity = next;
     _repo.setSetting('stickyOpacity', next);
+    notifyListeners();
+  }
+
+  /// Remember the break-message style so the agenda's breaks match the dialog.
+  void setBreakMessageMode(int v) {
+    if (v == breakMessageMode) return;
+    breakMessageMode = v;
+    _repo.setSetting('breakMessageMode', v);
     notifyListeners();
   }
 
