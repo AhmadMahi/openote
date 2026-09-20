@@ -27,6 +27,7 @@ import 'command_button.dart';
 import 'compacting_toolbar.dart';
 import 'font_picker.dart';
 import 'insert_catalog.dart';
+import 'pen_size_control.dart';
 import 'object_face.dart';
 import 'settings_dialog.dart';
 import '../theme/tokens.dart';
@@ -1055,30 +1056,9 @@ class _CommandBarState extends State<CommandBar> {
         // The ready-made palettes, and a way to keep your own.
         _PalettePicker(app: app),
         const SizedBox(width: 6),
-        SizedBox(
-          width: 110,
-          child: Slider(
-            value: app.penSize.clamp(AppState.minPenSize, AppState.maxPenSize),
-            min: AppState.minPenSize,
-            max: AppState.maxPenSize,
-            // 36 steps of 0.25 — fine enough that the slider still feels
-            // continuous, coarse enough that the number beside it is one you
-            // could deliberately return to.
-            divisions: 36,
-            onChanged: app.setPenSize,
-          ),
-        ),
-        // The number, because a width you cannot read is a width you cannot
-        // get back to. Fixed width so the row does not shuffle as it changes.
-        SizedBox(
-          width: 26,
-          child: Text(
-            app.penSize.toStringAsFixed(app.penSize % 1 == 0 ? 0 : 2),
-            textAlign: TextAlign.right,
-            style:
-                TextStyle(fontSize: 11, color: context.surfaces.textSecondary),
-          ),
-        ),
+        // Slider + value + up/down stepper. Pen and highlighter each carry
+        // their own width, so this reflects whichever tool is up.
+        PenSizeControl(app: app),
       ] else if (app.tool == Tool.eraser) ...[
         SegmentedButton<EraserMode>(
           segments: [

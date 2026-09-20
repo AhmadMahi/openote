@@ -29,6 +29,7 @@ import 'shortcut_overlay.dart';
 import 'focus_palette.dart';
 import 'sidebar.dart';
 import 'sticky_note.dart';
+import 'selection_format_bar.dart';
 import 'tab_strip.dart';
 import '../export/print_page.dart';
 import 'study_panel.dart';
@@ -1614,6 +1615,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                     app: app,
                                     topInset: app.focusMode ? 0.0 : chromeTop,
                                   ),
+                                // A quick format bar over the page whenever text
+                                // is selected in a text block. Topmost, so its
+                                // taps never fall through to the canvas.
+                                if (!app.navHome && !app.navNotebook)
+                                  SelectionFormatBar(app: app),
                               ]),
                             ),
                           ),

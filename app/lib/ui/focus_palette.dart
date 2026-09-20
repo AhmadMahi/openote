@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../canvas/ink_painter.dart' show themedInk;
 import 'color_picker.dart';
 import 'glass.dart';
+import 'pen_size_control.dart';
 
 /// The drawing tools, when focus mode has taken the chrome away.
 ///
@@ -123,27 +124,9 @@ class _FocusPaletteState extends State<FocusPalette> {
                   for (var i = 0; i < app.inkPalette.length; i++)
                     _well(scheme, i),
                   _divider(s),
-                  SizedBox(
-                    width: 110,
-                    child: Slider(
-                      value: app.penSize
-                          .clamp(AppState.minPenSize, AppState.maxPenSize),
-                      min: AppState.minPenSize,
-                      max: AppState.maxPenSize,
-                      divisions: 36,
-                      // Through the state, so a width set here survives a
-                      // restart exactly as one set on the Draw row does.
-                      onChanged: app.setPenSize,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 26,
-                    child: Text(
-                      app.penSize.toStringAsFixed(app.penSize % 1 == 0 ? 0 : 2),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(fontSize: 11, color: s.textSecondary),
-                    ),
-                  ),
+                  // Slider + value + stepper, through the state so a width set
+                  // here survives a restart exactly as one set on the Draw row.
+                  PenSizeControl(app: app),
                 ]),
               ),
             ],

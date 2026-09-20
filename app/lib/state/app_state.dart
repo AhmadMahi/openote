@@ -4381,17 +4381,32 @@ class AppState extends ChangeNotifier
   /// It used to reset to 2.5 on every launch, which meant the first stroke of
   /// every day was the wrong weight and you re-set it by hand. A pen width is
   /// a preference about handwriting, not a property of a sitting.
-  double penSize = 2.5;
+  // Pen and highlighter each keep their OWN thickness — a highlighter wants to
+  // be much fatter than a pen, and switching between them should not make you
+  // re-set the width each time. Anything else (eraser fallback) uses the pen's.
+  double _penSize = 2.5;
+  double _highlighterSize = 8.0;
+
+  /// The active tool's stroke width.
+  double get penSize => tool == Tool.highlighter ? _highlighterSize : _penSize;
+
   void setPenSize(double v) {
     final next = v.clamp(minPenSize, maxPenSize);
-    if (next == penSize) return;
-    penSize = next;
-    _repo.setSetting('penSize', next);
+    if (tool == Tool.highlighter) {
+      if (next == _highlighterSize) return;
+      _highlighterSize = next;
+      _repo.setSetting('highlighterSize', next);
+    } else {
+      if (next == _penSize) return;
+      _penSize = next;
+      _repo.setSetting('penSize', next);
+    }
     notifyListeners();
   }
 
   static const double minPenSize = 1;
   static const double maxPenSize = 10;
+  static const double penSizeStep = 0.5;
 
   /// Focus mode: the chrome goes, the page fills the window edge to edge, and
   /// the drawing tools come back as a small palette you can put anywhere.
@@ -6743,7 +6758,11 @@ class AppState extends ChangeNotifier
     if (as_ is bool) autoShape = as_;
     final psz = _repo.getSetting('penSize');
     if (psz is num) {
-      penSize = psz.toDouble().clamp(minPenSize, maxPenSize);
+      _penSize = psz.toDouble().clamp(minPenSize, maxPenSize);
+    }
+    final hsz = _repo.getSetting('highlighterSize');
+    if (hsz is num) {
+      _highlighterSize = hsz.toDouble().clamp(minPenSize, maxPenSize);
     }
     final pcs = _repo.getSetting('penCursorStyle') as String?;
     if (pcs != null) {
