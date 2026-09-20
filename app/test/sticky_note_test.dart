@@ -177,6 +177,58 @@ void main() {
     expect(app.stickyItems.last.minutes, 15);
   });
 
+  test('parseAgendaLine reads CSV, trailing numbers, and breaks', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    final a = AppState.parseAgendaLine('Introduction, 15');
+    expect(a.text, 'Introduction');
+    expect(a.minutes, 15);
+    expect(a.isBreak, isFalse);
+
+    final b = AppState.parseAgendaLine('Deep dive 40');
+    expect(b.text, 'Deep dive');
+    expect(b.minutes, 40);
+
+    final c = AppState.parseAgendaLine('Break, 10');
+    expect(c.text, 'Break');
+    expect(c.minutes, 10);
+    expect(c.isBreak, isTrue);
+
+    final d = AppState.parseAgendaLine('- Wrap-up and Q&A, 20');
+    expect(d.text, 'Wrap-up and Q&A', reason: 'leading bullet stripped');
+    expect(d.minutes, 20);
+
+    final e = AppState.parseAgendaLine('Just a topic');
+    expect(e.text, 'Just a topic');
+    expect(e.minutes, 0);
+  });
+
+  test('setStickyAgendaParsed builds a full timed agenda from CSV lines', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.toggleStickyTimerMode();
+    app.setStickyAgendaParsed([
+      'Introduction, 15',
+      'Core concepts, 30',
+      'Break, 10',
+      'Hands-on, 40',
+    ]);
+    expect(app.stickyItems.map((e) => e.text),
+        ['Introduction', 'Core concepts', 'Break', 'Hands-on']);
+    expect(app.stickyItems.map((e) => e.minutes), [15, 30, 10, 40]);
+    expect(app.stickyItems[2].isBreak, isTrue);
+    expect(app.stickySessionMinutes, 95);
+
+    // Appending a pasted block adds to the end.
+    app.addStickyAgendaParsed(['Q&A, 20']);
+    expect(app.stickyItems.length, 5);
+    expect(app.stickyItems.last.minutes, 20);
+  });
+
+  test('the sample prompt is available and asks for CSV', () {
+    expect(AppState.stickyAgendaSamplePrompt, contains('CSV'));
+    expect(AppState.stickyAgendaSamplePrompt, contains('topic, minutes'));
+    expect(AppState.stickyAgendaSamplePrompt.toLowerCase(), contains('break'));
+  });
+
   test('open state, position and items are persisted per page', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.toggleStickyOpen();

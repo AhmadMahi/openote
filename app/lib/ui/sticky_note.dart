@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
@@ -137,8 +138,21 @@ class _NoteCardState extends State<_NoteCard> {
   AppState get app => widget.app;
 
   @override
+  void initState() {
+    super.initState();
+    // Rebuild as the input changes so the add row can swap between "add" and
+    // "copy sample prompt" when it is empty.
+    _input.addListener(_onInputChanged);
+  }
+
+  void _onInputChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
     _ticker?.cancel();
+    _input.removeListener(_onInputChanged);
     _input.dispose();
     _minutes.dispose();
     super.dispose();
@@ -175,27 +189,39 @@ class _NoteCardState extends State<_NoteCard> {
   }
 
   void _add() {
-    var t = _input.text.trim();
-    if (t.isEmpty) return;
-    final isBreak = AppState.isBreakLabel(t);
-    var minutes = 0;
+    final raw = _input.text;
+    if (raw.trim().isEmpty) return;
+    final lines = raw.split('\n').where((l) => l.trim().isNotEmpty).toList();
     if (app.stickyTimerMode) {
-      minutes = int.tryParse(_minutes.text.trim()) ?? 0;
-      // "break 20" typed into the text field: pull the number out as the time.
-      final m = RegExp(r'(\d+)\s*$').firstMatch(t);
-      if (minutes == 0 && m != null) {
-        minutes = int.parse(m.group(1)!);
-        t = t.substring(0, m.start).trim();
+      // A pasted CSV block (topic, minutes per line) becomes the whole agenda;
+      // a single line becomes one timed item, with the minutes field winning
+      // if it was filled.
+      if (lines.length > 1) {
+        app.addStickyAgendaParsed(lines);
+      } else {
+        final p = AppState.parseAgendaLine(lines.first);
+        final field = int.tryParse(_minutes.text.trim());
+        app.addStickyItem(p.text,
+            minutes: (field != null && field > 0) ? field : p.minutes,
+            isBreak: p.isBreak);
+      }
+    } else {
+      // Plain checklist: keep text verbatim (no time parsing), one item a line.
+      for (final l in lines) {
+        app.addStickyItem(l.trim());
       }
     }
-    if (isBreak &&
-        t.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '') == 'break') {
-      t = 'Break';
-    }
-    app.addStickyItem(t.isEmpty ? 'Break' : t,
-        minutes: minutes, isBreak: isBreak);
     _input.clear();
     _minutes.clear();
+  }
+
+  void _copySamplePrompt() {
+    Clipboard.setData(
+        const ClipboardData(text: AppState.stickyAgendaSamplePrompt));
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+      content: Text('Sample prompt copied — paste it into any LLM, then paste '
+          'the CSV it gives back here.'),
+    ));
   }
 
   Future<void> _startItem(int i) async {
@@ -222,7 +248,13 @@ class _NoteCardState extends State<_NoteCard> {
           content: Text('Connect an AI provider to generate an agenda.')));
       return;
     }
-    app.setStickyItems(items);
+    // Timer mode returns CSV lines with times/breaks — parse them into timed
+    // items; otherwise a plain list.
+    if (app.stickyTimerMode) {
+      app.setStickyAgendaParsed(items);
+    } else {
+      app.setStickyItems(items);
+    }
     _input.clear();
   }
 
@@ -526,12 +558,21 @@ class _NoteCardState extends State<_NoteCard> {
                 ),
               ],
               const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.add, size: 18),
-                tooltip: 'Add item',
-                visualDensity: VisualDensity.compact,
-                onPressed: _add,
-              ),
+              // Empty input → offer a sample prompt to build the agenda in any
+              // LLM; once you have typed (or pasted a CSV), it becomes Add.
+              _input.text.trim().isEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.content_copy_outlined, size: 16),
+                      tooltip: 'Copy a sample prompt for any LLM',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _copySamplePrompt,
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.add, size: 18),
+                      tooltip: 'Add item',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _add,
+                    ),
               _generating
                   ? const Padding(
                       padding: EdgeInsets.all(8),

@@ -7823,15 +7823,104 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Parse one agenda line into a label, minutes and break-ness. Handles
+  /// "Topic, 20" (CSV), "Topic 20" (trailing number), "Break, 10", a bare
+  /// "Topic", and strips a leading bullet or "1." if the model added one.
+  static ({String text, int minutes, bool isBreak}) parseAgendaLine(
+      String raw) {
+    var line =
+        raw.trim().replaceFirst(RegExp(r'^\s*(?:[-*•]|\d+[.)])\s*'), '').trim();
+    var minutes = 0;
+    // Prefer a trailing ", 20"; otherwise a trailing bare number.
+    final comma = line.lastIndexOf(',');
+    if (comma >= 0) {
+      final n = int.tryParse(line.substring(comma + 1).trim());
+      if (n != null) {
+        minutes = n;
+        line = line.substring(0, comma).trim();
+      }
+    }
+    if (minutes == 0) {
+      final m = RegExp(r'(\d+)\s*(?:min|mins|minutes|m)?\s*$').firstMatch(line);
+      if (m != null && m.group(1) != line) {
+        minutes = int.parse(m.group(1)!);
+        line = line.substring(0, m.start).trim();
+      }
+    }
+    final isBreak = isBreakLabel(line);
+    if (isBreak &&
+        line.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '') == 'break') {
+      line = 'Break';
+    }
+    return (
+      text: line.isEmpty ? 'Break' : line,
+      minutes: minutes < 0 ? 0 : minutes,
+      isBreak: isBreak,
+    );
+  }
+
+  /// Replace the whole agenda from lines, parsing each into a timed item —
+  /// used by the AI generator in timer mode and by a pasted CSV.
+  void setStickyAgendaParsed(List<String> lines) {
+    stickyItems
+      ..clear()
+      ..addAll([
+        for (final l in lines)
+          if (l.trim().isNotEmpty) _stickyFromLine(l),
+      ]);
+    _persistSticky();
+    notifyListeners();
+  }
+
+  /// Append parsed lines (a CSV block pasted into the add row).
+  void addStickyAgendaParsed(List<String> lines) {
+    var added = false;
+    for (final l in lines) {
+      if (l.trim().isEmpty) continue;
+      stickyItems.add(_stickyFromLine(l));
+      added = true;
+    }
+    if (!added) return;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  StickyItem _stickyFromLine(String l) {
+    final p = parseAgendaLine(l);
+    return StickyItem(p.text, minutes: p.minutes, isBreak: p.isBreak);
+  }
+
+  /// A ready-made prompt the teacher can paste into any LLM to get a timed
+  /// agenda as CSV, which they then paste back into the add row.
+  static const String stickyAgendaSamplePrompt =
+      'Create a timed teaching agenda for the session below.\n\n'
+      'Reply as CSV ONLY — one item per line as "topic, minutes" where minutes '
+      'is a whole number. Add "Break, 10" lines where a break makes sense. No '
+      'header row, no numbering, no commentary.\n\n'
+      'Topic: <describe your session>\n'
+      'Total length: <e.g. 3 hours>\n\n'
+      'Example:\n'
+      'Introduction, 15\n'
+      'Core concepts, 30\n'
+      'Break, 10\n'
+      'Hands-on practice, 40\n'
+      'Wrap-up and Q&A, 20';
+
   /// Turn rough notes into a clean teaching agenda with AI. Returns the items
-  /// as plain lines, or null on failure (the caller shows the reason).
+  /// as lines, or null on failure. In timer mode the lines are CSV
+  /// ("topic, minutes", plus "Break, N"); the caller parses them.
   Future<List<String>?> generateStickyAgenda(String rough) async {
     final client = aiClient();
     if (client == null) return null;
+    final format = stickyTimerMode
+        ? 'Reply as CSV ONLY — one item per line as "topic, minutes" (minutes '
+            'a whole number). Include "Break, N" lines where a break makes '
+            'sense, and try to make the times add up to the session length if '
+            'one is given. No header, no numbering, no commentary.'
+        : 'Reply with only the agenda, one item per line, no numbering, no '
+            'bullets, no Markdown — just the plain text of each item.';
     final res = await client.chat([
-      AiMessage.system('${systemPromptFor(AiFeature.stickyAgenda)}\n\n'
-          'Reply with only the agenda, one item per line, no numbering, no '
-          'bullets, no Markdown — just the plain text of each item.'),
+      AiMessage.system('${systemPromptFor(AiFeature.stickyAgenda)}\n\n$format'),
       AiMessage.user(rough),
     ], temperature: 0.4);
     addAiTokens(res.totalTokens);
