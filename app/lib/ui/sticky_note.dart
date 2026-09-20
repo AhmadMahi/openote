@@ -569,13 +569,12 @@ class _NoteCardState extends State<_NoteCard> {
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: items.length,
                   onReorder: app.reorderStickyItem,
-                  // Delete-all only earns its place once the list is long
-                  // enough to need it — and it lives at the BOTTOM of the list
-                  // (scroll to reach it), not floating under the add bar.
-                  footer: items.length > 5 ? _deleteAllItem(s, scheme) : null,
                   itemBuilder: (context, i) => _itemRow(context, s, scheme, i),
                 ),
         ),
+        // Delete-all sits at the very end of the list, and only earns its
+        // place once the list is long enough to need it (more than five items).
+        if (items.length > 5) _deleteAllItem(s, scheme),
         Divider(height: 1, color: s.border.withValues(alpha: 0.6)),
         _addBar(context, s, scheme, timer),
       ],
@@ -745,12 +744,11 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  /// The delete-all control: the LAST row of a long list (shown only past five
-  /// items), a clearly-destructive red bar you reach by scrolling to the end.
+  /// The delete-all control: a clearly-destructive red bar at the end of the
+  /// agenda, shown only once the list is long enough to need it (past five
+  /// items), so it never crowds a short list.
   Widget _deleteAllItem(OnoteSurfaces s, ColorScheme scheme) {
     return Padding(
-      // A key so the ReorderableListView footer is happy alongside keyed items.
-      key: const ValueKey('sticky-delete-all'),
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       child: Material(
         color: scheme.error.withValues(alpha: 0.10),

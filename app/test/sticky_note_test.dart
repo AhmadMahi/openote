@@ -307,4 +307,37 @@ void main() {
     expect(app.stickyX, greaterThan(100), reason: 'header drag moved it right');
     expect(app.stickyY, greaterThan(100), reason: 'header drag moved it down');
   });
+
+  // Delete-all is the last row of the list, and earns its place only once the
+  // list is long enough to need it (more than five items).
+  testWidgets('delete-all appears only past five items, at the list end',
+      (t) async {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.toggleStickyOpen();
+    app.setTool(Tool.select);
+    for (var i = 0; i < 5; i++) {
+      app.addStickyItem('Item ${i + 1}');
+    }
+
+    Widget host() => MaterialApp(
+          home: Scaffold(
+            body: ListenableBuilder(
+              listenable: app,
+              builder: (_, __) =>
+                  Stack(children: [StickyNote(app: app, topInset: 0)]),
+            ),
+          ),
+        );
+
+    await t.pumpWidget(host());
+    await t.pump();
+    expect(find.text('Delete all'), findsNothing,
+        reason: 'five items is not enough to show it');
+
+    app.addStickyItem('Item 6'); // now six
+    await t.pump();
+    expect(find.text('Delete all'), findsOneWidget,
+        reason: 'past five items it appears');
+    app.cancelPendingSave();
+  });
 }
