@@ -127,6 +127,56 @@ void main() {
     expect(app.stickyItems.map((e) => e.text), ['this page only']);
   });
 
+  test('timer mode: start minimizes and runs one item, complete finishes it',
+      () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.toggleStickyTimerMode();
+    expect(app.stickyTimerMode, isTrue);
+    app.addStickyItem('Intro', minutes: 20);
+    app.addStickyItem('Demo', minutes: 40);
+    expect(app.stickySessionMinutes, 60);
+
+    app.startStickyItem(0);
+    expect(app.stickyItems[0].running, isTrue);
+    expect(app.stickyMinimized, isTrue, reason: 'starting folds the note away');
+    expect(app.runningStickyIndex, 0);
+
+    // Starting another stops the first without completing it (one runs at once).
+    app.startStickyItem(1);
+    expect(app.stickyItems[0].running, isFalse);
+    expect(app.stickyItems[0].done, isFalse);
+    expect(app.runningStickyIndex, 1);
+
+    app.completeStickyItem(1);
+    expect(app.stickyItems[1].done, isTrue);
+    expect(app.runningStickyIndex, -1);
+    // Timer mode + item times persist.
+    final raw = repo.getSetting('sticky:page:$pageId') as Map;
+    expect(raw['timer'], isTrue);
+    expect((raw['items'] as List).first, containsPair('m', 20));
+  });
+
+  test('timer mode: reorder, minutes edit, and break detection', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.toggleStickyTimerMode();
+    app.addStickyItem('One', minutes: 10);
+    app.addStickyItem('Two', minutes: 10);
+    app.reorderStickyItem(0, 2); // move "One" to the end (LV convention)
+    expect(app.stickyItems.map((e) => e.text), ['Two', 'One']);
+
+    app.setStickyItemMinutes(0, 25);
+    expect(app.stickyItems[0].minutes, 25);
+
+    expect(AppState.isBreakLabel('break'), isTrue);
+    expect(AppState.isBreakLabel('Break 20'), isTrue);
+    // Word-boundary: "breakfast" is not a break.
+    expect(AppState.isBreakLabel('breakfast plans'), isFalse);
+    expect(AppState.isBreakLabel('lunch'), isFalse);
+    app.addStickyItem('Break', minutes: 15, isBreak: true);
+    expect(app.stickyItems.last.isBreak, isTrue);
+    expect(app.stickyItems.last.minutes, 15);
+  });
+
   test('open state, position and items are persisted per page', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.toggleStickyOpen();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -5,18 +6,21 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
+import 'break_timer.dart';
 
 /// The floating teaching agenda — a translucent sticky note that sits over the
 /// page, fixed to the window (it does not scroll with the page) and never part
-/// of it (so it is never exported). One per notebook.
+/// of it (so it is never exported).
+///
+/// It doubles as a session planner: turn on timer mode and each item carries a
+/// duration you can start and run down. Starting an item folds the note away to
+/// a single running line with the minutes left; a break slot opens the
+/// full-screen break countdown and completes itself when it ends.
 ///
 /// It is a `Positioned.fill` overlay whose only opaque region is the note
 /// itself, so the rest of the canvas stays clickable. In any tool other than
 /// Select its BODY ignores the pointer, so you can draw straight over it; the
-/// header stays live in every tool, so the note is always draggable — the way
-/// the focus-mode tool palette is. It shows in focus mode too. Minimise shows
-/// only the next unchecked item; close hides it but keeps the list until you
-/// delete it.
+/// header stays live in every tool, so the note is always draggable.
 class StickyNote extends StatelessWidget {
   const StickyNote({super.key, required this.app, this.topInset = 0});
   final AppState app;
@@ -26,7 +30,7 @@ class StickyNote extends StatelessWidget {
   /// over the chrome. Zero in focus mode, where there is no chrome.
   final double topInset;
 
-  static const double _width = 300;
+  static const double _width = 320;
 
   @override
   Widget build(BuildContext context) {
@@ -49,10 +53,6 @@ class StickyNote extends StatelessWidget {
                     .toDouble();
                 final y =
                     (app.stickyY ?? (top + 220)).clamp(top, maxY).toDouble();
-                // In a drawing tool the BODY lets strokes through (so you can
-                // draw straight over the note); the HEADER stays live either
-                // way, so the note is always draggable — even mid-focus-mode
-                // with a pen in hand, the way the tool palette is.
                 final interactive = app.tool == Tool.select;
                 // Solidity from the setting; dimmed further in a drawing tool
                 // so the note is less in the way while you draw near it.
@@ -67,8 +67,6 @@ class StickyNote extends StatelessWidget {
                       left: x,
                       top: y,
                       width: _width,
-                      // Opacity composites the whole card; it does not change
-                      // hit-testing, so the header stays draggable at any level.
                       child: Opacity(
                         opacity: opacity,
                         child: _NoteCard(
@@ -89,6 +87,23 @@ class StickyNote extends StatelessWidget {
   }
 }
 
+/// A finished session's overtime colour, and the "on time" green.
+const Color _green = Color(0xFF2E9E5B);
+
+String _fmtDuration(int minutes) {
+  if (minutes <= 0) return '0m';
+  if (minutes < 60) return '${minutes}m';
+  final h = minutes ~/ 60, m = minutes % 60;
+  return m == 0 ? '${h}h' : '${h}h ${m}m';
+}
+
+/// A running item's remaining time as m:ss, negative when in overtime.
+String _fmtClock(int seconds) {
+  final neg = seconds < 0;
+  final a = seconds.abs();
+  return '${neg ? '-' : ''}${a ~/ 60}:${(a % 60).toString().padLeft(2, '0')}';
+}
+
 class _NoteCard extends StatefulWidget {
   const _NoteCard(
       {required this.app,
@@ -104,9 +119,7 @@ class _NoteCard extends StatefulWidget {
   final double top;
   final Size bounds;
 
-  /// Whether the body accepts the pointer. False in a drawing tool, so a
-  /// stroke drawn across the note lands on the canvas beneath it — the header
-  /// stays live regardless, so the note is always draggable.
+  /// Whether the body accepts the pointer. False in a drawing tool.
   final bool interactive;
 
   @override
@@ -115,14 +128,40 @@ class _NoteCard extends StatefulWidget {
 
 class _NoteCardState extends State<_NoteCard> {
   final _input = TextEditingController();
+  final _minutes = TextEditingController();
   bool _generating = false;
+
+  /// Ticks once a second while an item is running, to refresh the countdown.
+  Timer? _ticker;
 
   AppState get app => widget.app;
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _input.dispose();
+    _minutes.dispose();
     super.dispose();
+  }
+
+  void _syncTicker() {
+    final running = app.runningStickyIndex >= 0;
+    if (running && _ticker == null) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if (!running && _ticker != null) {
+      _ticker!.cancel();
+      _ticker = null;
+    }
+  }
+
+  /// Remaining seconds for a running item (negative = overtime).
+  int _remaining(StickyItem it) {
+    if (it.startedAtMs == null) return it.minutes * 60;
+    final elapsed =
+        (DateTime.now().millisecondsSinceEpoch - it.startedAtMs!) ~/ 1000;
+    return it.minutes * 60 - elapsed;
   }
 
   void _drag(DragUpdateDetails d) {
@@ -136,10 +175,39 @@ class _NoteCardState extends State<_NoteCard> {
   }
 
   void _add() {
-    final t = _input.text.trim();
+    var t = _input.text.trim();
     if (t.isEmpty) return;
-    app.addStickyItem(t);
+    final isBreak = AppState.isBreakLabel(t);
+    var minutes = 0;
+    if (app.stickyTimerMode) {
+      minutes = int.tryParse(_minutes.text.trim()) ?? 0;
+      // "break 20" typed into the text field: pull the number out as the time.
+      final m = RegExp(r'(\d+)\s*$').firstMatch(t);
+      if (minutes == 0 && m != null) {
+        minutes = int.parse(m.group(1)!);
+        t = t.substring(0, m.start).trim();
+      }
+    }
+    if (isBreak &&
+        t.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '') == 'break') {
+      t = 'Break';
+    }
+    app.addStickyItem(t.isEmpty ? 'Break' : t,
+        minutes: minutes, isBreak: isBreak);
     _input.clear();
+    _minutes.clear();
+  }
+
+  Future<void> _startItem(int i) async {
+    final it = app.stickyItems[i];
+    app.startStickyItem(i);
+    if (it.isBreak) {
+      await showBreakCountdown(context, app,
+          minutes: it.minutes > 0 ? it.minutes : 5);
+      if (!mounted) return;
+      final idx = app.stickyItems.indexOf(it);
+      if (idx >= 0) app.completeStickyItem(idx);
+    }
   }
 
   Future<void> _generate() async {
@@ -160,23 +228,18 @@ class _NoteCardState extends State<_NoteCard> {
 
   @override
   Widget build(BuildContext context) {
+    _syncTicker();
     final s = context.surfaces;
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final minimized = app.stickyMinimized;
 
-    // The expanded body passes the pointer through while a pen is up so you can
-    // draw over the note; the header is never wrapped, so drag/close stay live
-    // in every tool. The MINIMIZED body stays live too (it is only a line with
-    // one check circle — its whole point is ticking the next task off, often
-    // mid-lesson with a pen in hand). `Flexible` must stay a direct child of
-    // the Column, so IgnorePointer goes INSIDE it, not around it.
     final Widget body = minimized
-        ? _minimizedBody(context, s)
+        ? _minimizedBody(context, s, scheme)
         : Flexible(
             child: IgnorePointer(
                 ignoring: !widget.interactive,
-                child: _expandedBody(context, s)));
+                child: _expandedBody(context, s, scheme)));
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -212,11 +275,12 @@ class _NoteCardState extends State<_NoteCard> {
   }
 
   Widget _header(BuildContext context, OnoteSurfaces s, ColorScheme scheme) {
+    final total = app.stickySessionMinutes;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onPanUpdate: _drag,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -233,14 +297,32 @@ class _NoteCardState extends State<_NoteCard> {
         child: Row(
           children: [
             Icon(Icons.drag_indicator, size: 16, color: s.textSecondary),
-            const SizedBox(width: 4),
+            const SizedBox(width: 2),
             Icon(Icons.sticky_note_2_outlined, size: 15, color: scheme.primary),
             const SizedBox(width: 6),
-            Expanded(
+            Flexible(
               child: Text('Agenda',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: OnoteType.uiStrong.copyWith(color: s.textPrimary)),
+            ),
+            if (app.stickyTimerMode && total > 0) ...[
+              const SizedBox(width: 6),
+              Text('· ${_fmtDuration(total)}',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.primary)),
+            ],
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.timer_outlined, size: 17),
+              isSelected: app.stickyTimerMode,
+              selectedIcon: Icon(Icons.timer, size: 17, color: scheme.primary),
+              tooltip:
+                  app.stickyTimerMode ? 'Timer mode: on' : 'Timer mode: off',
+              visualDensity: VisualDensity.compact,
+              onPressed: app.toggleStickyTimerMode,
             ),
             IconButton(
               icon: Icon(
@@ -262,9 +344,70 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  /// Minimized: only the next thing to teach, with a check circle that ticks
-  /// it off and lets the one after slide into its place.
-  Widget _minimizedBody(BuildContext context, OnoteSurfaces s) {
+  /// Minimized: the running item with its countdown and a progress line, or —
+  /// when nothing is running — the next thing to teach with a check circle.
+  Widget _minimizedBody(
+      BuildContext context, OnoteSurfaces s, ColorScheme scheme) {
+    final ri = app.runningStickyIndex;
+    if (ri >= 0) {
+      final it = app.stickyItems[ri];
+      final rem = _remaining(it);
+      final total = math.max(1, it.minutes * 60);
+      final progress = ((total - rem) / total).clamp(0.0, 1.0);
+      final over = rem < 0;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 12, 6),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                      it.isBreak ? Icons.free_breakfast : Icons.stop_circle,
+                      size: 19,
+                      color: scheme.primary),
+                  tooltip: 'Complete',
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                  onPressed: () => app.completeStickyItem(ri),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(it.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OnoteType.ui.copyWith(color: s.textPrimary)),
+                ),
+                const SizedBox(width: 6),
+                if (it.minutes > 0)
+                  Text(_fmtClock(rem),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: over ? scheme.error : _green)),
+              ],
+            ),
+          ),
+          if (it.minutes > 0)
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(16)),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 3,
+                backgroundColor: s.border.withValues(alpha: 0.4),
+                valueColor:
+                    AlwaysStoppedAnimation(over ? scheme.error : _green),
+              ),
+            ),
+        ],
+      );
+    }
+
     final next = app.nextStickyItem;
     final idx = app.nextStickyIndex;
     return Padding(
@@ -273,19 +416,24 @@ class _NoteCardState extends State<_NoteCard> {
         children: [
           if (next != null)
             IconButton(
-              icon: const Icon(Icons.radio_button_unchecked, size: 18),
+              icon: Icon(
+                  app.stickyTimerMode
+                      ? Icons.play_circle_outline
+                      : Icons.radio_button_unchecked,
+                  size: 18),
               color: s.textSecondary,
-              tooltip: 'Mark done',
+              tooltip: app.stickyTimerMode ? 'Start' : 'Mark done',
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.all(4),
               constraints: const BoxConstraints(),
-              onPressed: () => app.toggleStickyItem(idx),
+              onPressed: () => app.stickyTimerMode
+                  ? _startItem(idx)
+                  : app.toggleStickyItem(idx),
             )
           else
             const Padding(
               padding: EdgeInsets.all(4),
-              child:
-                  Icon(Icons.check_circle, size: 18, color: Color(0xFF2E9E5B)),
+              child: Icon(Icons.check_circle, size: 18, color: _green),
             ),
           const SizedBox(width: 6),
           Expanded(
@@ -302,8 +450,10 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  Widget _expandedBody(BuildContext context, OnoteSurfaces s) {
+  Widget _expandedBody(
+      BuildContext context, OnoteSurfaces s, ColorScheme scheme) {
     final items = app.stickyItems;
+    final timer = app.stickyTimerMode;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -312,18 +462,23 @@ class _NoteCardState extends State<_NoteCard> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
             child: Text(
-                'Your agenda for this session. Add items, or type a few rough '
-                'words and let AI shape them into a to-do list.',
+                timer
+                    ? 'Plan your session. Add items with a time each, or type '
+                        'rough notes and let AI shape them into a timed agenda.'
+                    : 'Your agenda for this session. Add items, or type a few '
+                        'rough words and let AI shape them into a to-do list.',
                 style: OnoteType.ui
                     .copyWith(color: s.textSecondary, height: 1.35)),
           )
         else
           Flexible(
-            child: ListView.builder(
+            child: ReorderableListView.builder(
               shrinkWrap: true,
+              buildDefaultDragHandles: false,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: items.length,
-              itemBuilder: (context, i) => _itemRow(context, s, i),
+              onReorder: app.reorderStickyItem,
+              itemBuilder: (context, i) => _itemRow(context, s, scheme, i),
             ),
           ),
         const Divider(height: 1),
@@ -339,14 +494,37 @@ class _NoteCardState extends State<_NoteCard> {
                   style: const TextStyle(fontSize: 12.5),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _add(),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
-                    border: OutlineInputBorder(),
-                    hintText: 'Add an item… or rough notes for AI',
-                    hintStyle: TextStyle(fontSize: 12),
+                    border: const OutlineInputBorder(),
+                    hintText: timer
+                        ? 'Add an item (or "break")…'
+                        : 'Add an item… or rough notes for AI',
+                    hintStyle: const TextStyle(fontSize: 12),
                   ),
                 ),
               ),
+              if (timer) ...[
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 44,
+                  child: TextField(
+                    controller: _minutes,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12.5),
+                    onSubmitted: (_) => _add(),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      hintText: 'min',
+                      hintStyle: TextStyle(fontSize: 11),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(width: 4),
               IconButton(
                 icon: const Icon(Icons.add, size: 18),
@@ -386,36 +564,37 @@ class _NoteCardState extends State<_NoteCard> {
     );
   }
 
-  Widget _itemRow(BuildContext context, OnoteSurfaces s, int i) {
+  Widget _itemRow(
+      BuildContext context, OnoteSurfaces s, ColorScheme scheme, int i) {
     final it = app.stickyItems[i];
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      key: ObjectKey(it),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          IconButton(
-            icon: Icon(
-                it.done ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 18,
-                color: it.done ? const Color(0xFF2E9E5B) : s.textSecondary),
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            onPressed: () => app.toggleStickyItem(i),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
+          // Drag handle — reorder up/down (Select tool only, since the body
+          // ignores the pointer while a pen is up).
+          ReorderableDragStartListener(
+            index: i,
             child: Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                it.text,
-                style: OnoteType.ui.copyWith(
-                  color: it.done ? s.textSecondary : s.textPrimary,
-                  decoration: it.done ? TextDecoration.lineThrough : null,
-                ),
+              padding: const EdgeInsets.only(right: 2),
+              child: Icon(Icons.drag_indicator,
+                  size: 15, color: s.textSecondary.withValues(alpha: 0.7)),
+            ),
+          ),
+          _leading(s, scheme, it, i),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              it.text,
+              style: OnoteType.ui.copyWith(
+                color: it.done ? s.textSecondary : s.textPrimary,
+                decoration: it.done ? TextDecoration.lineThrough : null,
               ),
             ),
           ),
+          if (app.stickyTimerMode) _minutesChip(scheme, s, it, i),
           IconButton(
             icon: const Icon(Icons.close, size: 14),
             tooltip: 'Delete',
@@ -426,6 +605,95 @@ class _NoteCardState extends State<_NoteCard> {
             onPressed: () => app.deleteStickyItem(i),
           ),
         ],
+      ),
+    );
+  }
+
+  /// The leading control: a simple check off timer mode; in timer mode a
+  /// play → running-countdown → done progression.
+  Widget _leading(OnoteSurfaces s, ColorScheme scheme, StickyItem it, int i) {
+    if (!app.stickyTimerMode) {
+      return IconButton(
+        icon: Icon(it.done ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 18, color: it.done ? _green : s.textSecondary),
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(4),
+        constraints: const BoxConstraints(),
+        onPressed: () => app.toggleStickyItem(i),
+      );
+    }
+    if (it.done) {
+      return IconButton(
+        icon: const Icon(Icons.check_circle, size: 18, color: _green),
+        tooltip: 'Undo',
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(4),
+        constraints: const BoxConstraints(),
+        onPressed: () => app.toggleStickyItem(i),
+      );
+    }
+    if (it.running) {
+      final rem = _remaining(it);
+      final over = rem < 0;
+      return Tooltip(
+        message: 'Complete',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => app.completeStickyItem(i),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: (over ? scheme.error : _green).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              it.minutes > 0 ? _fmtClock(rem) : 'stop',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: over ? scheme.error : _green),
+            ),
+          ),
+        ),
+      );
+    }
+    // Not started: play.
+    return IconButton(
+      icon: Icon(
+          it.isBreak
+              ? Icons.free_breakfast_outlined
+              : Icons.play_circle_outline,
+          size: 19,
+          color: scheme.primary),
+      tooltip: it.isBreak ? 'Start break' : 'Start',
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(),
+      onPressed: () => _startItem(i),
+    );
+  }
+
+  /// A small pill showing the item's minutes; tap to change from a preset list.
+  Widget _minutesChip(
+      ColorScheme scheme, OnoteSurfaces s, StickyItem it, int i) {
+    return PopupMenuButton<int>(
+      tooltip: 'Set time',
+      padding: EdgeInsets.zero,
+      onSelected: (m) => app.setStickyItemMinutes(i, m),
+      itemBuilder: (_) => [
+        for (final m in const [5, 10, 15, 20, 25, 30, 45, 60, 90])
+          PopupMenuItem(value: m, height: 34, child: Text(_fmtDuration(m))),
+      ],
+      child: Container(
+        margin: const EdgeInsets.only(right: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: s.well.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(it.minutes > 0 ? _fmtDuration(it.minutes) : 'set',
+            style: TextStyle(fontSize: 11, color: s.textSecondary)),
       ),
     );
   }

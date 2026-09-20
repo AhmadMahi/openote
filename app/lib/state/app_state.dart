@@ -121,17 +121,47 @@ class PageTab {
   int get hashCode => Object.hash(notebookId, pageId);
 }
 
-/// One line on the sticky-note agenda — a teaching to-do that can be ticked off.
+/// One line on the sticky-note agenda — a teaching to-do that can be ticked
+/// off, and (in timer mode) given a duration and run down like a stopwatch.
 class StickyItem {
-  StickyItem(this.text, {this.done = false});
+  StickyItem(this.text,
+      {this.done = false,
+      this.minutes = 0,
+      this.isBreak = false,
+      this.startedAtMs});
   String text;
   bool done;
 
-  Map<String, dynamic> toJson() => {'t': text, if (done) 'd': true};
+  /// Planned duration in minutes; 0 means untimed.
+  int minutes;
+
+  /// A break slot — starting it opens the full-screen break countdown.
+  bool isBreak;
+
+  /// Epoch ms when Start was pressed, or null when it has not been started.
+  /// Kept (not cleared) on completion so a finished item still reads its time.
+  int? startedAtMs;
+
+  /// Running = started and not yet completed.
+  bool get running => startedAtMs != null && !done;
+
+  Map<String, dynamic> toJson() => {
+        't': text,
+        if (done) 'd': true,
+        if (minutes > 0) 'm': minutes,
+        if (isBreak) 'b': true,
+        if (startedAtMs != null) 's': startedAtMs,
+      };
 
   static StickyItem? fromJson(Object? j) {
     if (j is Map && j['t'] is String) {
-      return StickyItem(j['t'] as String, done: j['d'] == true);
+      return StickyItem(
+        j['t'] as String,
+        done: j['d'] == true,
+        minutes: (j['m'] as num?)?.toInt() ?? 0,
+        isBreak: j['b'] == true,
+        startedAtMs: (j['s'] as num?)?.toInt(),
+      );
     }
     return null;
   }
@@ -7575,6 +7605,10 @@ class AppState extends ChangeNotifier
   bool stickyOpen = false;
   bool stickyMinimized = false;
 
+  /// Timer mode: each item carries a duration and can be started/run down, and
+  /// the header shows the total session time. Persisted with the agenda.
+  bool stickyTimerMode = false;
+
   /// Top-left of the note, in the editor area's own coordinates. Null until it
   /// has been placed/dragged, so the widget can choose a sensible first spot.
   double? stickyX, stickyY;
@@ -7602,6 +7636,7 @@ class AppState extends ChangeNotifier
     stickyItems.clear();
     stickyOpen = false;
     stickyMinimized = false;
+    stickyTimerMode = false;
     stickyX = stickyY = null;
     final raw = _repo.getSetting(_stickyKey);
     if (raw is! Map) return;
@@ -7611,6 +7646,7 @@ class AppState extends ChangeNotifier
     }
     stickyOpen = raw['open'] == true;
     stickyMinimized = raw['min'] == true;
+    stickyTimerMode = raw['timer'] == true;
     stickyX = (raw['x'] as num?)?.toDouble();
     stickyY = (raw['y'] as num?)?.toDouble();
   }
@@ -7623,6 +7659,7 @@ class AppState extends ChangeNotifier
       'items': [for (final it in stickyItems) it.toJson()],
       'open': stickyOpen,
       'min': stickyMinimized,
+      'timer': stickyTimerMode,
       if (stickyX != null) 'x': stickyX,
       if (stickyY != null) 'y': stickyY,
     });
@@ -7682,17 +7719,82 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
-  void addStickyItem(String text) {
+  void addStickyItem(String text, {int minutes = 0, bool isBreak = false}) {
     final t = text.trim();
     if (t.isEmpty) return;
-    stickyItems.add(StickyItem(t));
+    stickyItems.add(
+        StickyItem(t, minutes: minutes < 0 ? 0 : minutes, isBreak: isBreak));
     _persistSticky();
     notifyListeners();
   }
 
+  /// Whether a label reads as a break (typed "break", or "break 10"). Shared by
+  /// the input row and the AI/CSV agenda parser.
+  static bool isBreakLabel(String s) =>
+      RegExp(r'^\s*break\b', caseSensitive: false).hasMatch(s);
+
   void toggleStickyItem(int i) {
     if (i < 0 || i >= stickyItems.length) return;
     stickyItems[i].done = !stickyItems[i].done;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  // ── Timer mode ──────────────────────────────────────────────────────────
+
+  void toggleStickyTimerMode() {
+    stickyTimerMode = !stickyTimerMode;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  void setStickyItemMinutes(int i, int minutes) {
+    if (i < 0 || i >= stickyItems.length) return;
+    stickyItems[i].minutes = minutes < 0 ? 0 : minutes;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  /// Start an item's timer and fold the note away so only the running item
+  /// shows. Manual flow: one item runs at a time, so starting one stops any
+  /// other that was still running (without completing it).
+  void startStickyItem(int i) {
+    if (i < 0 || i >= stickyItems.length) return;
+    for (final it in stickyItems) {
+      if (it.running) it.startedAtMs = null;
+    }
+    stickyItems[i].startedAtMs = DateTime.now().millisecondsSinceEpoch;
+    stickyItems[i].done = false;
+    stickyMinimized = true;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  /// Mark an item complete (the second click, or a break's timer ending).
+  void completeStickyItem(int i) {
+    if (i < 0 || i >= stickyItems.length) return;
+    stickyItems[i].done = true;
+    _persistSticky();
+    notifyListeners();
+  }
+
+  /// The item currently running, or -1.
+  int get runningStickyIndex => stickyItems.indexWhere((it) => it.running);
+
+  /// Total planned minutes across the agenda — the session length shown in the
+  /// header.
+  int get stickySessionMinutes =>
+      stickyItems.fold(0, (a, it) => a + it.minutes);
+
+  void reorderStickyItem(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= stickyItems.length) return;
+    var target = newIndex;
+    if (target > oldIndex) target -= 1; // ReorderableListView convention
+    if (target < 0) target = 0;
+    if (target >= stickyItems.length) target = stickyItems.length - 1;
+    if (target == oldIndex) return;
+    final it = stickyItems.removeAt(oldIndex);
+    stickyItems.insert(target, it);
     _persistSticky();
     notifyListeners();
   }

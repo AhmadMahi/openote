@@ -41,14 +41,29 @@ Future<void> showBreakTimer(BuildContext context, AppState app) async {
     builder: (_) => const _BreakSetupDialog(),
   );
   if (setup == null || !context.mounted) return;
-  await showGeneralDialog<void>(
+  await _runBreakScreen(context, app, setup.minutes, setup.mode);
+}
+
+/// Run the full-screen break countdown directly for [minutes], skipping the
+/// setup dialog — used by the agenda when a break slot is started. Returns when
+/// the screen is dismissed (finished, or ended early), so the caller can mark
+/// the break complete.
+Future<void> showBreakCountdown(BuildContext context, AppState app,
+    {required int minutes,
+    BreakMessageMode mode = BreakMessageMode.motivating}) {
+  return _runBreakScreen(context, app, minutes.clamp(1, 180), mode);
+}
+
+Future<void> _runBreakScreen(
+    BuildContext context, AppState app, int minutes, BreakMessageMode mode) {
+  return showGeneralDialog<void>(
     context: context,
     barrierDismissible: false,
     barrierLabel: 'Break',
     barrierColor: Colors.black.withValues(alpha: 0.6),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (_, __, ___) =>
-        _BreakScreen(app: app, minutes: setup.minutes, mode: setup.mode),
+        _BreakScreen(app: app, minutes: minutes, mode: mode),
     transitionBuilder: (_, anim, __, child) =>
         FadeTransition(opacity: anim, child: child),
   );
