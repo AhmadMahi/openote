@@ -6906,8 +6906,8 @@ class AppState extends ChangeNotifier
     _loadTabs();
     // Sticky scope/opacity must be read BEFORE the agenda, since scope decides
     // which key the agenda loads from.
-    final ssg = _repo.getSetting('stickyScopeGlobal');
-    if (ssg is bool) stickyScopeGlobal = ssg;
+    final swn = _repo.getSetting('stickyWholeNotebook');
+    if (swn is bool) stickyWholeNotebook = swn;
     final sop = _repo.getSetting('stickyOpacity');
     if (sop is num) {
       stickyOpacity = sop.toDouble().clamp(minStickyOpacity, maxStickyOpacity);
@@ -7430,6 +7430,9 @@ class AppState extends ChangeNotifier
     docRevision++;
     _refreshActiveTabTitle();
     _loadBucket();
+    // Per-page agendas follow the page; whole-notebook scope reloads the same
+    // list harmlessly. Bucket is per page too, hence both here.
+    _loadSticky();
     _persistSession();
     // "Fit new pages to width" is applied by PageCanvas.initState's post-frame
     // (the viewport is not laid out yet here), so a page reliably opens filled
@@ -7576,9 +7579,10 @@ class AppState extends ChangeNotifier
   /// has been placed/dragged, so the widget can choose a sensible first spot.
   double? stickyX, stickyY;
 
-  /// When true the agenda is ONE list shared across every notebook; when false
-  /// (the default) each notebook keeps its own. Switchable in Settings.
-  bool stickyScopeGlobal = false;
+  /// The agenda's scope. false (the default) = per PAGE, so each page keeps its
+  /// own to-do list; true = one agenda shared across the WHOLE notebook.
+  /// Switchable in Settings.
+  bool stickyWholeNotebook = false;
 
   /// How solid the note is, 0.3 (barely there) to 1.0. In a drawing tool it is
   /// dimmed further so a stroke drawn near it is not fought by an opaque card.
@@ -7589,9 +7593,10 @@ class AppState extends ChangeNotifier
   /// Extra dimming applied to [stickyOpacity] while a drawing tool is armed.
   static const double stickyDrawDim = 0.55;
 
-  // Global scope uses one fixed key; per-notebook keys by the open notebook.
-  String get _stickyKey =>
-      stickyScopeGlobal ? 'sticky:__all__' : 'sticky:${notebookId ?? ''}';
+  // Whole-notebook scope keys by the open notebook; per-page keys by the page.
+  String get _stickyKey => stickyWholeNotebook
+      ? 'sticky:nb:${notebookId ?? ''}'
+      : 'sticky:page:${pageId ?? ''}';
 
   void _loadSticky() {
     stickyItems.clear();
@@ -7611,9 +7616,9 @@ class AppState extends ChangeNotifier
   }
 
   void _persistSticky() {
-    // Global scope has a home even with no notebook open; per-notebook scope
-    // needs one, or the empty key would collect a stray list.
-    if (!stickyScopeGlobal && notebookId == null) return;
+    // Whole-notebook scope needs a notebook; per-page scope needs a page. Bail
+    // rather than write to an empty key that would collect a stray list.
+    if (stickyWholeNotebook ? notebookId == null : pageId == null) return;
     _repo.setSetting(_stickyKey, {
       'items': [for (final it in stickyItems) it.toJson()],
       'open': stickyOpen,
@@ -7640,12 +7645,12 @@ class AppState extends ChangeNotifier
     return -1;
   }
 
-  /// Switch the agenda between per-notebook and shared-across-all, then reload
-  /// the list that scope points at so the note updates in place.
-  void setStickyScopeGlobal(bool v) {
-    if (stickyScopeGlobal == v) return;
-    stickyScopeGlobal = v;
-    _repo.setSetting('stickyScopeGlobal', v);
+  /// Switch the agenda between per-page and whole-notebook, then reload the list
+  /// that scope points at so the note updates in place.
+  void setStickyWholeNotebook(bool v) {
+    if (stickyWholeNotebook == v) return;
+    stickyWholeNotebook = v;
+    _repo.setSetting('stickyWholeNotebook', v);
     _loadSticky();
     notifyListeners();
   }

@@ -353,7 +353,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           const SizedBox(height: OnoteSpace.x8),
           Row(children: [
-            Text('Your notebooks',
+            Text('Your projects',
                 style: OnoteType.title.copyWith(color: s.textPrimary)),
             const SizedBox(width: OnoteSpace.x4),
             _Count(notebooks.length),

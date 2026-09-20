@@ -819,29 +819,47 @@ Future<void> insertPageLink(
 Future<void> importPdfWithProgress(BuildContext context, AppState app,
     {PdfPlacement placement = PdfPlacement.currentPage}) async {
   final progress = ValueNotifier<String>('Opening PDF…');
-  var dialogOpen = false;
-  if (context.mounted) {
-    dialogOpen = true;
-    showOnoteDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        content: Row(children: [
-          const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.6)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ValueListenableBuilder<String>(
-              valueListenable: progress,
-              builder: (_, text, __) => Text(text),
-            ),
-          ),
-        ]),
-      ),
-    );
+  if (!context.mounted) {
+    progress.dispose();
+    return;
   }
+  // Hold the navigator and messenger NOW, while the context is alive. The
+  // Insert popover collapses the instant an item is tapped, which unmounts the
+  // button's context before this async import finishes — so the old
+  // `context.mounted` guards were false by the time the import returned and the
+  // "Opening PDF…" spinner was never dismissed (it hung forever, though the PDF
+  // itself imported fine). A held NavigatorState/ScaffoldMessengerState outlives
+  // that context, so the dialog always closes.
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final messenger = ScaffoldMessenger.of(context);
+
+  var dialogOpen = true;
+  showOnoteDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      content: Row(children: [
+        const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.6)),
+        const SizedBox(width: 16),
+        Expanded(
+          child: ValueListenableBuilder<String>(
+            valueListenable: progress,
+            builder: (_, text, __) => Text(text),
+          ),
+        ),
+      ]),
+    ),
+  );
+  void closeDialog() {
+    if (dialogOpen) {
+      navigator.pop();
+      dialogOpen = false;
+    }
+  }
+
   try {
     final result = await importPdfAsPages(
       app,
@@ -849,14 +867,10 @@ Future<void> importPdfWithProgress(BuildContext context, AppState app,
       onProgress: (done, total) =>
           progress.value = 'Importing page $done of $total…',
     );
-    if (dialogOpen && context.mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
-      dialogOpen = false;
-    }
+    closeDialog();
     if (result == null) return; // cancelled at the file picker
-    if (!context.mounted) return;
     if (result.pages == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
           const SnackBar(content: Text("That PDF couldn't be read.")));
       return;
     }
@@ -865,8 +879,7 @@ Future<void> importPdfWithProgress(BuildContext context, AppState app,
     if (result.sectionId != null && result.firstPageId != null) {
       await app.selectPage(result.firstPageId!);
     }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    messenger.showSnackBar(SnackBar(
       duration: const Duration(seconds: 6),
       content: Text('Imported ${result.pages} '
           '${result.pages == 1 ? 'slide' : 'slides'}'
@@ -874,13 +887,8 @@ Future<void> importPdfWithProgress(BuildContext context, AppState app,
           'and write on them. The slide text is searchable.'),
     ));
   } catch (e) {
-    if (dialogOpen && context.mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
-    }
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('PDF import failed: $e')));
-    }
+    closeDialog();
+    messenger.showSnackBar(SnackBar(content: Text('PDF import failed: $e')));
   } finally {
     progress.dispose();
   }

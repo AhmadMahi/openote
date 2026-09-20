@@ -1,10 +1,11 @@
-// The per-notebook sticky agenda: items, checking off, the "next" item the
-// minimized note shows, delete/clear, and persistence.
+// The sticky agenda: items, checking off, the "next" item the minimized note
+// shows, delete/clear, and per-page / whole-notebook scope + persistence.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:openote/model/models.dart';
 import 'package:openote/state/app_state.dart';
 import 'package:openote/store/repository.dart';
 import 'package:openote/ui/sticky_note.dart';
@@ -19,6 +20,7 @@ void main() {
   late Repository repo;
   late AppState app;
   late String nbId;
+  late String pageId;
 
   setUp(() async {
     if (!haveSqlite) return;
@@ -29,6 +31,10 @@ void main() {
     nbId = nb.id;
     app = AppState(repo)..notebookId = nb.id;
     app.reloadNodes();
+    // A page is needed for the default (per-page) scope to have a home.
+    final page = app.nodes.firstWhere((n) => n.kind == NodeKind.page);
+    await app.selectPage(page.id);
+    pageId = page.id;
   });
 
   tearDown(() {
@@ -94,39 +100,40 @@ void main() {
     expect(app.stickyOpacity, AppState.minStickyOpacity);
   });
 
-  test('scope routes the agenda to per-notebook vs one shared key', () {
+  test('scope routes the agenda per page vs whole notebook', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-    // Per-notebook (default): items land under this notebook's own key.
-    app.addStickyItem('for T only');
-    expect(app.stickyScopeGlobal, isFalse);
-    final perNb = repo.getSetting('sticky:$nbId') as Map;
-    expect((perNb['items'] as List).length, 1);
+    // Per page (default): items land under this page's own key.
+    app.addStickyItem('this page only');
+    expect(app.stickyWholeNotebook, isFalse);
+    final perPage = repo.getSetting('sticky:page:$pageId') as Map;
+    expect((perPage['items'] as List).length, 1);
 
-    // Switch to shared: the note reads/writes one fixed key and starts fresh.
-    app.setStickyScopeGlobal(true);
-    expect(app.stickyItems, isEmpty, reason: 'shared list starts empty');
-    app.addStickyItem('everywhere');
+    // Switch to whole-notebook: reads/writes one notebook key, starts fresh.
+    app.setStickyWholeNotebook(true);
+    expect(app.stickyItems, isEmpty,
+        reason: 'the notebook-wide list starts empty');
+    app.addStickyItem('notebook-wide');
 
-    final shared = repo.getSetting('sticky:__all__') as Map;
-    expect((shared['items'] as List).first, containsPair('t', 'everywhere'));
-    // The per-notebook list is untouched by writes made in shared scope.
-    final perNbAgain = repo.getSetting('sticky:$nbId') as Map;
-    expect((perNbAgain['items'] as List).length, 1);
-    expect(
-        (perNbAgain['items'] as List).first, containsPair('t', 'for T only'));
+    final nb = repo.getSetting('sticky:nb:$nbId') as Map;
+    expect((nb['items'] as List).first, containsPair('t', 'notebook-wide'));
+    // The per-page list is untouched by writes made in whole-notebook scope.
+    final perPageAgain = repo.getSetting('sticky:page:$pageId') as Map;
+    expect((perPageAgain['items'] as List).length, 1);
+    expect((perPageAgain['items'] as List).first,
+        containsPair('t', 'this page only'));
 
-    // Switching back restores the per-notebook list in place.
-    app.setStickyScopeGlobal(false);
-    expect(app.stickyItems.map((e) => e.text), ['for T only']);
+    // Switching back restores the page's own list in place.
+    app.setStickyWholeNotebook(false);
+    expect(app.stickyItems.map((e) => e.text), ['this page only']);
   });
 
-  test('open state, position and items are persisted per notebook', () {
+  test('open state, position and items are persisted per page', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.toggleStickyOpen();
     app.addStickyItem('Persist me');
     app.toggleStickyItem(0);
     app.setStickyPos(120, 60);
-    final raw = repo.getSetting('sticky:$nbId');
+    final raw = repo.getSetting('sticky:page:$pageId');
     expect(raw, isA<Map>());
     final m = raw as Map;
     expect(m['open'], isTrue);

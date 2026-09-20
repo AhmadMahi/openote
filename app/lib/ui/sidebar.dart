@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import '../export/pdf_vector_export.dart';
 import '../export/print_page.dart';
 import '../model/models.dart';
-import '../planner/agenda.dart';
 import '../state/app_state.dart';
 import '../study/study_stats.dart';
 import '../theme/onote_theme.dart';
@@ -15,7 +14,6 @@ import 'page_history_dialog.dart';
 import 'protect_dialog.dart';
 import 'settings_dialog.dart';
 import 'sync_dot.dart';
-import 'planner_format.dart';
 import '../theme/tokens.dart';
 import 'onote_dialog.dart';
 
@@ -125,16 +123,15 @@ class _Reveal extends StatelessWidget {
   }
 }
 
-/// Navigator (style guide §7b): a notebook bar, a search/jump box, then TWO
-/// COLUMNS — sections on the left, the active section's pages on the right —
-/// each independently scrollable and resizable, collapsible to a 44px rail.
+/// Navigator: a notebook bar, a search/jump box, then a SINGLE-COLUMN TREE —
+/// a Home tile, then each section as a folder whose pages nest beneath it when
+/// it is open. Collapsible to the premium rail (`_NavRail`).
 ///
-/// The OneNote shape, adopted because the previous stacked layout made
-/// sections and pages fight over one column's height: with a real notebook
-/// both zones scrolled, and you could never see the section list and a page
-/// list at once. Beyond the shape itself, three things OneNote doesn't do:
-/// a Home pane (favourites + recents), a remembered per-section page so
-/// browsing never loses your place, and the rail.
+/// The tree shape (Notability / the reference design) replaced an earlier
+/// two-column split: one column reads more calmly, keeps a section and its
+/// pages together, and matches how people picture "my notebook → its pages".
+/// The active section is the open folder (accordion), and the whole tree is
+/// still searchable and resizable.
 class Sidebar extends StatefulWidget {
   const Sidebar({super.key, required this.app});
   final AppState app;
@@ -182,9 +179,7 @@ class _SidebarState extends State<Sidebar> {
               _searchRow(context),
               const Divider(height: 1),
               Expanded(
-                child: searching
-                    ? _searchResults(context)
-                    : _twoColumnBody(context),
+                child: searching ? _searchResults(context) : _treeBody(context),
               ),
               const Divider(height: 1),
               _footer(context),
@@ -370,109 +365,13 @@ class _SidebarState extends State<Sidebar> {
   // see the section list and a page list at the same time — which is the
   // thing that makes OneNote's navigator effortless to scan.
 
-  Widget _twoColumnBody(BuildContext context) {
-    final sections =
-        app.nodes.where((n) => n.kind == NodeKind.section).toList();
-    if (sections.isEmpty) {
-      return _EmptyHint(
-        icon: Icons.folder_outlined,
-        text: 'No sections yet.\nCreate one to get started.',
-        actionLabel: 'New section',
-        onAction: app.addSection,
-      );
-    }
-    final active = app.activeSection ?? sections.first;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: app.navSectionsW,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _HomeTile(app: app),
-              Expanded(child: _sectionsColumn(context)),
-            ],
-          ),
-        ),
-        _VDragHandle(
-          onDrag: (dx) {
-            app.navSectionsW = (app.navSectionsW + dx).clamp(96.0, 220.0);
-            app.refresh();
-          },
-          onEnd: () => app.setNavSectionsW(app.navSectionsW),
-        ),
-        // The pages pane sits on the lighter surface colour — the same
-        // two-tone depth cue the canvas already uses, no new tokens.
-        Expanded(
-          child: Container(
-            color: context.surfaces.chrome.withValues(alpha: .45),
-            child:
-                app.navHome ? _HomePane(app: app) : _pagesZone(context, active),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _pagesZone(BuildContext context, TreeNode section) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final color = _sectionColor(section.color, dark);
-    final pages = _pageEntriesFor(app, section);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 4, 2),
-          child: Row(
-            children: [
-              Container(
-                width: 3.5,
-                height: 14,
-                decoration: BoxDecoration(
-                    color: color, borderRadius: BorderRadius.circular(4)),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  section.title.toUpperCase(),
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .6,
-                    color: dark ? OnoteColors.moon300 : OnoteColors.graphite500,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add, size: 16),
-                visualDensity: VisualDensity.compact,
-                tooltip: 'New page in ${section.title}',
-                onPressed: () => app.addPage(sectionId: section.id),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: pages.isEmpty
-              ? Center(
-                  child: Text('No pages yet',
-                      style: TextStyle(
-                          fontSize: 12, color: context.surfaces.textSecondary)),
-                )
-              : ListView(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  children: pages,
-                ),
-        ),
-      ],
-    );
-  }
-
-  // ── Section list (groups → sections) ──────────────────────────────────
-
-  Widget _sectionsColumn(BuildContext context) {
+  // ── The notebook tree (single column) ─────────────────────────────────
+  //
+  // One column, not two: sections are folders and their pages nest beneath
+  // the open one, the way Notability and the reference design lay it out.
+  // Tapping a section makes it active, which reveals its pages inline
+  // (accordion — the previously open section closes); tapping a page opens it.
+  Widget _treeBody(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final groups = app.nodes
         .where((n) => n.kind == NodeKind.sectionGroup && n.parentId == null)
@@ -482,26 +381,52 @@ class _SidebarState extends State<Sidebar> {
         .toList();
 
     if (groups.isEmpty && looseSections.isEmpty) {
-      return _EmptyHint(
-        icon: Icons.folder_outlined,
-        text: 'No sections yet.\nCreate one to get started.',
-        actionLabel: 'New section',
-        onAction: app.addSection,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _HomeTile(app: app),
+          Expanded(
+            child: _EmptyHint(
+              icon: Icons.folder_outlined,
+              text: 'No sections yet.\nCreate one to get started.',
+              actionLabel: 'New section',
+              onAction: app.addSection,
+            ),
+          ),
+        ],
       );
     }
 
-    Widget row(TreeNode s) => _SectionHeader(
-        app: app, section: s, dark: dark, active: app.activeSectionId == s.id);
+    // A section as a folder: its header, then its pages revealed inline when
+    // it is the active section.
+    Widget folder(TreeNode s) {
+      final open = app.activeSectionId == s.id;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionHeader(app: app, section: s, dark: dark, active: open),
+          _Reveal(
+            open: open,
+            child: Padding(
+              // Pages sit under their folder, indented so the nesting reads.
+              padding: const EdgeInsets.only(left: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _pageEntriesFor(app, s),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 8),
       children: [
+        _HomeTile(app: app),
+        const SizedBox(height: 4),
         for (final g in groups) ...[
           _GroupHeader(app: app, group: g),
-          // Indented AND railed. Indentation alone says "these are children";
-          // the rail is what says where the group ENDS — with several groups
-          // in a column, an indent that just stops is ambiguous, because the
-          // next group's header looks like an outdented sibling either way.
           _Reveal(
             open: !app.collapsedGroups.contains(g.id),
             child: Padding(
@@ -519,14 +444,14 @@ class _SidebarState extends State<Sidebar> {
                   children: [
                     for (final s in app.nodes.where((n) =>
                         n.kind == NodeKind.section && n.parentId == g.id))
-                      row(s),
+                      folder(s),
                   ],
                 ),
               ),
             ),
           ),
         ],
-        for (final s in looseSections) row(s),
+        for (final s in looseSections) folder(s),
       ],
     );
   }
@@ -739,228 +664,6 @@ class _HomeTile extends StatelessWidget {
 
 /// The Home pane: favourites, then recents. A springboard, not a place — any
 /// page tap returns the pane to that page's section.
-class _HomePane extends StatelessWidget {
-  const _HomePane({required this.app});
-  final AppState app;
-
-  @override
-  Widget build(BuildContext context) {
-    final favourites = app.favouritePages();
-    final recents = app.recentPages(max: 8);
-
-    Widget label(String s) => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-          child: Text(s,
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .6,
-                  color: context.surfaces.textSecondary)),
-        );
-
-    Widget row(TreeNode page, IconData icon, {Color? iconColor}) => InkWell(
-          onTap: () => app.openPage(page.id),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(children: [
-              Icon(icon,
-                  size: 16, color: iconColor ?? context.surfaces.textSecondary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(page.title.isEmpty ? 'Untitled' : page.title,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13)),
-                    Text(app.node(page.parentId)?.title ?? '',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: context.surfaces.textSecondary)),
-                  ],
-                ),
-              ),
-            ]),
-          ),
-        );
-
-    if (favourites.isEmpty && recents.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(14),
-        child: Text(
-          'Nothing here yet.\n\nRight-click a page and choose Favourite to '
-          'pin it; pages you visit show up under Recent.',
-          style: TextStyle(fontSize: 12, height: 1.45),
-        ),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 12),
-      children: [
-        _ComingUp(app: app),
-        if (favourites.isNotEmpty) ...[
-          label('FAVOURITES'),
-          for (final p in favourites)
-            row(p, Icons.star, iconColor: OnoteColors.brass400),
-        ],
-        if (recents.isNotEmpty) ...[
-          label('RECENT'),
-          for (final p in recents) row(p, Icons.history),
-        ],
-      ],
-    );
-  }
-}
-
-/// The planner, in the Home pane (v0.5 §3).
-///
-/// **A summary, not the planner.** The navigator is 96–320px wide and is a
-/// place you pass through; the planner is a working surface where dates get
-/// re-dated. So Home answers "have I got anything on" in three rows and hands
-/// off. That split is also what let the exam countdown stop hiding: this is the
-/// first surface in the app where a date is visible without having navigated to
-/// the thing it belongs to.
-///
-/// Hidden entirely when there is nothing dated — an empty heading over an empty
-/// list is the "row of zeroes" the study stats deliberately avoid.
-class _ComingUp extends StatelessWidget {
-  const _ComingUp({required this.app});
-  final AppState app;
-
-  /// Rows before it defers to the panel. Three fits above the fold beside
-  /// favourites and recents, and "what's next" is a shorter question than
-  /// "what have I got".
-  static const _max = 3;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final now = DateTime.now();
-    final sections = app.planner.sections(now: now);
-    // Overdue and today first, then whatever is next — the same order the
-    // panel shows, truncated rather than re-sorted so the two never disagree.
-    final rows = <DatedItem>[];
-    var total = 0;
-    for (final s in sections) {
-      if (s.bucket == AgendaBucket.done) continue;
-      total += s.items.length;
-      for (final it in s.items) {
-        if (rows.length < _max) rows.add(it);
-      }
-    }
-    final alerts = app.planner.pendingAlerts.length;
-    if (rows.isEmpty && alerts == 0) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 6, 4),
-          child: Row(children: [
-            Text('COMING UP',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .6,
-                    color: context.surfaces.textSecondary)),
-            const Spacer(),
-            InkWell(
-              onTap: app.openPlanner,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(total > _max ? 'All $total' : 'Open',
-                    style: TextStyle(fontSize: 11, color: scheme.primary)),
-              ),
-            ),
-          ]),
-        ),
-        if (alerts > 0)
-          InkWell(
-            onTap: app.openPlanner,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 3, 12, 3),
-              child: Row(children: [
-                Icon(Icons.notifications_active_outlined,
-                    size: 16, color: scheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                      '$alerts reminder${alerts == 1 ? '' : 's'} waiting',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.primary)),
-                ),
-              ]),
-            ),
-          ),
-        for (final it in rows)
-          InkWell(
-            onTap: () {
-              if (it.pageId != null) {
-                app.openPage(it.pageId!);
-              } else {
-                app.openPlanner();
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 3, 12, 3),
-              child: Row(children: [
-                Icon(_icon(it.kind),
-                    size: OnoteIcon.sm,
-                    color: _colour(it.kind, scheme, context.surfaces)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(it.title,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 12,
-                          decoration:
-                              it.done ? TextDecoration.lineThrough : null)),
-                ),
-                const SizedBox(width: 6),
-                Text(plannerWhen(it, now),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: bucketFor(it, now) == AgendaBucket.overdue
-                            ? OnoteColors.danger
-                            : context.surfaces.textSecondary)),
-              ]),
-            ),
-          ),
-      ],
-    );
-  }
-
-  static IconData _icon(DatedKind k) => switch (k) {
-        DatedKind.exam => Icons.flag_outlined,
-        DatedKind.task => Icons.check_box_outline_blank,
-        DatedKind.reminder => Icons.notifications_none,
-        DatedKind.event => Icons.schedule,
-      };
-
-  static Color _colour(DatedKind k, ColorScheme scheme, OnoteSurfaces s) =>
-      switch (k) {
-        DatedKind.exam => OnoteColors.brass500,
-        DatedKind.task => scheme.primary,
-        DatedKind.reminder => OnoteColors.ink400,
-        DatedKind.event => s.textSecondary,
-      };
-}
-
-/// The collapsed navigator: a slim, premium floating rail. The glass shell,
-/// rounding and shadow come from the [GlassCard] this sits inside; the rail
-/// adds a soft, theme-aware accent wash and a calm top-to-bottom rhythm —
-/// brand, expand, primary navigation, the notebook's own sections, then the
-/// utility cluster and the notebook avatar anchored at the foot.
-///
-/// Colours are entirely theme-derived (accent + surface tokens), so the
-/// lavender feel on the default theme follows any accent choice and both light
-/// and dark modes. Every control maps to a real destination — nothing here is
-/// decorative.
 class _NavRail extends StatelessWidget {
   const _NavRail({required this.app, required this.dark});
   final AppState app;

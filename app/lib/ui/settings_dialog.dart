@@ -403,15 +403,15 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             segments: const [
               ButtonSegment(
                   value: false,
-                  label: Text('Per notebook'),
-                  tooltip: 'Each notebook keeps its own agenda'),
+                  label: Text('Per page'),
+                  tooltip: 'Each page keeps its own agenda'),
               ButtonSegment(
                   value: true,
-                  label: Text('All notebooks'),
-                  tooltip: 'One shared agenda everywhere'),
+                  label: Text('Whole notebook'),
+                  tooltip: 'One agenda shared across the notebook'),
             ],
-            selected: {app.stickyScopeGlobal},
-            onSelectionChanged: (s) => app.setStickyScopeGlobal(s.first),
+            selected: {app.stickyWholeNotebook},
+            onSelectionChanged: (s) => app.setStickyWholeNotebook(s.first),
           ),
         ),
         _rowStacked(
