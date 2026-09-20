@@ -7635,7 +7635,7 @@ class AppState extends ChangeNotifier
   /// (like the opacity, one preferred size everywhere) so it reopens the same.
   /// Null until first resized, so the widget uses its own default.
   double? stickyW, stickyH;
-  static const double minStickyW = 260;
+  static const double minStickyW = 300;
   static const double maxStickyW = 640;
   static const double minStickyH = 200;
   static const double maxStickyH = 820;

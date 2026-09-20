@@ -32,7 +32,7 @@ class StickyNote extends StatelessWidget {
   final double topInset;
 
   /// The note's size before it has ever been resized.
-  static const double _defaultWidth = 320;
+  static const double _defaultWidth = 360;
   static const double _defaultHeight = 360;
 
   @override
@@ -352,10 +352,15 @@ class _NoteCardState extends State<_NoteCard> {
         behavior: HitTestBehavior.opaque,
         onPanUpdate: (d) => app.setStickySize(
             widget.width + d.delta.dx, widget.height + d.delta.dy),
-        child: Padding(
-          padding: const EdgeInsets.all(3),
-          child: Icon(Icons.south_east_rounded,
-              size: 14, color: s.textSecondary.withValues(alpha: 0.7)),
+        child: SizedBox(
+          // A generous, invisible hit area so the corner is easy to grab.
+          width: 24,
+          height: 24,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 4, bottom: 4),
+            child: Icon(Icons.south_east_rounded,
+                size: 15, color: s.textSecondary.withValues(alpha: 0.8)),
+          ),
         ),
       ),
     );
@@ -665,6 +670,9 @@ class _NoteCardState extends State<_NoteCard> {
           hintText: timer
               ? 'Add an item (or "break")…'
               : 'Add an item… or rough notes for AI',
+          // Keep the placeholder on one line so the bar stays a single row at
+          // rest; typed or pasted text still grows the field up to maxLines.
+          hintMaxLines: 1,
           hintStyle: TextStyle(fontSize: 12.5, color: s.textSecondary),
         ),
       ),
@@ -673,7 +681,7 @@ class _NoteCardState extends State<_NoteCard> {
 
   Widget _minutesField(OnoteSurfaces s, ColorScheme scheme) {
     return SizedBox(
-      width: 76,
+      width: 66,
       height: _ctlH,
       child: TextField(
         controller: _minutes,
