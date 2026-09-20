@@ -36,23 +36,46 @@ abstract final class PdfPages {
   static var _pageBytes = 0;
   static const _maxPageBytes = 96 << 20; // ~96 MB of decoded slides
 
+  /// Renders IN FLIGHT, keyed `hash#page`. This is the fix for the "keeps
+  /// loading forever" a freshly-inserted deck showed: the block's FutureBuilder
+  /// asks for the page on EVERY rebuild, and right after an insert the block
+  /// rebuilds many times a second (selection, drag handles, notifies). Without
+  /// this map each rebuild kicked off ANOTHER render of the same page, and a
+  /// pile of concurrent pdfium renders on one document starve each other so
+  /// nothing ever settles. Now every caller for the same page shares the one
+  /// render future — stable in identity, so the FutureBuilder does not even
+  /// resubscribe — and the first result caches for the rest.
+  static final Map<String, Future<Uint8List?>> _inflight = {};
+
   /// The rendered image for [page] of the PDF stored as [hash], from cache or
   /// freshly rendered. Null when the blob is absent (a sync still bringing it
   /// across) or the bytes are not a readable PDF.
-  static Future<Uint8List?> pageImage(
-      AppState app, String hash, int page) async {
+  static Future<Uint8List?> pageImage(AppState app, String hash, int page) {
     final key = '$hash#$page';
     final hit = _pages.remove(key);
     if (hit != null) {
       _pages[key] = hit; // re-insert: LRU freshness
-      return hit;
+      return Future.value(hit);
     }
+    final existing = _inflight[key];
+    if (existing != null) return existing; // share the render already running
+    final fut = _renderPage(app, hash, page, key);
+    _inflight[key] = fut;
+    fut.whenComplete(() {
+      if (identical(_inflight[key], fut)) _inflight.remove(key);
+    });
+    return fut;
+  }
+
+  static Future<Uint8List?> _renderPage(
+      AppState app, String hash, int page, String key) async {
     final doc = await _open(app, hash);
     if (doc == null) return null;
     doc.busy++;
     try {
-      if (page < 0 || page >= doc.doc.pages.length) return null;
-      final png = await renderPdfPageToPng(doc.doc.pages[page]);
+      final d = doc.doc;
+      if (d == null || page < 0 || page >= d.pages.length) return null;
+      final png = await renderPdfPageToPng(d.pages[page]);
       if (png == null) return null;
       _pages[key] = png.png;
       _pageBytes += png.png.length;
@@ -70,18 +93,47 @@ abstract final class PdfPages {
 
   /// How many pages the stored PDF has, or null when it cannot be opened.
   static Future<int?> pageCount(AppState app, String hash) async =>
-      (await _open(app, hash))?.doc.pages.length;
+      (await _open(app, hash))?.doc?.pages.length;
 
   static Future<_Doc?> _open(AppState app, String hash) async {
     final held = _docs.remove(hash);
     if (held != null) {
-      _docs[hash] = held;
-      return held.failed ? null : held;
+      _docs[hash] = held; // LRU refresh
+      // A concurrent first-open may still be in flight — wait for the SAME
+      // open rather than starting a second one (and reading a not-yet-set
+      // document, which used to throw a LateInitializationError).
+      final op = held.opening;
+      if (op != null) await op;
+      return held.failed || held.doc == null ? null : held;
     }
     final bytes = app.blob(hash);
     if (bytes == null) return null;
     final entry = _Doc();
     _docs[hash] = entry;
+    final open = _load(entry, bytes, hash);
+    entry.opening = open;
+    await open;
+    entry.opening = null;
+    if (entry.failed || entry.doc == null) return null;
+    // Evict beyond the cap — least recently used first, never one mid-render
+    // or mid-open.
+    final evictable = _docs.entries
+        .where((e) =>
+            e.key != hash &&
+            e.value.busy == 0 &&
+            e.value.opening == null &&
+            !e.value.failed &&
+            e.value.doc != null)
+        .map((e) => e.key)
+        .toList();
+    while (_docs.length > _maxDocs && evictable.isNotEmpty) {
+      final victim = _docs.remove(evictable.removeAt(0))!;
+      unawaited(victim.doc!.dispose());
+    }
+    return entry;
+  }
+
+  static Future<void> _load(_Doc entry, Uint8List bytes, String hash) async {
     try {
       entry.doc = await PdfDocument.openData(bytes, sourceName: hash);
     } catch (e) {
@@ -89,35 +141,29 @@ abstract final class PdfPages {
       // stays corrupt, and every caller re-opening it would jank the canvas.
       entry.failed = true;
       debugPrint('[openote/pdf] could not open $hash: $e');
-      return null;
     }
-    // Evict beyond the cap — least recently used first, never one mid-render.
-    final evictable = _docs.entries
-        .where((e) => e.key != hash && e.value.busy == 0 && !e.value.failed)
-        .map((e) => e.key)
-        .toList();
-    while (_docs.length > _maxDocs && evictable.isNotEmpty) {
-      final victim = _docs.remove(evictable.removeAt(0))!;
-      unawaited(victim.doc.dispose());
-    }
-    return entry;
   }
 
   /// Drop everything — for tests, and for a notebook switch where holding
   /// another notebook's documents open would pin its blobs in memory.
   static Future<void> reset() async {
-    final docs = _docs.values.where((d) => !d.failed).toList();
+    final docs = _docs.values.where((d) => !d.failed && d.doc != null).toList();
     _docs.clear();
     _pages.clear();
+    _inflight.clear();
     _pageBytes = 0;
     for (final d in docs) {
-      await d.doc.dispose();
+      await d.doc!.dispose();
     }
   }
 }
 
 class _Doc {
-  late PdfDocument doc;
+  PdfDocument? doc;
+
+  /// The open in progress, so concurrent openers share one parse instead of
+  /// racing (and reading `doc` before it is set).
+  Future<void>? opening;
   var busy = 0;
   var failed = false;
 }

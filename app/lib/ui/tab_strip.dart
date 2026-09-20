@@ -45,7 +45,8 @@ class TabStrip extends StatelessWidget {
       ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 8, right: 8),
+        // No leading gap — the first tab sits flush to the strip's left edge.
+        padding: const EdgeInsets.only(left: 0, right: 8),
         itemCount: app.openTabs.length,
         separatorBuilder: (_, __) => const SizedBox(width: 3),
         itemBuilder: (context, i) =>
@@ -114,32 +115,38 @@ class _TabState extends State<_Tab> {
                 duration: const Duration(milliseconds: 140),
                 curve: Curves.easeOut,
                 height: active ? widget.barHeight : widget.barHeight - 7,
-                constraints: const BoxConstraints(maxWidth: 220, minWidth: 108),
+                constraints: const BoxConstraints(maxWidth: 240, minWidth: 150),
                 decoration: BoxDecoration(
-                  // Active matches the content surface; inactive is transparent
-                  // (a faint fill on hover) so it reads as recessed.
+                  // Active matches the content surface; inactive keeps a faint
+                  // fill (brighter on hover) so every tab reads as its own
+                  // shape rather than floating text.
                   color: active
                       ? s.raised
                       : _hover
-                          ? s.raised.withValues(alpha: dark ? 0.4 : 0.55)
-                          : Colors.transparent,
+                          ? s.raised.withValues(alpha: dark ? 0.5 : 0.66)
+                          : s.raised.withValues(alpha: dark ? 0.22 : 0.42),
                   border: Border(
-                    // Hairline sides define the tab shape against the bar; the
+                    // Hairline sides define each tab against its neighbours; the
                     // coloured top indicator is the clipped strip below, not a
                     // border, so its ends round with the corner.
                     left: BorderSide(
-                        color: active ? s.border : Colors.transparent),
+                        color: active
+                            ? s.border
+                            : s.border.withValues(alpha: 0.5)),
                     right: BorderSide(
-                        color: active ? s.border : Colors.transparent),
+                        color: active
+                            ? s.border
+                            : s.border.withValues(alpha: 0.5)),
                   ),
                 ),
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 12, right: 6),
+                        // A touch more breathing room, and the × rides the
+                        // trailing edge (see the Expanded title below).
+                        padding: const EdgeInsets.only(left: 12, right: 8),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.description_rounded,
                                 size: 16,
@@ -147,7 +154,10 @@ class _TabState extends State<_Tab> {
                                     ? accent
                                     : accent.withValues(alpha: 0.55)),
                             const SizedBox(width: 8),
-                            Flexible(
+                            // Expanded, so the title takes the middle and pushes
+                            // the close button to the tab's right end instead of
+                            // hugging the label.
+                            Expanded(
                               child: Text(
                                 title,
                                 maxLines: 1,
@@ -162,9 +172,9 @@ class _TabState extends State<_Tab> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            // A steady slot so the label does not shift when ×
-                            // appears; the × only shows for the active or
-                            // hovered tab.
+                            // A steady slot at the trailing edge so the label
+                            // does not shift when × appears; the × only shows
+                            // for the active or hovered tab.
                             SizedBox(
                               width: 20,
                               height: 20,

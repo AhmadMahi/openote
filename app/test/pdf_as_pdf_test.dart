@@ -44,8 +44,8 @@ void main() {
     await initPdfiumForTests();
     pdfBytes = await _twoPagePdf();
     try {
-      final d = await PdfDocument.openData(
-          Uint8List.fromList(pdfBytes), sourceName: 'probe');
+      final d = await PdfDocument.openData(Uint8List.fromList(pdfBytes),
+          sourceName: 'probe');
       havePdfium = d.pages.length == 2;
       await d.dispose();
     } catch (_) {
@@ -93,8 +93,7 @@ void main() {
     final r = await importPdfFile(app, pdfFile.path, 'deck.pdf');
     expect(r.pages, 2);
 
-    final slides =
-        app.blocks.where((b) => b.content['pdf'] is String).toList();
+    final slides = app.blocks.where((b) => b.content['pdf'] is String).toList();
     expect(slides, hasLength(2));
     for (final s in slides) {
       expect(s.type, BlockType.image);
@@ -145,6 +144,31 @@ void main() {
         reason: 'a page the document does not have is null, not a throw');
   });
 
+  test('concurrent looks at a fresh slide share one render', () async {
+    if (!haveSqlite || !havePdfium) {
+      return markTestSkipped('sqlite or pdfium unavailable');
+    }
+    await importPdfFile(app, pdfFile.path, 'deck.pdf');
+    final ref = app.blocks
+        .firstWhere((b) => b.content['pdf'] is String)
+        .content['pdf'] as String;
+    await PdfPages.reset(); // nothing cached or in flight
+
+    // A freshly-inserted deck's FutureBuilder asks for the page on every
+    // rebuild; before the in-flight de-dupe each of these started its OWN
+    // render and the pile of concurrent renders never settled (the endless
+    // spinner). Now they must all resolve to the very same bytes.
+    final results = await Future.wait([
+      PdfPages.pageImage(app, ref, 0),
+      PdfPages.pageImage(app, ref, 0),
+      PdfPages.pageImage(app, ref, 0),
+    ]);
+    expect(results[0], isNotNull, reason: 'the shared render produced a slide');
+    expect(identical(results[0], results[1]), isTrue,
+        reason: 'one render, shared by every caller');
+    expect(identical(results[1], results[2]), isTrue);
+  });
+
   test('card mode: one block, the whole deck behind it', () async {
     if (!haveSqlite || !havePdfium) {
       return markTestSkipped('sqlite or pdfium unavailable');
@@ -167,9 +191,8 @@ void main() {
     // The blob_refs write path itself, with dummy bytes — this half must
     // hold even on machines where pdfium is missing entirely.
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
-    final hash = repo.putBlob(
-        app.notebookId!, Uint8List.fromList(List.filled(64, 7)),
-        'application/pdf');
+    final hash = repo.putBlob(app.notebookId!,
+        Uint8List.fromList(List.filled(64, 7)), 'application/pdf');
     repo.writePage(
       app.notebookId!,
       pageId,
