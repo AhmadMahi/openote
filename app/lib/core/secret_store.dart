@@ -168,8 +168,8 @@ abstract final class SecretStore {
   // ── Windows: Credential Manager via advapi32 ─────────────────────────
 
   /// How the entry is named in the Credential Manager UI ("Windows
-  /// Credentials" → "Generic Credentials"): `Openote/<key>`.
-  static String _winTarget(String key) => 'Openote/$key';
+  /// Credentials" → "Generic Credentials"): `Slate/<key>`.
+  static String _winTarget(String key) => 'Slate/$key';
 
   static const int _credTypeGeneric = 1; // CRED_TYPE_GENERIC
   static const int _credPersistLocalMachine = 2; // survives logoff, this user
@@ -259,7 +259,7 @@ abstract final class SecretStore {
 
   // ── macOS: login Keychain via Security.framework ─────────────────────
 
-  static const _macService = 'Openote';
+  static const _macService = 'Slate';
 
   static DynamicLibrary get _security => DynamicLibrary.open(
       '/System/Library/Frameworks/Security.framework/Security');

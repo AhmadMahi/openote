@@ -21,12 +21,12 @@ import '../markdown/md_syntax.dart';
 
 /// The running app's version. pubspec.yaml is the source of truth;
 /// app_update_test.dart fails the build the moment the two drift.
-const kAppVersion = '1.0.0';
+const kAppVersion = '2.0.0';
 
 /// Our release build number. Releases are tagged `slate-<kAppVersion>-b<N>`;
 /// this is the running build's N, so the update check can tell one 0.8.0 build
 /// from the next. Bump it with every release.
-const kAppBuild = 29;
+const kAppBuild = 1;
 
 const _kLatestReleaseApi =
     'https://api.github.com/repos/AhmadMahi/openote/releases/latest';

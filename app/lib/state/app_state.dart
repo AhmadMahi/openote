@@ -7780,7 +7780,11 @@ class AppState extends ChangeNotifier
 
   void toggleStickyItem(int i) {
     if (i < 0 || i >= stickyItems.length) return;
-    stickyItems[i].done = !stickyItems[i].done;
+    final it = stickyItems[i];
+    it.done = !it.done;
+    // Marking done clears any running clock, so re-opening or re-starting the
+    // item begins fresh from its full time rather than resurfacing old overtime.
+    if (it.done) it.startedAtMs = null;
     _persistSticky();
     notifyListeners();
   }
@@ -7816,9 +7820,12 @@ class AppState extends ChangeNotifier
   }
 
   /// Mark an item complete (the second click, or a break's timer ending).
+  /// Clearing the start time resets its clock, so starting it again later
+  /// counts down from the full time instead of resuming old overtime.
   void completeStickyItem(int i) {
     if (i < 0 || i >= stickyItems.length) return;
     stickyItems[i].done = true;
+    stickyItems[i].startedAtMs = null;
     _persistSticky();
     notifyListeners();
   }

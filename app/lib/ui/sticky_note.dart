@@ -153,6 +153,10 @@ class _NoteCardState extends State<_NoteCard> {
   final _minutes = TextEditingController();
   bool _generating = false;
 
+  /// Whether the pointer is over the bottom-right corner (shows the resize
+  /// arrow, which is otherwise hidden).
+  bool _hoverResize = false;
+
   /// Ticks once a second while an item is running, to refresh the countdown.
   Timer? _ticker;
 
@@ -346,15 +350,30 @@ class _NoteCardState extends State<_NoteCard> {
   }
 
   Widget _resizeHandle(OnoteSurfaces s, ColorScheme scheme) {
-    // No visible grip — the cursor change on hover is the only hint. Kept small
-    // so it sits in the very corner and never steals the AI button's clicks.
+    // No permanent grip; a small arrow fades in only while you hover the very
+    // corner, hinting you can pull to resize. Kept small so it never steals the
+    // AI button's clicks.
     return MouseRegion(
       cursor: SystemMouseCursors.resizeUpLeftDownRight,
+      onEnter: (_) => setState(() => _hoverResize = true),
+      onExit: (_) => setState(() => _hoverResize = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanUpdate: (d) => app.setStickySize(
             widget.width + d.delta.dx, widget.height + d.delta.dy),
-        child: const SizedBox(width: 16, height: 16),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: AnimatedOpacity(
+            opacity: _hoverResize ? 1 : 0,
+            duration: const Duration(milliseconds: 120),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 3, bottom: 3),
+              child: Icon(Icons.south_east_rounded,
+                  size: 13, color: s.textSecondary.withValues(alpha: 0.9)),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -567,14 +586,18 @@ class _NoteCardState extends State<_NoteCard> {
               : ReorderableListView.builder(
                   buildDefaultDragHandles: false,
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  itemCount: items.length,
+                  // Delete-all is a real last row (past five items), so it is
+                  // out of sight until you scroll down to the end of the list.
+                  // It carries no drag handle, so it cannot be picked up; and
+                  // reorderStickyItem clamps any drop, so nothing lands "after"
+                  // it.
+                  itemCount: items.length + (items.length > 5 ? 1 : 0),
                   onReorder: app.reorderStickyItem,
-                  itemBuilder: (context, i) => _itemRow(context, s, scheme, i),
+                  itemBuilder: (context, i) => i < items.length
+                      ? _itemRow(context, s, scheme, i)
+                      : _deleteAllItem(s, scheme),
                 ),
         ),
-        // Delete-all sits at the very end of the list, and only earns its
-        // place once the list is long enough to need it (more than five items).
-        if (items.length > 5) _deleteAllItem(s, scheme),
         Divider(height: 1, color: s.border.withValues(alpha: 0.6)),
         _addBar(context, s, scheme, timer),
       ],
@@ -749,6 +772,8 @@ class _NoteCardState extends State<_NoteCard> {
   /// items), so it never crowds a short list.
   Widget _deleteAllItem(OnoteSurfaces s, ColorScheme scheme) {
     return Padding(
+      // Required: every ReorderableListView child is keyed.
+      key: const ValueKey('sticky-delete-all'),
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       child: Material(
         color: scheme.error.withValues(alpha: 0.10),

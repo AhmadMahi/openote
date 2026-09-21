@@ -181,6 +181,38 @@ void main() {
     expect((raw['items'] as List).first, containsPair('m', 20));
   });
 
+  test(
+      'completing clears the clock so a restart is fresh (no lingering overtime)',
+      () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.toggleStickyTimerMode();
+    app.addStickyItem('Talk', minutes: 20);
+
+    // Start it in the past so it is deep in overtime.
+    app.startStickyItem(0);
+    app.stickyItems[0].startedAtMs =
+        DateTime.now().millisecondsSinceEpoch - 30 * 60 * 1000; // 30m ago
+    expect(app.stickyItems[0].running, isTrue);
+
+    // Completing clears the start time, so it is no longer running/overtime.
+    app.completeStickyItem(0);
+    expect(app.stickyItems[0].done, isTrue);
+    expect(app.stickyItems[0].startedAtMs, isNull);
+    expect(app.stickyItems[0].running, isFalse);
+
+    // Un-completing does NOT resurrect the old overtime clock.
+    app.toggleStickyItem(0);
+    expect(app.stickyItems[0].done, isFalse);
+    expect(app.stickyItems[0].startedAtMs, isNull);
+    expect(app.stickyItems[0].running, isFalse);
+
+    // Starting again begins fresh (a start time within the last second).
+    app.startStickyItem(0);
+    final elapsed =
+        DateTime.now().millisecondsSinceEpoch - app.stickyItems[0].startedAtMs!;
+    expect(elapsed, lessThan(2000), reason: 'the clock restarted from full');
+  });
+
   test('timer mode: reorder, minutes edit, and break detection', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.toggleStickyTimerMode();
@@ -308,9 +340,9 @@ void main() {
     expect(app.stickyY, greaterThan(100), reason: 'header drag moved it down');
   });
 
-  // Delete-all is the last row of the list, and earns its place only once the
-  // list is long enough to need it (more than five items).
-  testWidgets('delete-all appears only past five items, at the list end',
+  // Delete-all is the last row of the SCROLLING list — out of sight until you
+  // reach the end — and earns its place only past five items.
+  testWidgets('delete-all is at the end of the list, only past five items',
       (t) async {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.toggleStickyOpen();
@@ -329,15 +361,25 @@ void main() {
           ),
         );
 
+    // A tall note so the whole (short) list plus the trailing row all fit,
+    // and the delete-all can be asserted without scrolling.
+    app.setStickySize(AppState.minStickyW, AppState.maxStickyH);
+
     await t.pumpWidget(host());
     await t.pump();
+    expect(tester_exception(t), isNull, reason: 'the list builds cleanly');
     expect(find.text('Delete all'), findsNothing,
-        reason: 'five items is not enough to show it');
+        reason: 'five items is not enough for it to exist at all');
 
     app.addStickyItem('Item 6'); // now six
     await t.pump();
+    expect(tester_exception(t), isNull,
+        reason: 'adding the trailing delete-all row builds cleanly');
     expect(find.text('Delete all'), findsOneWidget,
-        reason: 'past five items it appears');
+        reason: 'past five items it is the last row of the list');
     app.cancelPendingSave();
   });
 }
+
+/// Returns and clears any exception the widget tree threw during build/layout.
+Object? tester_exception(WidgetTester t) => t.takeException();
