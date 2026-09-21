@@ -1268,36 +1268,29 @@ class _SectionHeaderState extends State<_SectionHeader> {
       onLongPress: () => showNodeMenu(context, app, section,
           canIndent: false, position: _downPos),
       child: Container(
-        // Inset so the pill sits off the edges, with a touch of vertical gap.
         margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        // No filled pill: the active section is shown by its coloured bar and
+        // accent text, not a whole background. Only a drop target draws a soft
+        // outline.
         decoration: pageTarget
             ? BoxDecoration(
                 border:
                     Border.all(color: scheme.primary.withValues(alpha: .45)),
                 borderRadius: OnoteRadius.mdAll,
                 color: scheme.primary.withValues(alpha: .06))
-            : active
-                ? BoxDecoration(
-                    color: scheme.primary.withValues(alpha: dark ? .16 : .10),
-                    borderRadius: OnoteRadius.mdAll,
-                    // A soft lift on the active section, no hard edges.
-                    boxShadow: [
-                        BoxShadow(
-                            color: scheme.primary
-                                .withValues(alpha: dark ? .20 : .12),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3)),
-                      ])
-                : null,
+            : null,
         padding: const EdgeInsets.fromLTRB(8, 9, 8, 9),
         child: Row(
           children: [
             const SizedBox(width: 4),
+            // The section's colour bar — taller and full-strength when active,
+            // quieter otherwise. This is the whole active indicator.
             Container(
               width: 3.5,
-              height: 16,
+              height: active ? 18 : 14,
               decoration: BoxDecoration(
-                  color: color, borderRadius: BorderRadius.circular(4)),
+                  color: active ? color : color.withValues(alpha: .55),
+                  borderRadius: BorderRadius.circular(4)),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1741,10 +1734,8 @@ class _PageTileState extends State<_PageTile> {
       fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
       color: selected || subpageTarget ? scheme.primary : null,
     );
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      // Inset so the selected row reads as a soft rounded pill, and a real gap
-      // above/below so pages never look stacked on top of one another.
+      // A gap above/below each row so pages never look stacked on one another.
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       child: Material(
         color: Colors.transparent,
@@ -1774,31 +1765,32 @@ class _PageTileState extends State<_PageTile> {
           onLongPress: () => showNodeMenu(context, app, page,
               canIndent: true, position: _downPos),
           child: Container(
-            decoration: BoxDecoration(
-              borderRadius: OnoteRadius.mdAll,
-              color: selected
-                  ? scheme.primary.withValues(alpha: dark ? .16 : .10)
-                  : subpageTarget
-                      ? scheme.primary.withValues(alpha: .06)
-                      : null,
-              border: subpageTarget
-                  ? Border.all(color: scheme.primary.withValues(alpha: .45))
-                  : null,
-              // A soft lift on the current page, no hard edges.
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                          color: scheme.primary
-                              .withValues(alpha: dark ? .20 : .12),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3)),
-                    ]
-                  : null,
-            ),
+            // No filled pill for the current page: only a slim accent bar (see
+            // below) and accent text mark it. A drop target still draws a soft
+            // outline so it is clear where a dragged page will land.
+            decoration: subpageTarget
+                ? BoxDecoration(
+                    borderRadius: OnoteRadius.mdAll,
+                    color: scheme.primary.withValues(alpha: .06),
+                    border: Border.all(
+                        color: scheme.primary.withValues(alpha: .45)),
+                  )
+                : null,
             padding: EdgeInsets.only(
                 left: 8.0 + page.level * 15, right: 4, top: 6, bottom: 6),
             child: Row(
               children: [
+                // A slim accent bar is the whole "this is the current page"
+                // indicator — no background fill.
+                Container(
+                  width: 3,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 5),
+                  decoration: BoxDecoration(
+                    color: selected ? scheme.primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
                 // Collapse chevron (only when the page has subpages)
                 SizedBox(
                   width: 16,
