@@ -401,22 +401,26 @@ class _SidebarState extends State<Sidebar> {
     // it is the active section.
     Widget folder(TreeNode s) {
       final open = app.activeSectionId == s.id;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SectionHeader(app: app, section: s, dark: dark, active: open),
-          _Reveal(
-            open: open,
-            child: Padding(
-              // Pages sit under their folder, indented so the nesting reads.
-              padding: const EdgeInsets.only(left: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _pageEntriesFor(app, s),
+      return Padding(
+        // A clear gap between one folder and the next, so sections never stack.
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionHeader(app: app, section: s, dark: dark, active: open),
+            _Reveal(
+              open: open,
+              child: Padding(
+                // Pages sit under their folder, indented so the nesting reads.
+                padding: const EdgeInsets.only(left: 16, top: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _pageEntriesFor(app, s),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -434,9 +438,10 @@ class _SidebarState extends State<Sidebar> {
               child: Container(
                 decoration: BoxDecoration(
                   border: Border(
+                    // A soft translucent guide, not a hard rule.
                     left: BorderSide(
-                        color:
-                            dark ? OnoteColors.night300 : OnoteColors.paper300),
+                        color: (dark ? Colors.white : Colors.black)
+                            .withValues(alpha: dark ? .08 : .06)),
                   ),
                 ),
                 child: Column(
@@ -1263,6 +1268,8 @@ class _SectionHeaderState extends State<_SectionHeader> {
       onLongPress: () => showNodeMenu(context, app, section,
           canIndent: false, position: _downPos),
       child: Container(
+        // Inset so the pill sits off the edges, with a touch of vertical gap.
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration: pageTarget
             ? BoxDecoration(
                 border:
@@ -1282,7 +1289,7 @@ class _SectionHeaderState extends State<_SectionHeader> {
                             offset: const Offset(0, 3)),
                       ])
                 : null,
-        padding: const EdgeInsets.fromLTRB(6, 7, 6, 7),
+        padding: const EdgeInsets.fromLTRB(8, 9, 8, 9),
         child: Row(
           children: [
             const SizedBox(width: 4),
@@ -1736,9 +1743,9 @@ class _PageTileState extends State<_PageTile> {
     );
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      // A little inset so the selected row reads as a soft rounded pill, not a
-      // full-bleed rectangle against the glass.
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      // Inset so the selected row reads as a soft rounded pill, and a real gap
+      // above/below so pages never look stacked on top of one another.
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       child: Material(
         color: Colors.transparent,
         borderRadius: OnoteRadius.mdAll,

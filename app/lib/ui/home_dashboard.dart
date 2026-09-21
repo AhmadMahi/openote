@@ -307,49 +307,54 @@ class _HomeDashboardState extends State<HomeDashboard> {
         padding: const EdgeInsets.fromLTRB(
             OnoteSpace.x9, OnoteSpace.x8, OnoteSpace.x9, OnoteSpace.x9),
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Home',
-                        style: OnoteType.display
-                            .copyWith(fontSize: 30, color: s.textPrimary)),
-                    const SizedBox(height: OnoteSpace.x2),
-                    Text('Pick up where you left off, or start something new.',
-                        style: OnoteType.ui.copyWith(color: s.textSecondary)),
-                  ],
+          _Sheet(
+            padding: const EdgeInsets.fromLTRB(
+                OnoteSpace.x7, OnoteSpace.x6, OnoteSpace.x6, OnoteSpace.x6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Home',
+                          style: OnoteType.display
+                              .copyWith(fontSize: 30, color: s.textPrimary)),
+                      const SizedBox(height: OnoteSpace.x2),
+                      Text(
+                          'Pick up where you left off, or start something new.',
+                          style: OnoteType.ui.copyWith(color: s.textSecondary)),
+                    ],
+                  ),
                 ),
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.cloud_download_outlined,
-                    size: OnoteIcon.md),
-                label: const Text('Import'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 42),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: OnoteSpace.x5),
-                  shape: const RoundedRectangleBorder(
-                      borderRadius: OnoteRadius.lgAll),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.cloud_download_outlined,
+                      size: OnoteIcon.md),
+                  label: const Text('Import'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: OnoteSpace.x5),
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: OnoteRadius.lgAll),
+                  ),
+                  onPressed: () => showRestoreDialog(context, app),
                 ),
-                onPressed: () => showRestoreDialog(context, app),
-              ),
-              const SizedBox(width: OnoteSpace.x3),
-              FilledButton.icon(
-                icon: const Icon(Icons.add, size: OnoteIcon.md),
-                label: const Text('New notebook'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 42),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: OnoteSpace.x7),
-                  shape: const RoundedRectangleBorder(
-                      borderRadius: OnoteRadius.lgAll),
+                const SizedBox(width: OnoteSpace.x3),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add, size: OnoteIcon.md),
+                  label: const Text('New notebook'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: OnoteSpace.x7),
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: OnoteRadius.lgAll),
+                  ),
+                  onPressed: () => _newNotebook(context),
                 ),
-                onPressed: () => _newNotebook(context),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: OnoteSpace.x8),
           Row(children: [
@@ -386,21 +391,21 @@ class _HomeDashboardState extends State<HomeDashboard> {
             Text('Continue where you left off',
                 style: OnoteType.small.copyWith(color: s.textSecondary)),
             const SizedBox(height: OnoteSpace.x4),
-            _Sheet(
-              child: Column(children: [
-                for (final (i, r) in recents.indexed) ...[
-                  if (i > 0)
-                    Divider(height: 1, color: s.border.withValues(alpha: .6)),
-                  _RecentRow(
-                    page: r.page,
-                    notebook: r.nb,
-                    section: r.section,
-                    hue: notebookHue(r.nb.id, dark: dark),
-                    onTap: () => _openRecent(r.nb.id, r.page.id),
-                  ),
-                ],
-              ]),
-            ),
+            // Each recent page is its own translucent card (like Your
+            // projects), with clear spacing between them — no cramped rows.
+            for (final (i, r) in recents.indexed) ...[
+              if (i > 0) const SizedBox(height: OnoteSpace.x4),
+              _Sheet(
+                glow: notebookHue(r.nb.id, dark: dark),
+                child: _RecentRow(
+                  page: r.page,
+                  notebook: r.nb,
+                  section: r.section,
+                  hue: notebookHue(r.nb.id, dark: dark),
+                  onTap: () => _openRecent(r.nb.id, r.page.id),
+                ),
+              ),
+            ],
           ],
         ],
       );
@@ -776,7 +781,9 @@ class _RecentRow extends StatelessWidget {
     final s = context.surfaces;
     return Material(
       color: Colors.transparent,
+      borderRadius: OnoteRadius.xlAll,
       child: InkWell(
+        borderRadius: OnoteRadius.xlAll,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(
