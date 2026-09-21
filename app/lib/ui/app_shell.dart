@@ -1385,9 +1385,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           body: Listener(
             onPointerDown: (_) => _ring.value = null,
             child: Stack(children: [
-              // The room: the ambient ground the cards float on. In focus
-              // mode the canvas covers it edge to edge.
-              const Positioned.fill(child: AmbientBackdrop()),
+              // The room: the ambient ground the cards float on — the chosen
+              // window background. In focus mode the canvas covers it edge to
+              // edge. The sidebar and Home float on it as glass; the note
+              // canvas paints its own opaque paper, so notes are never tinted.
+              Positioned.fill(
+                child: AmbientBackdrop(
+                  style: app.backgroundStyle,
+                  opacity: app.backgroundOpacity,
+                  imagePath: app.backgroundImagePath,
+                ),
+              ),
               Row(
                 children: [
                   // Focus mode takes the whole frame away, not just the

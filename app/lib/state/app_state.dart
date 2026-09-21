@@ -4263,6 +4263,59 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  // ── Appearance: window background ─────────────────────────────────────────
+  //
+  // A wallpaper painted behind the whole window (Home and the sidebar float on
+  // it as glass; the note canvas stays opaque, so notes are never tinted).
+  // 'none' is today's subtle ambient; 'accent' is a wash of the accent colour;
+  // an `ambient*` value is one of the built-in abstract gradients; 'custom' is
+  // an uploaded image at [backgroundImagePath].
+
+  /// The chosen background. See [abstractBackgrounds] for the abstract set.
+  String backgroundStyle = 'none';
+
+  /// How strongly the background shows, 0..1 (drives glow strength / image
+  /// opacity). Ignored for 'none'.
+  double backgroundOpacity = 0.5;
+
+  /// The uploaded image path when [backgroundStyle] is 'custom'.
+  String? backgroundImagePath;
+
+  /// The built-in abstract gradients, in the order the picker shows them. Each
+  /// maps to a `paintAmbient` variant.
+  static const List<String> abstractBackgrounds = [
+    'ambient',
+    'ambient-aurora',
+    'ambient-ocean',
+    'ambient-forest',
+    'ambient-sunset',
+    'ambient-dusk',
+  ];
+
+  void setBackgroundStyle(String v) {
+    if (v == backgroundStyle) return;
+    backgroundStyle = v;
+    _repo.setSetting('backgroundStyle', v);
+    notifyListeners();
+  }
+
+  void setBackgroundOpacity(double v) {
+    final next = v.clamp(0.0, 1.0).toDouble();
+    if (next == backgroundOpacity) return;
+    backgroundOpacity = next;
+    _repo.setSetting('backgroundOpacity', next);
+    notifyListeners();
+  }
+
+  /// Set (or clear, with null) the custom background image and switch to it.
+  void setBackgroundImagePath(String? p) {
+    backgroundImagePath = p;
+    _repo.setSetting('backgroundImagePath', p ?? '');
+    if (p != null) backgroundStyle = 'custom';
+    _repo.setSetting('backgroundStyle', backgroundStyle);
+    notifyListeners();
+  }
+
   void openHome() {
     navHome = true;
     navNotebook = false;
@@ -6948,6 +7001,12 @@ class AppState extends ChangeNotifier
     if (sh is num) stickyH = sh.toDouble().clamp(minStickyH, maxStickyH);
     final bmm = _repo.getSetting('breakMessageMode');
     if (bmm is num) breakMessageMode = bmm.toInt().clamp(0, 2);
+    final bgs = _repo.getSetting('backgroundStyle');
+    if (bgs is String && bgs.isNotEmpty) backgroundStyle = bgs;
+    final bgo = _repo.getSetting('backgroundOpacity');
+    if (bgo is num) backgroundOpacity = bgo.toDouble().clamp(0.0, 1.0);
+    final bgi = _repo.getSetting('backgroundImagePath');
+    if (bgi is String && bgi.isNotEmpty) backgroundImagePath = bgi;
     _loadSticky();
     // The app opens on Home. The last page is loaded and one click away —
     // the navigator and Home's recents both lead to it — but the first thing

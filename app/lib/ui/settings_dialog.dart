@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../canvas/paper.dart';
@@ -5,9 +6,11 @@ import '../core/platform_open.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
+import '../theme/tokens.dart';
 import '../update/app_update.dart';
 import 'ai_provider_dialog.dart';
 import 'central_sync_dialog.dart';
+import 'glass.dart';
 import 'mcp_dialog.dart';
 import 'color_picker.dart' show ShortcutField;
 import 'onote_dialog.dart';
@@ -356,7 +359,106 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             ],
           ),
         ),
+        _rowStacked(
+          'Background',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _bgTile('none', 'None',
+                      const AmbientBackdrop(style: 'none', opacity: 0.5)),
+                  _bgTile('accent', 'Accent',
+                      const AmbientBackdrop(style: 'accent', opacity: 0.75)),
+                  for (final v in AppState.abstractBackgrounds)
+                    _bgTile(
+                        v, 'Abstract', AmbientBackdrop(style: v, opacity: 0.8)),
+                  _bgTile(
+                      'custom', 'Upload an image…', _bgCustomPreview(context)),
+                ],
+              ),
+              if (app.backgroundStyle != 'none') ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text('Strength',
+                        style: OnoteType.small
+                            .copyWith(color: context.surfaces.textSecondary)),
+                    Expanded(
+                      child: Slider(
+                        value: app.backgroundOpacity,
+                        onChanged: app.setBackgroundOpacity,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ];
+
+  Widget _bgCustomPreview(BuildContext context) {
+    final p = app.backgroundImagePath;
+    if (app.backgroundStyle == 'custom' && p != null && p.isNotEmpty) {
+      return const AmbientBackdrop(style: 'custom', opacity: 1);
+    }
+    return Center(
+      child: Icon(Icons.add_photo_alternate_outlined,
+          size: 18, color: context.surfaces.textSecondary),
+    );
+  }
+
+  Widget _bgTile(String key, String label, Widget preview) {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = key == 'custom'
+        ? app.backgroundStyle == 'custom'
+        : app.backgroundStyle == key;
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        borderRadius: OnoteRadius.mdAll,
+        onTap: () => key == 'custom'
+            ? _pickBackgroundImage()
+            : app.setBackgroundStyle(key),
+        child: Container(
+          width: 58,
+          height: 42,
+          decoration: BoxDecoration(
+            borderRadius: OnoteRadius.mdAll,
+            border: Border.all(
+              color: selected ? scheme.primary : context.surfaces.border,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(fit: StackFit.expand, children: [
+            preview,
+            if (selected)
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                      color: scheme.primary, shape: BoxShape.circle),
+                  child: const Icon(Icons.check, size: 12, color: Colors.white),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickBackgroundImage() async {
+    const group = XTypeGroup(
+      label: 'Images',
+      extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'],
+    );
+    final f = await openFile(acceptedTypeGroups: [group]);
+    if (f != null) app.setBackgroundImagePath(f.path);
+  }
 
   List<Widget> _writing(BuildContext context) => [
         _section('Writing & drawing'),

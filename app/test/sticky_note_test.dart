@@ -117,6 +117,26 @@ void main() {
     expect(app.stickyH, AppState.minStickyH);
   });
 
+  test('background style, opacity and image persist', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    expect(app.backgroundStyle, 'none', reason: 'defaults to the current look');
+    app.setBackgroundStyle('ambient-ocean');
+    expect(app.backgroundStyle, 'ambient-ocean');
+    expect(repo.getSetting('backgroundStyle'), 'ambient-ocean');
+
+    app.setBackgroundOpacity(0.8);
+    expect(app.backgroundOpacity, 0.8);
+    expect(repo.getSetting('backgroundOpacity'), 0.8);
+    app.setBackgroundOpacity(9); // clamped
+    expect(app.backgroundOpacity, 1.0);
+
+    // Setting a custom image switches to custom and persists the path.
+    app.setBackgroundImagePath('/tmp/wall.png');
+    expect(app.backgroundStyle, 'custom');
+    expect(app.backgroundImagePath, '/tmp/wall.png');
+    expect(repo.getSetting('backgroundImagePath'), '/tmp/wall.png');
+  });
+
   test('break message mode is remembered (shared with agenda breaks)', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     expect(app.breakMessageMode, 1, reason: 'default is a motivating line');

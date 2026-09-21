@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -245,30 +246,129 @@ class ChromeBar extends StatelessWidget {
 /// page, so the window and the paper share one atmosphere. Barely there by
 /// design; the reference is a premium blank page, not a wallpaper.
 class AmbientBackdrop extends StatelessWidget {
-  const AmbientBackdrop({super.key});
+  const AmbientBackdrop({
+    super.key,
+    this.style = 'none',
+    this.opacity = 0.5,
+    this.imagePath,
+    this.accent,
+  });
+
+  /// 'none' (the subtle signature), 'accent' (a wash of [accent]), an
+  /// `ambient*` abstract variant, or 'custom' (paint [imagePath]).
+  final String style;
+
+  /// How strongly a chosen background shows, 0..1. Ignored for 'none'.
+  final double opacity;
+
+  /// The image file for 'custom'.
+  final String? imagePath;
+
+  /// The accent colour for 'accent' (defaults to the theme's primary).
+  final Color? accent;
+
+  static Color _baseColor(bool dark) =>
+      dark ? const Color(0xFF14151B) : const Color(0xFFF3F5FC);
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return CustomPaint(painter: _AmbientPainter(dark: dark));
+    final base = _baseColor(dark);
+    if (style == 'custom' &&
+        imagePath != null &&
+        imagePath!.isNotEmpty &&
+        File(imagePath!).existsSync()) {
+      return Stack(fit: StackFit.expand, children: [
+        ColoredBox(color: base),
+        Opacity(
+          opacity: (0.2 + opacity * 0.8).clamp(0.0, 1.0),
+          child: Image.file(
+            File(imagePath!),
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+        // A soft scrim so glass panels and text stay legible over any image.
+        ColoredBox(color: base.withValues(alpha: dark ? 0.28 : 0.20)),
+      ]);
+    }
+    return CustomPaint(
+      painter: _AmbientPainter(
+        dark: dark,
+        style: style,
+        opacity: opacity,
+        accent: accent ?? Theme.of(context).colorScheme.primary,
+      ),
+    );
   }
 }
 
+/// Rotate a colour's hue, for the accent background's companion glows.
+Color _hueShift(Color c, double degrees) {
+  final h = HSLColor.fromColor(c);
+  return h.withHue((h.hue + degrees) % 360).toColor();
+}
+
 class _AmbientPainter extends CustomPainter {
-  const _AmbientPainter({required this.dark});
+  const _AmbientPainter({
+    required this.dark,
+    this.style = 'none',
+    this.opacity = 0.5,
+    required this.accent,
+  });
   final bool dark;
+  final String style;
+  final double opacity;
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-        Offset.zero & size,
-        Paint()
-          ..color = dark ? const Color(0xFF14151B) : const Color(0xFFF3F5FC));
-    paintAmbient(canvas, Offset.zero & size, dark: dark, strength: 1.3);
+    final rect = Offset.zero & size;
+    canvas.drawRect(rect, Paint()..color = AmbientBackdrop._baseColor(dark));
+    if (style == 'accent') {
+      _paintAccent(canvas, rect);
+      return;
+    }
+    // 'none' is the subtle signature wash; a chosen abstract is bolder and
+    // scales with the opacity slider.
+    final variant = style.startsWith('ambient') ? style : 'ambient';
+    final strength = style == 'none' ? 1.3 : (0.9 + opacity * 2.2);
+    paintAmbient(canvas, rect,
+        dark: dark, strength: strength, variant: variant);
+  }
+
+  void _paintAccent(Canvas canvas, Rect rect) {
+    final s = 0.9 + opacity * 2.2;
+    void glow(Alignment at, double r, Color c, double a) {
+      final centre = at.withinRect(rect);
+      final radius = r * math.max(rect.width, rect.height);
+      canvas.drawRect(
+          rect,
+          Paint()
+            ..shader = ui.Gradient.radial(
+              centre,
+              radius,
+              [
+                c.withValues(alpha: (a * s).clamp(0, 1)),
+                c.withValues(alpha: 0)
+              ],
+              const [0, 1],
+            ));
+    }
+
+    final base = dark ? 0.20 : 0.22;
+    glow(const Alignment(-1.1, 1.1), .75, accent, base);
+    glow(const Alignment(1.1, -1.1), .65, _hueShift(accent, 28), base * 0.8);
+    glow(const Alignment(-.2, -.9), .5, _hueShift(accent, -24), base * 0.55);
   }
 
   @override
-  bool shouldRepaint(covariant _AmbientPainter old) => old.dark != dark;
+  bool shouldRepaint(covariant _AmbientPainter old) =>
+      old.dark != dark ||
+      old.style != style ||
+      old.opacity != opacity ||
+      old.accent != accent;
 }
 
 /// The ambient glow itself, painted into [rect]: three soft radial lights.
@@ -302,28 +402,76 @@ void paintAmbient(Canvas canvas, Rect rect,
   switch (variant) {
     case 'ambient-sunset': // warm amber, rose, peach
       (g0, g1, g2) = dark
-          ? ((c: 0x6E4A2A, a: .44), (c: 0x6E2A3A, a: .34), (c: 0x5A3A24, a: .18))
-          : ((c: 0xFFD9A8, a: .55), (c: 0xFBC0C6, a: .48), (c: 0xFFE3C4, a: .28));
+          ? (
+              (c: 0x6E4A2A, a: .44),
+              (c: 0x6E2A3A, a: .34),
+              (c: 0x5A3A24, a: .18)
+            )
+          : (
+              (c: 0xFFD9A8, a: .55),
+              (c: 0xFBC0C6, a: .48),
+              (c: 0xFFE3C4, a: .28)
+            );
     case 'ambient-ocean': // teal, sky, aqua
       (g0, g1, g2) = dark
-          ? ((c: 0x1F4A5A, a: .44), (c: 0x23415A, a: .34), (c: 0x1F5A50, a: .16))
-          : ((c: 0xA8E0E6, a: .52), (c: 0xBFE0FF, a: .46), (c: 0xC6F0EA, a: .26));
+          ? (
+              (c: 0x1F4A5A, a: .44),
+              (c: 0x23415A, a: .34),
+              (c: 0x1F5A50, a: .16)
+            )
+          : (
+              (c: 0xA8E0E6, a: .52),
+              (c: 0xBFE0FF, a: .46),
+              (c: 0xC6F0EA, a: .26)
+            );
     case 'ambient-forest': // green, moss, sage
       (g0, g1, g2) = dark
-          ? ((c: 0x234A2E, a: .42), (c: 0x3A4A23, a: .30), (c: 0x1F4A34, a: .16))
-          : ((c: 0xBFE6C2, a: .50), (c: 0xDCEBB8, a: .44), (c: 0xCFE8D2, a: .26));
+          ? (
+              (c: 0x234A2E, a: .42),
+              (c: 0x3A4A23, a: .30),
+              (c: 0x1F4A34, a: .16)
+            )
+          : (
+              (c: 0xBFE6C2, a: .50),
+              (c: 0xDCEBB8, a: .44),
+              (c: 0xCFE8D2, a: .26)
+            );
     case 'ambient-dusk': // violet, magenta, indigo
       (g0, g1, g2) = dark
-          ? ((c: 0x3A2E6E, a: .46), (c: 0x4A2A5A, a: .35), (c: 0x2E2A6E, a: .20))
-          : ((c: 0xCBBFFF, a: .55), (c: 0xE9C4F0, a: .46), (c: 0xD9D3FF, a: .30));
+          ? (
+              (c: 0x3A2E6E, a: .46),
+              (c: 0x4A2A5A, a: .35),
+              (c: 0x2E2A6E, a: .20)
+            )
+          : (
+              (c: 0xCBBFFF, a: .55),
+              (c: 0xE9C4F0, a: .46),
+              (c: 0xD9D3FF, a: .30)
+            );
     case 'ambient-aurora': // green, teal, violet
       (g0, g1, g2) = dark
-          ? ((c: 0x1F5A4A, a: .40), (c: 0x2A3C7A, a: .34), (c: 0x4A2A5A, a: .20))
-          : ((c: 0xB8F0D8, a: .50), (c: 0xC4D4FF, a: .46), (c: 0xE0C6F0, a: .28));
+          ? (
+              (c: 0x1F5A4A, a: .40),
+              (c: 0x2A3C7A, a: .34),
+              (c: 0x4A2A5A, a: .20)
+            )
+          : (
+              (c: 0xB8F0D8, a: .50),
+              (c: 0xC4D4FF, a: .46),
+              (c: 0xE0C6F0, a: .28)
+            );
     default: // 'ambient' — the signature wash, unchanged
       (g0, g1, g2) = dark
-          ? ((c: 0x2A3C7A, a: .45), (c: 0x5A2A52, a: .35), (c: 0x3A2E6E, a: .18))
-          : ((c: 0xB9CFFF, a: .55), (c: 0xF7C9E0, a: .45), (c: 0xD9D3FF, a: .28));
+          ? (
+              (c: 0x2A3C7A, a: .45),
+              (c: 0x5A2A52, a: .35),
+              (c: 0x3A2E6E, a: .18)
+            )
+          : (
+              (c: 0xB9CFFF, a: .55),
+              (c: 0xF7C9E0, a: .45),
+              (c: 0xD9D3FF, a: .28)
+            );
   }
 
   glow(const Alignment(-1.1, 1.1), .75, Color(0xFF000000 | g0.c), g0.a);

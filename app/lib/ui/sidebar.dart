@@ -555,7 +555,8 @@ class _GroupHeaderState extends State<_GroupHeader> {
           child: Container(
             decoration: target
                 ? BoxDecoration(
-                    border: Border.all(color: scheme.primary, width: 1.5),
+                    border: Border.all(
+                        color: scheme.primary.withValues(alpha: .45)),
                     borderRadius: OnoteRadius.mdAll,
                     color: scheme.primary.withValues(alpha: .06))
                 : null,
@@ -1264,14 +1265,22 @@ class _SectionHeaderState extends State<_SectionHeader> {
       child: Container(
         decoration: pageTarget
             ? BoxDecoration(
-                border: Border.all(color: scheme.primary, width: 1.5),
+                border:
+                    Border.all(color: scheme.primary.withValues(alpha: .45)),
                 borderRadius: OnoteRadius.mdAll,
                 color: scheme.primary.withValues(alpha: .06))
             : active
                 ? BoxDecoration(
-                    color:
-                        scheme.primary.withValues(alpha: OnoteAlpha.selected),
-                    borderRadius: OnoteRadius.mdAll)
+                    color: scheme.primary.withValues(alpha: dark ? .16 : .10),
+                    borderRadius: OnoteRadius.mdAll,
+                    // A soft lift on the active section, no hard edges.
+                    boxShadow: [
+                        BoxShadow(
+                            color: scheme.primary
+                                .withValues(alpha: dark ? .20 : .12),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3)),
+                      ])
                 : null,
         padding: const EdgeInsets.fromLTRB(6, 7, 6, 7),
         child: Row(
@@ -1725,87 +1734,109 @@ class _PageTileState extends State<_PageTile> {
       fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
       color: selected || subpageTarget ? scheme.primary : null,
     );
-    return Material(
-      color:
-          selected ? scheme.primary.withValues(alpha: .10) : Colors.transparent,
-      child: InkWell(
-        focusNode: _rowFocus,
-        onFocusChange: (has) {
-          if (has) _keyboardEnteredRow(app);
-        },
-        // No onDoubleTap — it deferred every click (see _DoubleTapGate).
-        onTap: _renaming
-            ? null
-            : () {
-                if (_taps.tap()) {
-                  setState(() => _renaming = true);
-                  return;
-                }
-                // The click is what aims the keyboard at this row; an InkWell
-                // does not take focus on tap of its own accord.
-                _rowFocus.requestFocus();
-                app.openPage(page.id);
-              },
-        onTapDown: (d) => _downPos = d.globalPosition,
-        onSecondaryTapUp: (d) => showNodeMenu(context, app, page,
-            canIndent: true, position: d.globalPosition),
-        onLongPress: () => showNodeMenu(context, app, page,
-            canIndent: true, position: _downPos),
-        child: Container(
-          decoration: subpageTarget
-              ? BoxDecoration(
-                  border: Border.all(color: scheme.primary, width: 1.5),
-                  borderRadius: OnoteRadius.mdAll,
-                  color: scheme.primary.withValues(alpha: .06))
-              : null,
-          padding: EdgeInsets.only(
-              left: 8.0 + page.level * 15, right: 4, top: 6, bottom: 6),
-          child: Row(
-            children: [
-              // Collapse chevron (only when the page has subpages)
-              SizedBox(
-                width: 16,
-                child: widget.hasChildren
-                    ? InkWell(
-                        onTap: () => app.togglePageCollapsed(page.id),
-                        child: Icon(
-                            widget.collapsed
-                                ? Icons.chevron_right
-                                : Icons.expand_more,
-                            size: 16,
-                            color: context.surfaces.textSecondary),
-                      )
-                    : null,
-              ),
-              Icon(
-                  page.level == 0
-                      ? Icons.description_outlined
-                      : Icons.subdirectory_arrow_right,
-                  size: 16,
-                  color: selected
-                      ? scheme.primary
-                      : context.surfaces.textSecondary),
-              const SizedBox(width: 7),
-              Expanded(
-                child: _renaming
-                    ? _InlineRename(
-                        initial: page.title,
-                        style: labelStyle,
-                        onSubmit: (v) {
-                          app.renameNode(page.id, v);
-                          if (mounted) setState(() => _renaming = false);
-                        },
-                        onCancel: () {
-                          if (mounted) setState(() => _renaming = false);
-                        },
-                      )
-                    : Text(
-                        subpageTarget ? '↳ make subpage' : page.title,
-                        overflow: TextOverflow.ellipsis,
-                        style: labelStyle,
-                      ),
-              ),
-            ],
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      // A little inset so the selected row reads as a soft rounded pill, not a
+      // full-bleed rectangle against the glass.
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: OnoteRadius.mdAll,
+        child: InkWell(
+          focusNode: _rowFocus,
+          borderRadius: OnoteRadius.mdAll,
+          onFocusChange: (has) {
+            if (has) _keyboardEnteredRow(app);
+          },
+          // No onDoubleTap — it deferred every click (see _DoubleTapGate).
+          onTap: _renaming
+              ? null
+              : () {
+                  if (_taps.tap()) {
+                    setState(() => _renaming = true);
+                    return;
+                  }
+                  // The click is what aims the keyboard at this row; an InkWell
+                  // does not take focus on tap of its own accord.
+                  _rowFocus.requestFocus();
+                  app.openPage(page.id);
+                },
+          onTapDown: (d) => _downPos = d.globalPosition,
+          onSecondaryTapUp: (d) => showNodeMenu(context, app, page,
+              canIndent: true, position: d.globalPosition),
+          onLongPress: () => showNodeMenu(context, app, page,
+              canIndent: true, position: _downPos),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: OnoteRadius.mdAll,
+              color: selected
+                  ? scheme.primary.withValues(alpha: dark ? .16 : .10)
+                  : subpageTarget
+                      ? scheme.primary.withValues(alpha: .06)
+                      : null,
+              border: subpageTarget
+                  ? Border.all(color: scheme.primary.withValues(alpha: .45))
+                  : null,
+              // A soft lift on the current page, no hard edges.
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                          color: scheme.primary
+                              .withValues(alpha: dark ? .20 : .12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3)),
+                    ]
+                  : null,
+            ),
+            padding: EdgeInsets.only(
+                left: 8.0 + page.level * 15, right: 4, top: 6, bottom: 6),
+            child: Row(
+              children: [
+                // Collapse chevron (only when the page has subpages)
+                SizedBox(
+                  width: 16,
+                  child: widget.hasChildren
+                      ? InkWell(
+                          onTap: () => app.togglePageCollapsed(page.id),
+                          child: Icon(
+                              widget.collapsed
+                                  ? Icons.chevron_right
+                                  : Icons.expand_more,
+                              size: 16,
+                              color: context.surfaces.textSecondary),
+                        )
+                      : null,
+                ),
+                Icon(
+                    page.level == 0
+                        ? Icons.description_outlined
+                        : Icons.subdirectory_arrow_right,
+                    size: 16,
+                    color: selected
+                        ? scheme.primary
+                        : context.surfaces.textSecondary),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: _renaming
+                      ? _InlineRename(
+                          initial: page.title,
+                          style: labelStyle,
+                          onSubmit: (v) {
+                            app.renameNode(page.id, v);
+                            if (mounted) setState(() => _renaming = false);
+                          },
+                          onCancel: () {
+                            if (mounted) setState(() => _renaming = false);
+                          },
+                        )
+                      : Text(
+                          subpageTarget ? '↳ make subpage' : page.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: labelStyle,
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
