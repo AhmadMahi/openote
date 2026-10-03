@@ -1071,21 +1071,22 @@ class _PageCanvasState extends State<PageCanvas>
     switch (mode) {
       case _DragMode.pending:
         final pagePt = controller.screenToPage(e.localPosition);
-        if (app.selectedIds.isNotEmpty || app.editingBlockId != null) {
-          // A click OUTSIDE the box you were editing finishes it: commit and
-          // deselect, and if the Text tool is still armed drop back to Select
-          // so this same click does not immediately drop another empty box.
-          // (Before: with Text armed, clicking away from a box you had tapped
-          // into spawned a fresh one every time.)
-          app.select(null);
-          if (app.tool == Tool.text) app.setTool(Tool.select);
-        } else {
-          // Nothing was open, so this is "click anywhere to type" (CANVAS-3) —
-          // and the Text tool's explicit "click to place a box". The seamless
-          // backdrop is part of the page, so it also works in the margin when
-          // zoomed out. `_createTextAt` itself reverts the Text tool to Select.
+        if (app.tool == Tool.text) {
+          // The Text tool's explicit "click to place a box" (it reverts to
+          // Select afterwards, so one tap = one box). A text box is now only
+          // ever created deliberately with the Text tool, never by a stray
+          // click in Select mode.
           _createTextAt(pagePt);
+        } else if (app.selectedIds.isNotEmpty || app.editingBlockId != null) {
+          // In Select mode a click on empty space just finishes what you were
+          // doing: it commits and blurs the box you were editing and clears
+          // the selection, and leaves you in Select. It never spawns a new
+          // box, so clicking away from a pasted/edited block does not drop you
+          // straight back into typing. To edit again, click into the block;
+          // to make a new one, pick the Text tool (T).
+          app.select(null);
         }
+      // Empty click in Select mode with nothing open: nothing to do.
       case _DragMode.marquee:
         final rect = Rect.fromPoints(_marqueeStartPage, _marqueeEndPage);
         final hit = [

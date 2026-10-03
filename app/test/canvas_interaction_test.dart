@@ -179,5 +179,54 @@ void main() {
           reason: 'pen and mouse keep the selector drag');
       app.cancelPendingSave();
     });
+
+    testWidgets('Select mode: a click on empty canvas deselects, never types',
+        (t) async {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      final b = app.addBlock(Block(
+          type: BlockType.text,
+          x: 200,
+          y: 300,
+          w: 200,
+          h: 60,
+          content: {'text': 'keep me', 'autoWidth': false}));
+      app.select(b.id);
+      await pump(t);
+
+      final before = app.blocks.length;
+      final empty = app.canvas.pageToScreen(const Offset(650, 120));
+      final g = await t.startGesture(empty, kind: PointerDeviceKind.mouse);
+      await g.up();
+      await t.pump();
+
+      expect(app.blocks.length, before,
+          reason: 'no new text box on an empty-canvas click in Select mode');
+      expect(app.selectedIds, isEmpty, reason: 'the click just deselects');
+      expect(app.editingBlockId, isNull);
+      expect(app.tool, Tool.select);
+      app.cancelPendingSave();
+    });
+
+    testWidgets('Text tool: a click on empty canvas still places a box',
+        (t) async {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      app.select(null);
+      app.setTool(Tool.text);
+      await pump(t);
+
+      final before = app.blocks.length;
+      final empty = app.canvas.pageToScreen(const Offset(500, 150));
+      final g = await t.startGesture(empty, kind: PointerDeviceKind.mouse);
+      await g.up();
+      await t.pump();
+
+      expect(app.blocks.length, before + 1,
+          reason: 'the Text tool still places a box on click');
+      expect(app.editingBlockId, isNotNull,
+          reason: 'and drops you into editing it');
+      expect(app.tool, Tool.select,
+          reason: 'one tap = one box: Text reverts to Select');
+      app.cancelPendingSave();
+    });
   });
 }

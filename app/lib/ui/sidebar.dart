@@ -187,7 +187,7 @@ class _SidebarState extends State<Sidebar> {
                     // At Home nothing is open, so the navigator is just Home +
                     // search: the projects themselves live in the main area.
                     : app.navHome
-                        ? const SizedBox.shrink()
+                        ? _HomeRecents(app: app)
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -497,30 +497,41 @@ class _SidebarState extends State<Sidebar> {
 
   // ── Footer toolbar ────────────────────────────────────────────────────
 
-  Widget _footer(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextButton.icon(
-                icon: const Icon(Icons.create_new_folder_outlined, size: 16),
-                label: const Text('Notebook', style: TextStyle(fontSize: 12)),
-                onPressed: app.addSection,
-              ),
+  Widget _footer(BuildContext context) {
+    // A page can only be added once there is a notebook to hold it.
+    final hasNotebook = app.nodes.any((n) => n.kind == NodeKind.section);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton.icon(
+              icon: const Icon(Icons.create_new_folder_outlined, size: 16),
+              label: const Text('Notebook', style: TextStyle(fontSize: 12)),
+              onPressed: app.addSection,
             ),
-            IconButton(
-              icon: const Icon(Icons.topic_outlined, size: 16),
-              tooltip: 'New group',
-              onPressed: app.addSectionGroup,
+          ),
+          Expanded(
+            child: TextButton.icon(
+              icon: const Icon(Icons.note_add_outlined, size: 16),
+              label: const Text('Page', style: TextStyle(fontSize: 12)),
+              onPressed: hasNotebook ? () => app.addPage() : null,
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 16),
-              tooltip: 'Recycle bin',
-              onPressed: () => showRecycleBin(context, app),
-            ),
-          ],
-        ),
-      );
+          ),
+          IconButton(
+            icon: const Icon(Icons.topic_outlined, size: 16),
+            tooltip: 'New group',
+            onPressed: app.addSectionGroup,
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 16),
+            tooltip: 'Recycle bin',
+            onPressed: () => showRecycleBin(context, app),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _GroupHeader extends StatefulWidget {
@@ -670,34 +681,138 @@ class _HomeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final active = app.navHome;
+    // No filled pill, even when active: the accent on the icon and label is the
+    // whole cue. A bigger, clearer Home that reads as the top of the navigator.
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
       child: InkWell(
         borderRadius: OnoteRadius.mdAll,
         onTap: app.openHome,
-        child: Container(
-          decoration: active
-              ? BoxDecoration(
-                  color: scheme.primary.withValues(alpha: OnoteAlpha.selected),
-                  borderRadius: OnoteRadius.mdAll)
-              : null,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           child: Row(children: [
-            Icon(Icons.star_outline,
-                size: 16,
+            Icon(active ? Icons.home_rounded : Icons.home_outlined,
+                size: 22,
                 color: active ? scheme.primary : OnoteColors.brass400),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Text('Home',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                       color: active ? scheme.primary : null)),
             ),
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// The Home navigator body: the pages you were last in, so the sidebar is a
+/// springboard rather than a blank panel while no project is open. The main
+/// area carries the full "Recent pages" list; this is the quick way back.
+class _HomeRecents extends StatelessWidget {
+  const _HomeRecents({required this.app});
+  final AppState app;
+
+  List<({NotebookRef nb, TreeNode page, TreeNode? section})> _recents() {
+    final out = <({NotebookRef nb, TreeNode page, TreeNode? section})>[];
+    for (final key in app.recentKeys) {
+      final i = key.indexOf(':');
+      if (i < 0) continue;
+      final nbId = key.substring(0, i), pageId = key.substring(i + 1);
+      final nb = app.notebooks.where((n) => n.id == nbId).firstOrNull;
+      if (nb == null) continue;
+      List<TreeNode> nodes;
+      try {
+        nodes = app.nodesOf(nbId);
+      } catch (_) {
+        continue;
+      }
+      final page = nodes.where((n) => n.id == pageId).firstOrNull;
+      if (page == null) continue;
+      out.add((
+        nb: nb,
+        page: page,
+        section: nodes.where((n) => n.id == page.parentId).firstOrNull,
+      ));
+      if (out.length >= 6) break;
+    }
+    return out;
+  }
+
+  Future<void> _open(
+      ({NotebookRef nb, TreeNode page, TreeNode? section}) r) async {
+    if (r.nb.id != app.notebookId) await app.selectNotebook(r.nb.id);
+    await app.selectPage(r.page.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    final recents = _recents();
+    if (recents.isEmpty) return const SizedBox.shrink();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 6, bottom: 4),
+          child: Text('Recent',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .4,
+                  color: s.textSecondary)),
+        ),
+        for (final r in recents)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1),
+            child: InkWell(
+              borderRadius: OnoteRadius.mdAll,
+              onTap: () => _open(r),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.description_outlined,
+                        size: 15, color: s.textSecondary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                              r.page.title.isEmpty
+                                  ? 'Untitled page'
+                                  : r.page.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: s.textPrimary)),
+                          const SizedBox(height: 1),
+                          Text(
+                              r.section == null
+                                  ? r.nb.title
+                                  : '${r.nb.title} › ${r.section!.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11, color: s.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
