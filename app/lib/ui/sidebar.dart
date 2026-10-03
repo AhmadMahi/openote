@@ -9,7 +9,6 @@ import '../study/study_stats.dart';
 import '../theme/onote_theme.dart';
 import 'central_sync_dialog.dart';
 import 'exam_date.dart';
-import 'glass.dart';
 import 'notebook_manager.dart';
 import 'page_history_dialog.dart';
 import 'protect_dialog.dart';
@@ -816,9 +815,11 @@ class _HomeRecents extends StatelessWidget {
         // recents — so the Home panel reads as a place, not a blank column.
         Positioned.fill(
           child: IgnorePointer(
-            child: Opacity(
-              opacity: dark ? 0.22 : 0.32,
-              child: CustomPaint(painter: _RecentArtPainter(dark: dark)),
+            child: CustomPaint(
+              painter: _RecentArtPainter(
+                dark: dark,
+                accent: Theme.of(context).colorScheme.primary,
+              ),
             ),
           ),
         ),
@@ -902,20 +903,42 @@ class _HomeRecents extends StatelessWidget {
   }
 }
 
-/// The contained abstract wash behind the Home recents — the app's own ambient
-/// art, drawn only inside the navigator panel.
+/// The contained abstract wash behind the Home recents: a few soft colour
+/// blooms derived from the accent, drawn only inside the navigator panel so
+/// Home reads as a place rather than a blank column. Gentle enough that the
+/// recent rows stay perfectly legible on top.
 class _RecentArtPainter extends CustomPainter {
-  _RecentArtPainter({required this.dark});
+  _RecentArtPainter({required this.dark, required this.accent});
   final bool dark;
+  final Color accent;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    paintAmbient(canvas, Offset.zero & size,
-        dark: dark, strength: 0.85, variant: 'ambient-aurora');
+  Color _rot(Color c, double deg) {
+    final h = HSLColor.fromColor(c);
+    return h.withHue((h.hue + deg) % 360).toColor();
+  }
+
+  void _bloom(Canvas canvas, Offset c, double radius, Color color) {
+    final paint = Paint()
+      ..shader = RadialGradient(colors: [color, color.withValues(alpha: 0)])
+          .createShader(Rect.fromCircle(center: c, radius: radius));
+    canvas.drawCircle(c, radius, paint);
   }
 
   @override
-  bool shouldRepaint(covariant _RecentArtPainter old) => old.dark != dark;
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final a = dark ? 0.26 : 0.34;
+    _bloom(canvas, Offset(w * 0.12, h * 0.10), w * 1.05,
+        accent.withValues(alpha: a));
+    _bloom(canvas, Offset(w * 1.02, h * 0.34), w * 0.95,
+        _rot(accent, 42).withValues(alpha: a * 0.95));
+    _bloom(canvas, Offset(w * 0.30, h * 0.72), w * 1.1,
+        _rot(accent, -38).withValues(alpha: a * 0.85));
+  }
+
+  @override
+  bool shouldRepaint(covariant _RecentArtPainter old) =>
+      old.dark != dark || old.accent != accent;
 }
 
 /// The bottom of the Home navigator: Settings and Trash, so the common chrome
