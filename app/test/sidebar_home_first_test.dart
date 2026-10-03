@@ -56,8 +56,13 @@ void main() {
     // The open project's switcher and its seeded notebook are shown.
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Notebook 1'), findsOneWidget);
-    // The footer's add control is present, and reads "Notebook" now.
+    // The footer offers both quick-adds, so a page or notebook can be made
+    // from inside a page without going back to Home.
     expect(find.widgetWithText(TextButton, 'Notebook'), findsOneWidget);
+    final pageBtn = find.widgetWithText(TextButton, 'Page');
+    expect(pageBtn, findsOneWidget);
+    // "Page" is live because the seeded notebook exists to hold it.
+    expect(t.widget<TextButton>(pageBtn).onPressed, isNotNull);
     // Collapse lives in the Home header, available either way.
     expect(find.byTooltip('Collapse the navigator  (Ctrl+)'), findsOneWidget);
   });
