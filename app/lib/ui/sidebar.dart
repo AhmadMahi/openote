@@ -9,6 +9,7 @@ import '../study/study_stats.dart';
 import '../theme/onote_theme.dart';
 import 'central_sync_dialog.dart';
 import 'exam_date.dart';
+import 'glass.dart';
 import 'notebook_manager.dart';
 import 'page_history_dialog.dart';
 import 'protect_dialog.dart';
@@ -187,7 +188,14 @@ class _SidebarState extends State<Sidebar> {
                     // At Home nothing is open, so the navigator is just Home +
                     // search: the projects themselves live in the main area.
                     : app.navHome
-                        ? _HomeRecents(app: app)
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _HomeRecents(app: app)),
+                              const Divider(height: 1),
+                              _HomeBottomBar(app: app),
+                            ],
+                          )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -451,7 +459,12 @@ class _SidebarState extends State<Sidebar> {
                 padding: const EdgeInsets.only(left: 16, top: 2),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _pageEntriesFor(app, s),
+                  children: [
+                    ..._pageEntriesFor(app, s),
+                    // A gentle "add a page" line right where the pages end, so
+                    // a new page is one click away without leaving the page.
+                    _AddPageRow(app: app, sectionId: s.id),
+                  ],
                 ),
               ),
             ),
@@ -498,8 +511,9 @@ class _SidebarState extends State<Sidebar> {
   // ── Footer toolbar ────────────────────────────────────────────────────
 
   Widget _footer(BuildContext context) {
-    // A page can only be added once there is a notebook to hold it.
-    final hasNotebook = app.nodes.any((n) => n.kind == NodeKind.section);
+    // One clear primary action — add a notebook — with room to breathe so the
+    // label never wraps. A new page is added inline beneath its notebook's
+    // pages instead (see `folder()`), where it belongs.
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
       child: Row(
@@ -507,15 +521,11 @@ class _SidebarState extends State<Sidebar> {
           Expanded(
             child: TextButton.icon(
               icon: const Icon(Icons.create_new_folder_outlined, size: 16),
-              label: const Text('Notebook', style: TextStyle(fontSize: 12)),
+              label: const Text('Add a notebook',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12)),
               onPressed: app.addSection,
-            ),
-          ),
-          Expanded(
-            child: TextButton.icon(
-              icon: const Icon(Icons.note_add_outlined, size: 16),
-              label: const Text('Page', style: TextStyle(fontSize: 12)),
-              onPressed: hasNotebook ? () => app.addPage() : null,
             ),
           ),
           IconButton(
@@ -691,9 +701,20 @@ class _HomeTile extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           child: Row(children: [
-            Icon(active ? Icons.home_rounded : Icons.home_outlined,
-                size: 22,
-                color: active ? scheme.primary : OnoteColors.brass400),
+            // A soft tinted tile for the icon, the same language as the project
+            // cards, so Home reads as a proper destination rather than a bullet.
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: active ? 0.20 : 0.12),
+                borderRadius: OnoteRadius.mdAll,
+              ),
+              alignment: Alignment.center,
+              child: Icon(Icons.home_rounded,
+                  size: 18,
+                  color: active ? scheme.primary : OnoteColors.brass400),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text('Home',
@@ -703,6 +724,41 @@ class _HomeTile extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: active ? scheme.primary : null)),
             ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// A quiet "add a page" line that sits right under a notebook's pages, so a
+/// new page can be made in place rather than from a cramped footer button.
+class _AddPageRow extends StatelessWidget {
+  const _AddPageRow({required this.app, required this.sectionId});
+  final AppState app;
+  final String sectionId;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: InkWell(
+        borderRadius: OnoteRadius.mdAll,
+        // Clickable, but kept out of the navigator's keyboard row traversal so
+        // Del/arrow focus still lands only on real page and notebook rows.
+        canRequestFocus: false,
+        onTap: () => app.addPage(sectionId: sectionId),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(children: [
+            Icon(Icons.add, size: 14, color: s.textSecondary),
+            const SizedBox(width: 6),
+            Text('Add page',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: s.textSecondary,
+                    fontWeight: FontWeight.w500)),
           ]),
         ),
       ),
@@ -752,8 +808,37 @@ class _HomeRecents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.surfaces;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final recents = _recents();
-    if (recents.isEmpty) return const SizedBox.shrink();
+    return Stack(
+      children: [
+        // Contained abstract art — only inside the navigator card, behind the
+        // recents — so the Home panel reads as a place, not a blank column.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: dark ? 0.22 : 0.32,
+              child: CustomPaint(painter: _RecentArtPainter(dark: dark)),
+            ),
+          ),
+        ),
+        if (recents.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Your recent pages\nwill show up here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: s.textSecondary)),
+            ),
+          )
+        else
+          _recentList(context, s, recents),
+      ],
+    );
+  }
+
+  Widget _recentList(BuildContext context, OnoteSurfaces s,
+      List<({NotebookRef nb, TreeNode page, TreeNode? section})> recents) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
       children: [
@@ -813,6 +898,66 @@ class _HomeRecents extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// The contained abstract wash behind the Home recents — the app's own ambient
+/// art, drawn only inside the navigator panel.
+class _RecentArtPainter extends CustomPainter {
+  _RecentArtPainter({required this.dark});
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintAmbient(canvas, Offset.zero & size,
+        dark: dark, strength: 0.85, variant: 'ambient-aurora');
+  }
+
+  @override
+  bool shouldRepaint(covariant _RecentArtPainter old) => old.dark != dark;
+}
+
+/// The bottom of the Home navigator: Settings and Trash, so the common chrome
+/// lives where you expect it rather than only behind the main top bar.
+class _HomeBottomBar extends StatelessWidget {
+  const _HomeBottomBar({required this.app});
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    Widget item(IconData icon, String label, VoidCallback onTap) => Expanded(
+          child: InkWell(
+            borderRadius: OnoteRadius.mdAll,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 16, color: s.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: s.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
+      child: Row(
+        children: [
+          item(Icons.settings_outlined, 'Settings',
+              () => showSettingsDialog(context, app)),
+          item(Icons.delete_outline, 'Trash',
+              () => showRecycleBin(context, app)),
+        ],
+      ),
     );
   }
 }
