@@ -95,11 +95,11 @@ void main() {
           window: size);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Notebooks'), findsOneWidget);
+      expect(find.text('Projects'), findsOneWidget);
       expect(find.text('Smoke'), findsWidgets,
           reason: 'the notebook is listed');
       // Every action it offers must be reachable, not clipped off the edge.
-      for (final label in ['New Notebook', 'Import', 'Get started', 'Done']) {
+      for (final label in ['New project', 'Import', 'Get started', 'Done']) {
         expect(find.text(label), findsOneWidget, reason: '"$label" is missing');
       }
     });

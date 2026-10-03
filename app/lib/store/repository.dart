@@ -246,7 +246,7 @@ class Repository {
     final repo = Repository._(dir);
     await repo._loadWorkspace();
     if (repo.notebooks.isEmpty) {
-      await repo.createNotebook('My Notebook');
+      await repo.createNotebook('My project');
     }
     return repo;
   }
@@ -417,7 +417,7 @@ class Repository {
         notebooks.add(NotebookRef(
             id: id,
             file: file,
-            title: m['title'] as String? ?? 'Notebook',
+            title: m['title'] as String? ?? 'Project',
             logDir: logDir));
       }
     }
@@ -432,7 +432,7 @@ class Repository {
         trashedNotebooks.add(NotebookRef(
             id: id,
             file: file,
-            title: m['title'] as String? ?? 'Notebook',
+            title: m['title'] as String? ?? 'Project',
             logDir: logDir,
             deletedAt: (m['deletedAt'] as num?)?.toInt() ?? nowMs()));
       }
@@ -1049,7 +1049,7 @@ class Repository {
     _open[id] = openOnote(file, notebookId: id, title: title);
     // Seed a first section + page so the notebook is immediately usable.
     final section =
-        upsertNode(id, TreeNode(kind: NodeKind.section, title: 'Section 1'));
+        upsertNode(id, TreeNode(kind: NodeKind.section, title: 'Notebook 1'));
     upsertNode(
         id,
         TreeNode(

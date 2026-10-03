@@ -59,9 +59,9 @@ void main() {
 
     // The manager is open: it lists BOTH notebooks (so it can switch) and offers
     // the management actions (so it is the single surface).
-    expect(find.text('Notebooks'), findsOneWidget);
+    expect(find.text('Projects'), findsOneWidget);
     expect(find.text('Beta'), findsOneWidget);
-    expect(find.text('New Notebook'), findsOneWidget);
+    expect(find.text('New project'), findsOneWidget);
     expect(find.text('Import'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
   });

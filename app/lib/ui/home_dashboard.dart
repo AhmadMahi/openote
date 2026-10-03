@@ -124,7 +124,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   Future<void> _newNotebook(BuildContext context) async {
     final title = await promptForText(context,
-        title: 'New notebook', okLabel: 'Create', hintText: 'Notebook name');
+        title: 'New project', okLabel: 'Create', hintText: 'Project name');
     if (title == null || title.trim().isEmpty) return;
     await app.createNotebook(title.trim());
     // If a GitHub account is connected, offer to back the new notebook with a
@@ -339,7 +339,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
               const SizedBox(width: OnoteSpace.x3),
               FilledButton.icon(
                 icon: const Icon(Icons.add, size: OnoteIcon.md),
-                label: const Text('New notebook'),
+                label: const Text('New project'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(0, 42),
                   padding:
@@ -444,12 +444,12 @@ class NotebookOverview extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(nb?.title ?? 'Notebook',
+                    Text(nb?.title ?? 'Project',
                         style: OnoteType.display
                             .copyWith(fontSize: 30, color: s.textPrimary)),
                     const SizedBox(height: OnoteSpace.x2),
                     Text(
-                        '${_plural(sections.length, 'section')} · '
+                        '${_plural(sections.length, 'notebook')} · '
                         '${_plural(pageCount, 'page')}',
                         style: OnoteType.ui.copyWith(color: s.textSecondary)),
                   ],
@@ -459,7 +459,7 @@ class NotebookOverview extends StatelessWidget {
               OutlinedButton.icon(
                 icon: const Icon(Icons.create_new_folder_outlined,
                     size: OnoteIcon.sm),
-                label: const Text('New section'),
+                label: const Text('New notebook'),
                 onPressed: () => app.addSection(),
               ),
               const SizedBox(width: OnoteSpace.x4),
@@ -471,7 +471,7 @@ class NotebookOverview extends StatelessWidget {
               const SizedBox(width: OnoteSpace.x2),
               IconButton(
                 icon: const Icon(Icons.more_horiz),
-                tooltip: 'Notebook — rename, duplicate, import…',
+                tooltip: 'Project — rename, duplicate, import…',
                 onPressed: () =>
                     showNotebookManager(context, app, focusId: app.notebookId),
               ),
@@ -482,7 +482,7 @@ class NotebookOverview extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: OnoteSpace.x9),
               child: Center(
-                child: Text('No sections yet — create one to start writing.',
+                child: Text('No notebooks yet — create one to start writing.',
                     style: OnoteType.ui.copyWith(color: s.textSecondary)),
               ),
             )
@@ -665,7 +665,7 @@ class _NotebookCardState extends State<_NotebookCard> {
                 const SizedBox(height: OnoteSpace.x1),
                 Text(
                     '${_plural(m.pages, 'page')} · '
-                    '${_plural(m.sections, 'section')}',
+                    '${_plural(m.sections, 'notebook')}',
                     style: OnoteType.small.copyWith(color: s.textSecondary)),
                 const SizedBox(height: OnoteSpace.x7),
                 Row(children: [
@@ -744,7 +744,7 @@ class _NewNotebookCard extends StatelessWidget {
                   child: Icon(Icons.add, color: scheme.primary),
                 ),
                 const SizedBox(height: OnoteSpace.x6),
-                Text('Create a new notebook',
+                Text('Create a new project',
                     style: OnoteType.headline.copyWith(color: s.textPrimary)),
                 const SizedBox(height: OnoteSpace.x1),
                 Text('Organise your thoughts, ideas and notes',
@@ -860,7 +860,7 @@ class _SectionCard extends StatelessWidget {
               ),
               const SizedBox(width: OnoteSpace.x4),
               Expanded(
-                child: Text(section.title.isEmpty ? 'Section' : section.title,
+                child: Text(section.title.isEmpty ? 'Notebook' : section.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: OnoteType.title.copyWith(color: s.textPrimary)),

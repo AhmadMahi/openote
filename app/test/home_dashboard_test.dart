@@ -96,8 +96,8 @@ void main() {
       await pump(t, HomeDashboard(app: app));
       expect(find.text('Physics'), findsWidgets);
       expect(find.text('History'), findsOneWidget);
-      expect(find.text('New notebook'), findsOneWidget);
-      expect(find.text('Create a new notebook'), findsOneWidget);
+      expect(find.text('New project'), findsOneWidget);
+      expect(find.text('Create a new project'), findsOneWidget);
       // The count is the real one.
       expect(find.text('2'), findsOneWidget);
     });
@@ -127,7 +127,7 @@ void main() {
       app.openNotebookOverview();
       await pump(t, NotebookOverview(app: app));
       expect(find.text('Waves'), findsOneWidget);
-      expect(find.textContaining('2 sections'), findsOneWidget);
+      expect(find.textContaining('2 notebooks'), findsOneWidget);
       await t.tap(find.text('Waves'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));

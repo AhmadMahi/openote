@@ -1378,7 +1378,7 @@ class AppState extends ChangeNotifier
     final key = _repoKey(url);
     final slash = key.lastIndexOf('/');
     final last = slash >= 0 ? key.substring(slash + 1) : key;
-    return last.isEmpty ? 'Notebook' : last;
+    return last.isEmpty ? 'Project' : last;
   }
 
   /// Git's clone failures, in words that say what to do.
@@ -6934,7 +6934,7 @@ class AppState extends ChangeNotifier
     // seeds one — but `first` on an empty list throws, which would turn an
     // odd registry into a startup that shows only an error screen. Making one
     // is always better than refusing to start.
-    if (_repo.notebooks.isEmpty) await _repo.createNotebook('My notebook');
+    if (_repo.notebooks.isEmpty) await _repo.createNotebook('My project');
     // A notebook named on the command line beats the last session's. Placed
     // after `loadSyncRoots` above, because adopting a notebook out of a synced
     // folder records that folder — and before the choice below, because being
@@ -9282,7 +9282,7 @@ class AppState extends ChangeNotifier
         TreeNode(
             kind: NodeKind.section,
             parentId: groupId,
-            title: 'Section ${count + 1}',
+            title: 'Notebook ${count + 1}',
             color: _sectionColors[count % _sectionColors.length],
             position: _nextPosition()));
     reloadNodes();

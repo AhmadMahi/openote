@@ -88,7 +88,7 @@ class _InsertPortalDialogState extends State<_InsertPortalDialog> {
         rows.add(Padding(
           padding: const EdgeInsets.fromLTRB(4, 10, 4, 2),
           child: Text(
-            pendingSection.title.isEmpty ? 'Section' : pendingSection.title,
+            pendingSection.title.isEmpty ? 'Notebook' : pendingSection.title,
             style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -178,8 +178,8 @@ class _InsertPortalDialogState extends State<_InsertPortalDialog> {
         Expanded(
           child: LayoutBuilder(builder: (context, box) {
             // Top-left aligned fit, so preview → page mapping is one divide.
-            final s = math.min(box.maxWidth / extent.width,
-                box.maxHeight / extent.height);
+            final s = math.min(
+                box.maxWidth / extent.width, box.maxHeight / extent.height);
             final shownW = extent.width * s, shownH = extent.height * s;
             return Align(
               alignment: Alignment.topLeft,
@@ -280,7 +280,8 @@ class _InsertPortalDialogState extends State<_InsertPortalDialog> {
 }
 
 class _MarqueePainter extends CustomPainter {
-  _MarqueePainter({required this.rect, required this.scale, required this.color});
+  _MarqueePainter(
+      {required this.rect, required this.scale, required this.color});
 
   final Rect? rect;
   final double scale;
@@ -290,8 +291,8 @@ class _MarqueePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final r = rect;
     if (r == null) return;
-    final s = Rect.fromLTWH(r.left * scale, r.top * scale, r.width * scale,
-        r.height * scale);
+    final s = Rect.fromLTWH(
+        r.left * scale, r.top * scale, r.width * scale, r.height * scale);
     canvas.drawRect(s, Paint()..color = color.withValues(alpha: .10));
     canvas.drawRect(
         s,

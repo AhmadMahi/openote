@@ -130,7 +130,8 @@ class CalendarSubscription {
   /// and blanking the timetable on a flaky connection is not.
   final String? lastError;
 
-  bool get isLocalFile => !url.startsWith('http://') && !url.startsWith('https://');
+  bool get isLocalFile =>
+      !url.startsWith('http://') && !url.startsWith('https://');
 
   CalendarSubscription copyWith({
     String? name,
@@ -232,9 +233,8 @@ class PlannerState extends ChangeNotifier {
   void load() {
     reminders.load();
     final raw = _read('plannerCalendar');
-    _calendar = CalendarSubscription.fromJson(raw is String
-        ? (jsonDecode(raw) as Object?)
-        : raw);
+    _calendar = CalendarSubscription.fromJson(
+        raw is String ? (jsonDecode(raw) as Object?) : raw);
     final body = _read('plannerCalendarBody');
     if (body is String && body.length <= plannerCalendarCacheMax) {
       _calendarBody = body;
@@ -323,8 +323,7 @@ class PlannerState extends ChangeNotifier {
     }
   }
 
-  void _persistCalendar() =>
-      _write('plannerCalendar', _calendar?.toJson());
+  void _persistCalendar() => _write('plannerCalendar', _calendar?.toJson());
 
   /// Cheap sanity check before a download is trusted enough to cache. A login
   /// page returns 200 and HTML, and caching that would show an empty timetable
@@ -448,7 +447,7 @@ class PlannerState extends ChangeNotifier {
       out.add(DatedItem(
         id: examItemId(n.id),
         kind: DatedKind.exam,
-        title: n.title.isEmpty ? 'Untitled section' : n.title,
+        title: n.title.isEmpty ? 'Untitled notebook' : n.title,
         when: at,
         allDay: !timed,
         notebookId: _doc.notebookId,
@@ -641,8 +640,8 @@ class PlannerState extends ChangeNotifier {
       case DatedKind.task:
         final kind = taskKindOf(it);
         if (kind == null || it.blockId == null || it.line == null) return false;
-        final ok = _doc.setTagDue(it.blockId!, it.line!, kind, day,
-            pageId: it.pageId);
+        final ok =
+            _doc.setTagDue(it.blockId!, it.line!, kind, day, pageId: it.pageId);
         if (ok) _agendaCache = null;
         return ok;
       case DatedKind.reminder:
@@ -911,8 +910,7 @@ class PlannerState extends ChangeNotifier {
   /// Two days rather than one: a laptop shut on Friday and opened on Monday
   /// must not replay Friday afternoon, and the key is cheap to keep.
   bool _pruneFired(DateTime now) {
-    final cutoff =
-        now.subtract(const Duration(days: 2)).millisecondsSinceEpoch;
+    final cutoff = now.subtract(const Duration(days: 2)).millisecondsSinceEpoch;
     final gone = <String>[];
     for (final k in _firedEvents) {
       final parts = k.split(':');

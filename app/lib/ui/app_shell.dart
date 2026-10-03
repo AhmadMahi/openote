@@ -1838,7 +1838,7 @@ class _TagsPanel extends StatelessWidget {
       onClose: app.closePanel,
       child: all.isEmpty
           ? PanelEmpty(
-              headline: 'No tags in this notebook yet.',
+              headline: 'No tags in this project yet.',
               body: 'Tags mark a line — to do, important, question, '
                   'definition — so you can find it again, revise from it, or '
                   'give it a deadline.',
@@ -2241,8 +2241,8 @@ class _PageNav extends StatelessWidget {
         Text('Page ${i + 1} of ${siblings.length}',
             style: OnoteType.caption.copyWith(color: s.textSecondary)),
         const SizedBox(width: OnoteSpace.x2),
-        step(Icons.chevron_left, 'Previous page in this section', i - 1),
-        step(Icons.chevron_right, 'Next page in this section', i + 1),
+        step(Icons.chevron_left, 'Previous page in this notebook', i - 1),
+        step(Icons.chevron_right, 'Next page in this notebook', i + 1),
       ]),
     );
   }

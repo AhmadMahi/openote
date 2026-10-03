@@ -509,8 +509,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   tooltip: 'Each page keeps its own agenda'),
               ButtonSegment(
                   value: true,
-                  label: Text('Whole notebook'),
-                  tooltip: 'One agenda shared across the notebook'),
+                  label: Text('Whole project'),
+                  tooltip: 'One agenda shared across the project'),
             ],
             selected: {app.stickyWholeNotebook},
             onSelectionChanged: (s) => app.setStickyWholeNotebook(s.first),
@@ -616,10 +616,10 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         _section('Connections'),
         _door(
             Icons.cloud_sync_outlined,
-            'Sync all notebooks',
+            'Sync all projects',
             app.central.enabled
-                ? 'On — every notebook backs up to ${app.central.fullName ?? 'GitHub'}.'
-                : 'Back up every notebook to one GitHub repo.',
+                ? 'On — every project backs up to ${app.central.fullName ?? 'GitHub'}.'
+                : 'Back up every project to one GitHub repo.',
             () => showCentralSyncDialog(context, app)),
         _door(
             Icons.smart_toy_outlined,

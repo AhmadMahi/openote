@@ -36,8 +36,8 @@ import 'onote_dialog.dart';
 /// the notebook tree rather than a card-container entity of its own.
 enum DeckScope {
   page('This page'),
-  section('This section'),
-  notebook('Whole notebook');
+  section('This notebook'),
+  notebook('Whole project');
 
   const DeckScope(this.label);
   final String label;
@@ -86,8 +86,8 @@ class _StudyPanelState extends State<StudyPanel> {
   }
 
   void _start(StudyMode mode) {
-    final cards =
-        app.study.sessionCards(sectionId: _sectionId, pageId: _pageId, mode: mode);
+    final cards = app.study
+        .sessionCards(sectionId: _sectionId, pageId: _pageId, mode: mode);
     if (cards.isEmpty) return; // nothing to enter; the overview stays put
     setState(() {
       _mode = mode;
@@ -236,66 +236,67 @@ class _StudyPanelState extends State<StudyPanel> {
   /// Header actions. The panel supplies the title, icon and close button
   /// (style guide §7c); this is only what is specific to studying.
   List<Widget> _actions(bool inSession) => [
-          if (inSession)
-            TextButton(
-              onPressed: _end,
-              style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
-              child: const Text('End', style: TextStyle(fontSize: 12)),
-            )
-          else
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz, size: 16),
-              tooltip: 'Deck actions',
-              padding: EdgeInsets.zero,
-              onSelected: (v) async {
-                final sectionId = app.activeSectionId;
-                switch (v) {
-                  case 'export':
-                    await _export();
-                  case 'reset':
-                    await _resetSchedule();
-                  case 'exam':
-                    if (sectionId != null &&
-                        await pickExamDate(context, app, sectionId) &&
-                        mounted) {
-                      setState(() {});
-                    }
-                  case 'examclear':
-                    if (sectionId != null && mounted) {
-                      clearExamDate(context, app, sectionId);
-                    }
-                }
-              },
-              itemBuilder: (_) {
-                final hasExam = app.study.examDate(app.activeSectionId) != null;
-                return [
-                  const PopupMenuItem(
-                      value: 'export',
+        if (inSession)
+          TextButton(
+            onPressed: _end,
+            style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8)),
+            child: const Text('End', style: TextStyle(fontSize: 12)),
+          )
+        else
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz, size: 16),
+            tooltip: 'Deck actions',
+            padding: EdgeInsets.zero,
+            onSelected: (v) async {
+              final sectionId = app.activeSectionId;
+              switch (v) {
+                case 'export':
+                  await _export();
+                case 'reset':
+                  await _resetSchedule();
+                case 'exam':
+                  if (sectionId != null &&
+                      await pickExamDate(context, app, sectionId) &&
+                      mounted) {
+                    setState(() {});
+                  }
+                case 'examclear':
+                  if (sectionId != null && mounted) {
+                    clearExamDate(context, app, sectionId);
+                  }
+              }
+            },
+            itemBuilder: (_) {
+              final hasExam = app.study.examDate(app.activeSectionId) != null;
+              return [
+                const PopupMenuItem(
+                    value: 'export',
+                    height: 36,
+                    child: Text('Export to Anki…',
+                        style: TextStyle(fontSize: 13))),
+                if (app.activeSectionId != null)
+                  PopupMenuItem(
+                      value: 'exam',
                       height: 36,
-                      child: Text('Export to Anki…',
-                          style: TextStyle(fontSize: 13))),
-                  if (app.activeSectionId != null)
-                    PopupMenuItem(
-                        value: 'exam',
-                        height: 36,
-                        child: Text(hasExam ? 'Change exam date…' : 'Set exam date…',
-                            style: const TextStyle(fontSize: 13))),
-                  if (hasExam)
-                    const PopupMenuItem(
-                        value: 'examclear',
-                        height: 36,
-                        child: Text('Remove exam date',
-                            style: TextStyle(fontSize: 13))),
+                      child: Text(
+                          hasExam ? 'Change exam date…' : 'Set exam date…',
+                          style: const TextStyle(fontSize: 13))),
+                if (hasExam)
                   const PopupMenuItem(
-                      value: 'reset',
+                      value: 'examclear',
                       height: 36,
-                      child: Text('Forget schedule…',
+                      child: Text('Remove exam date',
                           style: TextStyle(fontSize: 13))),
-                ];
-              },
-            ),
+                const PopupMenuItem(
+                    value: 'reset',
+                    height: 36,
+                    child: Text('Forget schedule…',
+                        style: TextStyle(fontSize: 13))),
+              ];
+            },
+          ),
       ];
 
   // ── Overview ──────────────────────────────────────────────────────────
@@ -341,7 +342,8 @@ class _StudyPanelState extends State<StudyPanel> {
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                   decoration: BoxDecoration(
                     color: OnoteColors.success.withValues(alpha: .10),
                     borderRadius: BorderRadius.circular(8),
@@ -371,8 +373,8 @@ class _StudyPanelState extends State<StudyPanel> {
               const SizedBox(height: 4),
               Text("Practice doesn't change your schedule.",
                   textAlign: TextAlign.center,
-                  style:
-                      TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+                  style: TextStyle(
+                      fontSize: 11, color: context.surfaces.textSecondary)),
               _progress(s, dark),
             ],
           ],
@@ -406,7 +408,7 @@ class _StudyPanelState extends State<StudyPanel> {
         icon: Icons.event_outlined,
         title: next.section.title,
         trailing: formatCountdown(next.plan.daysLeft),
-        detail: 'Study this section',
+        detail: 'Study this notebook',
         onTap: () {
           app.activateSection(next.section.id);
           setState(() {
@@ -513,7 +515,8 @@ class _StudyPanelState extends State<StudyPanel> {
                       icon: const Icon(Icons.close, size: 16),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 26, minHeight: 22),
+                      constraints:
+                          const BoxConstraints(minWidth: 26, minHeight: 22),
                       tooltip: 'Remove exam date',
                       color: context.surfaces.textSecondary,
                       onPressed: onClear,
@@ -566,8 +569,8 @@ class _StudyPanelState extends State<StudyPanel> {
                     color: context.surfaces.textSecondary)),
           ),
           Text('$seen of ${s.total}',
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600)),
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ]),
         const SizedBox(height: 6),
         ClipRRect(
@@ -584,7 +587,9 @@ class _StudyPanelState extends State<StudyPanel> {
             Icon(
               Icons.local_fire_department,
               size: 16,
-              color: streak > 0 ? OnoteColors.brass500 : context.surfaces.textSecondary,
+              color: streak > 0
+                  ? OnoteColors.brass500
+                  : context.surfaces.textSecondary,
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -692,8 +697,9 @@ class _StudyPanelState extends State<StudyPanel> {
                     value: s,
                     child: Builder(builder: (_) {
                       final st = app.study.deckStats(
-                        sectionId:
-                            s == DeckScope.notebook ? null : app.activeSectionId,
+                        sectionId: s == DeckScope.notebook
+                            ? null
+                            : app.activeSectionId,
                         pageId: s == DeckScope.page ? app.pageId : null,
                       );
                       return Text('${s.label}  ·  ${st.due}/${st.total}',
@@ -726,7 +732,9 @@ class _StudyPanelState extends State<StudyPanel> {
             'Cards are a view of your notes, so editing the note edits the '
             'card — there is nothing separate to maintain.',
             style: TextStyle(
-                fontSize: 12, height: 1.4, color: context.surfaces.textSecondary),
+                fontSize: 12,
+                height: 1.4,
+                color: context.surfaces.textSecondary),
           ),
         ],
       );
@@ -737,16 +745,18 @@ class _StudyPanelState extends State<StudyPanel> {
           Icon(kind.icon, size: 16, color: kind.color),
           const SizedBox(width: 8),
           Expanded(
-            child: Text.rich(TextSpan(children: [
-              TextSpan(
-                  text: '$chord  ',
-                  style: TextStyle(
-                      fontFamily: 'JetBrains Mono',
-                      fontFamilyFallback: onoteFontFallback,
-                      fontSize: 11,
-                      color: context.surfaces.textSecondary)),
-              TextSpan(text: what),
-            ]), style: const TextStyle(fontSize: 12, height: 1.4)),
+            child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                      text: '$chord  ',
+                      style: TextStyle(
+                          fontFamily: 'JetBrains Mono',
+                          fontFamilyFallback: onoteFontFallback,
+                          fontSize: 11,
+                          color: context.surfaces.textSecondary)),
+                  TextSpan(text: what),
+                ]),
+                style: const TextStyle(fontSize: 12, height: 1.4)),
           ),
         ]),
       );
@@ -768,8 +778,8 @@ class _StudyPanelState extends State<StudyPanel> {
             const SizedBox(height: 10),
             Text('Reviewed $done card${done == 1 ? '' : 's'}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text(
               _missed.isEmpty
@@ -782,7 +792,9 @@ class _StudyPanelState extends State<StudyPanel> {
                   : '${_missed.length} need another look.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 12, color: context.surfaces.textSecondary, height: 1.35),
+                  fontSize: 12,
+                  color: context.surfaces.textSecondary,
+                  height: 1.35),
             ),
             // The payoff. Finishing a sitting is the one moment a student is
             // certain to be looking at this panel, so it is where the streak
@@ -794,18 +806,20 @@ class _StudyPanelState extends State<StudyPanel> {
                 const Icon(Icons.local_fire_department,
                     size: 16, color: OnoteColors.brass500),
                 const SizedBox(width: 5),
-                Text('${app.study.studyStreakDays()}-day streak · '
+                Text(
+                    '${app.study.studyStreakDays()}-day streak · '
                     '${app.study.reviewsToday()} today',
                     style: const TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w600)),
               ]),
             ],
             if (examPlan(
-                  exam: app.study.examDate(app.activeSectionId),
-                  today: DateTime.now(),
-                  unseen: stats.unseen,
-                  total: stats.total,
-                ) case final p? when !p.isPast) ...[
+              exam: app.study.examDate(app.activeSectionId),
+              today: DateTime.now(),
+              unseen: stats.unseen,
+              total: stats.total,
+            )
+                case final p? when !p.isPast) ...[
               const SizedBox(height: 6),
               Text(
                 p.isToday
@@ -856,8 +870,7 @@ class _StudyPanelState extends State<StudyPanel> {
             child: LinearProgressIndicator(
               value: total == 0 ? 0 : _index / total,
               minHeight: 3,
-              backgroundColor:
-                  context.surfaces.border,
+              backgroundColor: context.surfaces.border,
             ),
           ),
           const SizedBox(height: 6),
@@ -920,8 +933,7 @@ class _StudyPanelState extends State<StudyPanel> {
     return Container(
       decoration: BoxDecoration(
         color: context.surfaces.raised,
-        border: Border.all(
-            color: context.surfaces.border),
+        border: Border.all(color: context.surfaces.border),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -968,9 +980,7 @@ class _StudyPanelState extends State<StudyPanel> {
               duration: const Duration(milliseconds: 130),
               curve: Curves.easeOut,
               alignment: Alignment.topCenter,
-              child: _revealed
-                  ? _answer(c, kind, dark)
-                  : _hiddenAnswer(dark),
+              child: _revealed ? _answer(c, kind, dark) : _hiddenAnswer(dark),
             ),
           ],
         ),
@@ -1004,9 +1014,7 @@ class _StudyPanelState extends State<StudyPanel> {
             // underline is meant to show.
             children: _revealed
                 ? inlineSpans(c.back, style.copyWith(color: kind.color), dark)
-                : const [
-                    TextSpan(text: '      ')
-                  ],
+                : const [TextSpan(text: '      ')],
             style: TextStyle(
               color: _revealed ? kind.color : null,
               decoration: TextDecoration.underline,
@@ -1023,12 +1031,12 @@ class _StudyPanelState extends State<StudyPanel> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: (context.surfaces.border)),
+          border: Border.all(color: (context.surfaces.border)),
         ),
         child: Text('Answer hidden',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+            style:
+                TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
       );
 
   Widget _answer(Flashcard c, TagKind kind, bool dark) {
@@ -1056,10 +1064,8 @@ class _StudyPanelState extends State<StudyPanel> {
           // as backslashes here is the flashcard defect this panel had.
           SelectableText.rich(
               TextSpan(
-                  children: inlineSpans(
-                      c.back,
-                      const TextStyle(fontSize: 13, height: 1.45),
-                      dark)),
+                  children: inlineSpans(c.back,
+                      const TextStyle(fontSize: 13, height: 1.45), dark)),
               style: const TextStyle(fontSize: 13, height: 1.45)),
         ],
       ),
@@ -1119,7 +1125,8 @@ class _StudyPanelState extends State<StudyPanel> {
         padding: pad,
         visualDensity: VisualDensity.compact,
         backgroundColor: tint?.withValues(alpha: .12),
-        side: tint == null ? null : BorderSide(color: tint.withValues(alpha: .4)),
+        side:
+            tint == null ? null : BorderSide(color: tint.withValues(alpha: .4)),
       ),
       onPressed: () => _grade(g),
       child: child,

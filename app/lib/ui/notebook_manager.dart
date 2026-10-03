@@ -189,7 +189,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
           constraints: const BoxConstraints(maxHeight: 480),
           child: ListView(
             children: [
-              _sectionHeader('Active notebooks',
+              _sectionHeader('Active projects',
                   trailing: '${app.notebooks.length} open'),
               const SizedBox(height: 6),
               if (notebooks.isEmpty)
@@ -198,8 +198,8 @@ class _NotebookManagerState extends State<_NotebookManager> {
                   child: Center(
                     child: Text(
                         _query.trim().isEmpty
-                            ? 'No notebooks yet.'
-                            : 'No notebooks match “${_query.trim()}”.',
+                            ? 'No projects yet.'
+                            : 'No projects match “${_query.trim()}”.',
                         style: TextStyle(fontSize: 13, color: s.textSecondary)),
                   ),
                 ),
@@ -214,7 +214,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
               ],
               if (_importOpen) ...[
                 const SizedBox(height: 12),
-                _sectionLabel('Import into a new notebook'),
+                _sectionLabel('Import into a new project'),
                 _importRow(),
               ],
               // Repeated imports of the same notebook. Shown here rather than
@@ -252,7 +252,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
                     style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact),
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('New Notebook'),
+                    label: const Text('New project'),
                     onPressed: () async {
                       // Through the shared prompt, which owns the field's
                       // controller in the dialog's own State. This used to build
@@ -261,9 +261,9 @@ class _NotebookManagerState extends State<_NotebookManager> {
                       // transition had finished unmounting the field. That is what
                       // crashed the app on Enter; see [promptForText].
                       final title = await promptForText(context,
-                          title: 'New notebook',
+                          title: 'New project',
                           okLabel: 'Create',
-                          hintText: 'Notebook name');
+                          hintText: 'Project name');
                       if (title == null || !mounted) return;
                       await app.createNotebook(title);
                       if (mounted) setState(() {});
@@ -349,7 +349,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Notebooks',
+              Text('Projects',
                   style: OnoteType.headline.copyWith(
                       color: s.textPrimary, fontWeight: FontWeight.w700)),
               Text('Organize your ideas, all in one place.',
@@ -372,7 +372,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
               prefixIcon: Icon(Icons.search, size: 16),
               prefixIconConstraints:
                   BoxConstraints(minWidth: 32, minHeight: 32),
-              hintText: 'Search notebooks…',
+              hintText: 'Search projects…',
               hintStyle: TextStyle(fontSize: 12.5),
               contentPadding: EdgeInsets.symmetric(vertical: 8),
               border: OutlineInputBorder(),
@@ -687,7 +687,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                  '${counts.sections} section${counts.sections == 1 ? '' : 's'} · '
+                                  '${counts.sections} notebook${counts.sections == 1 ? '' : 's'} · '
                                   '${counts.pages} page${counts.pages == 1 ? '' : 's'}'
                                   '${current ? ' · open' : ''}',
                                   style: TextStyle(
@@ -714,7 +714,7 @@ class _NotebookManagerState extends State<_NotebookManager> {
                     )
                   else if (!renaming && !confirming) ...[
                     if (!current)
-                      _act(Icons.open_in_new, 'Open this notebook', () async {
+                      _act(Icons.open_in_new, 'Open this project', () async {
                         Navigator.pop(context);
                         await app.openNotebook(nb.id);
                       }),

@@ -262,7 +262,8 @@ class _PlannerPanelState extends State<PlannerPanel> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Text('Show all',
-                    style: TextStyle(fontSize: 11, color: context.surfaces.textSecondary)),
+                    style: TextStyle(
+                        fontSize: 11, color: context.surfaces.textSecondary)),
               ),
             ),
           ]),
@@ -271,7 +272,8 @@ class _PlannerPanelState extends State<PlannerPanel> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Text('Nothing on this day.',
-                style: TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
+                style: TextStyle(
+                    fontSize: 12, color: context.surfaces.textSecondary)),
           )
         else
           for (final it in items) _row(context, it, now),
@@ -325,9 +327,9 @@ class _PlannerPanelState extends State<PlannerPanel> {
                     style: TextStyle(
                         fontSize: 13,
                         height: 1.3,
-                        decoration:
-                            it.done ? TextDecoration.lineThrough : null,
-                        color: it.done ? context.surfaces.textSecondary : null)),
+                        decoration: it.done ? TextDecoration.lineThrough : null,
+                        color:
+                            it.done ? context.surfaces.textSecondary : null)),
                 if (it.subtitle case final s?)
                   Text(s,
                       maxLines: 1,
@@ -396,8 +398,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
             if (it.pageId == null || it.blockId == null || it.line == null) {
               return;
             }
-            app.setTagCheckedOn(
-                it.pageId!, it.blockId!, it.line!, v ?? false);
+            app.setTagCheckedOn(it.pageId!, it.blockId!, it.line!, v ?? false);
           },
         ),
       );
@@ -406,7 +407,10 @@ class _PlannerPanelState extends State<PlannerPanel> {
       DatedKind.exam => (Icons.flag_outlined, OnoteColors.brass500),
       DatedKind.reminder => (Icons.notifications_none, OnoteColors.ink500),
       DatedKind.event => (Icons.schedule, context.surfaces.textSecondary),
-      DatedKind.task => (Icons.check_box_outline_blank, context.surfaces.textSecondary),
+      DatedKind.task => (
+          Icons.check_box_outline_blank,
+          context.surfaces.textSecondary
+        ),
     };
     return Padding(
       padding: const EdgeInsets.only(top: 1),
@@ -454,7 +458,8 @@ class _PlannerPanelState extends State<PlannerPanel> {
             PopupMenuItem(value: 'exam', child: Text('Exam date…')),
             PopupMenuItem(value: 'task', child: Text('Due date on this page…')),
             PopupMenuDivider(),
-            PopupMenuItem(value: 'ics', child: Text('Subscribe to a timetable…')),
+            PopupMenuItem(
+                value: 'ics', child: Text('Subscribe to a timetable…')),
           ],
           child: const Padding(
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -499,8 +504,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
             ],
             if (planner.calendarWarnings.isNotEmpty)
               const PopupMenuItem(
-                  value: 'warnings',
-                  child: Text('Notes about this calendar…')),
+                  value: 'warnings', child: Text('Notes about this calendar…')),
           ],
         ),
       ]),
@@ -513,12 +517,12 @@ class _PlannerPanelState extends State<PlannerPanel> {
     final at = sub.fetchedAt;
     if (at == null) return 'Refresh $name';
     return 'Refresh $name (updated ${relativeWhen(DatedItem(
-      id: '',
-      kind: DatedKind.event,
-      title: '',
-      when: at,
-      allDay: false,
-    ), now)})';
+          id: '',
+          kind: DatedKind.event,
+          title: '',
+          when: at,
+          allDay: false,
+        ), now)})';
   }
 
   // ── Actions ──────────────────────────────────────────────────────────
@@ -625,9 +629,8 @@ class _PlannerPanelState extends State<PlannerPanel> {
         if (n.kind == NodeKind.section) n
     ];
     if (sections.isEmpty) return;
-    final chosen = sections.length == 1
-        ? sections.single
-        : await _pickSection(sections);
+    final chosen =
+        sections.length == 1 ? sections.single : await _pickSection(sections);
     if (chosen == null || !mounted) return;
     // The shared picker, so the planner, the navigator and the study panel all
     // offer the same thing — including the optional start time, which the
@@ -639,7 +642,7 @@ class _PlannerPanelState extends State<PlannerPanel> {
       showOnoteDialog<TreeNode>(
         context: context,
         builder: (ctx) => SimpleDialog(
-          title: const Text('Which section?', style: TextStyle(fontSize: 15)),
+          title: const Text('Which notebook?', style: TextStyle(fontSize: 15)),
           children: [
             for (final s in sections)
               SimpleDialogOption(
@@ -748,8 +751,8 @@ class _PlannerPanelState extends State<PlannerPanel> {
   Future<void> _showWarnings() => showOnoteDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('About this calendar',
-              style: TextStyle(fontSize: 15)),
+          title:
+              const Text('About this calendar', style: TextStyle(fontSize: 15)),
           content: SizedBox(
             width: 460,
             child: SingleChildScrollView(
@@ -775,7 +778,8 @@ class _PlannerPanelState extends State<PlannerPanel> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close')),
           ],
         ),
       );
@@ -844,7 +848,8 @@ class _ReminderDialogState extends State<_ReminderDialog> {
   /// chose; it is an artefact of when the dialog happened to open.
   static DateTime _round(DateTime d) {
     final m = ((d.minute + 4) ~/ 5) * 5;
-    return DateTime(d.year, d.month, d.day, d.hour, 0).add(Duration(minutes: m));
+    return DateTime(d.year, d.month, d.day, d.hour, 0)
+        .add(Duration(minutes: m));
   }
 
   @override
@@ -873,7 +878,8 @@ class _ReminderDialogState extends State<_ReminderDialog> {
     final t = await showTimePicker(
         context: context, initialTime: TimeOfDay.fromDateTime(_at));
     if (t == null || !mounted) return;
-    setState(() => _at = DateTime(_at.year, _at.month, _at.day, t.hour, t.minute));
+    setState(
+        () => _at = DateTime(_at.year, _at.month, _at.day, t.hour, t.minute));
   }
 
   Future<void> _pickDate() async {
@@ -885,17 +891,14 @@ class _ReminderDialogState extends State<_ReminderDialog> {
       lastDate: DateTime(today.year + 5, today.month, today.day),
     );
     if (d == null || !mounted) return;
-    setState(() => _at = DateTime(d.year, d.month, d.day, _at.hour, _at.minute));
+    setState(
+        () => _at = DateTime(d.year, d.month, d.day, _at.hour, _at.minute));
   }
 
   @override
   Widget build(BuildContext context) {
     final when = DatedItem(
-        id: '',
-        kind: DatedKind.reminder,
-        title: '',
-        when: _at,
-        allDay: true);
+        id: '', kind: DatedKind.reminder, title: '', when: _at, allDay: true);
     // Enter in the field IS the "Remind me" button. The field is
     // autofocused, so typing the reminder and pressing Enter is what anyone
     // will try first; without this it did nothing at all and the only way
@@ -931,8 +934,8 @@ class _ReminderDialogState extends State<_ReminderDialog> {
               _chip('In 30 min', () => _shift(const Duration(minutes: 30))),
               _chip('In an hour', () => _shift(const Duration(hours: 1))),
               _chip('This evening', () => _setTimeOfDay(19, 0)),
-              _chip('Tomorrow morning',
-                  () => _setTimeOfDay(9, 0, dayOffset: 1)),
+              _chip(
+                  'Tomorrow morning', () => _setTimeOfDay(9, 0, dayOffset: 1)),
             ]),
             const SizedBox(height: 12),
             Row(children: [
@@ -956,7 +959,9 @@ class _ReminderDialogState extends State<_ReminderDialog> {
             Text(
               'Slate nudges you while it is open. If it was closed when the '
               'time came, the reminder is waiting when you next open it.',
-              style: TextStyle(fontSize: 11, height: 1.4,
+              style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
                   color: context.surfaces.textSecondary),
             ),
           ],
@@ -964,7 +969,8 @@ class _ReminderDialogState extends State<_ReminderDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         FilledButton(
           onPressed: _text.text.trim().isEmpty ? null : submit,
           child: const Text('Remind me'),
@@ -1025,16 +1031,17 @@ class _CalendarDialogState extends State<_CalendarDialog> {
                   isDense: true,
                 ),
                 onChanged: (_) => setState(() {}),
-                onSubmitted: (v) => v.trim().isEmpty
-                    ? null
-                    : Navigator.pop(context, v.trim()),
+                onSubmitted: (v) =>
+                    v.trim().isEmpty ? null : Navigator.pop(context, v.trim()),
               ),
               const SizedBox(height: 10),
               Text(
                 'Read-only, one direction: Slate shows your timetable beside '
                 'your notes and never writes anything back to it.',
                 style: TextStyle(
-                    fontSize: 11, height: 1.4, color: context.surfaces.textSecondary),
+                    fontSize: 11,
+                    height: 1.4,
+                    color: context.surfaces.textSecondary),
               ),
             ],
           ),
@@ -1128,8 +1135,8 @@ class _EventLine extends StatelessWidget {
       SizedBox(
         width: 34,
         child: Text(label,
-            style: OnoteType.overline.copyWith(
-                color: emphasis ? scheme.primary : s.textSecondary)),
+            style: OnoteType.overline
+                .copyWith(color: emphasis ? scheme.primary : s.textSecondary)),
       ),
       Expanded(
         child: Column(
@@ -1160,8 +1167,7 @@ class _EventLine extends StatelessWidget {
             child: FilledButton.tonal(
               style: FilledButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: OnoteSpace.x4),
+                padding: const EdgeInsets.symmetric(horizontal: OnoteSpace.x4),
                 minimumSize: const Size(0, OnoteSize.buttonCompact),
                 textStyle: OnoteType.small,
               ),
@@ -1177,9 +1183,7 @@ class _EventLine extends StatelessWidget {
     final parts = <String>[];
     final mins = event.start.difference(now).inMinutes;
     if (mins > 0) {
-      parts.add(mins < 60
-          ? 'in $mins min'
-          : 'at ${formatClock(event.start)}');
+      parts.add(mins < 60 ? 'in $mins min' : 'at ${formatClock(event.start)}');
     } else if (event.end != null) {
       parts.add('until ${formatClock(event.end!)}');
     } else {

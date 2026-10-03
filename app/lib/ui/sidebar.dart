@@ -175,14 +175,31 @@ class _SidebarState extends State<Sidebar> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _NotebookHeader(app: app),
+              // Home sits at the very top, always — a springboard back to the
+              // workspace. The open project's switcher and its tree only appear
+              // below once a project is open.
+              _homeHeader(context),
               _searchRow(context),
               const Divider(height: 1),
               Expanded(
-                child: searching ? _searchResults(context) : _treeBody(context),
+                child: searching
+                    ? _searchResults(context)
+                    // At Home nothing is open, so the navigator is just Home +
+                    // search: the projects themselves live in the main area.
+                    : app.navHome
+                        ? const SizedBox.shrink()
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _NotebookHeader(app: app),
+                              Expanded(child: _treeBody(context)),
+                            ],
+                          ),
               ),
-              const Divider(height: 1),
-              _footer(context),
+              if (!app.navHome) ...[
+                const Divider(height: 1),
+                _footer(context),
+              ],
             ],
           ),
         ),
@@ -195,6 +212,26 @@ class _SidebarState extends State<Sidebar> {
           },
           onEnd: () => app.setNavPagesW(app.navPagesW),
         ),
+      ],
+    );
+  }
+
+  // ── Home header ───────────────────────────────────────────────────────
+
+  /// The top of the navigator: Home on the left, the collapse toggle on the
+  /// right. Present whether or not a project is open, so Home is always one
+  /// click away.
+  Widget _homeHeader(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _HomeTile(app: app)),
+        IconButton(
+          icon: const Icon(Icons.keyboard_double_arrow_left, size: 16),
+          tooltip: 'Collapse the navigator  (Ctrl+)',
+          visualDensity: VisualDensity.compact,
+          onPressed: app.toggleNavCollapsed,
+        ),
+        const SizedBox(width: 4),
       ],
     );
   }
@@ -384,12 +421,11 @@ class _SidebarState extends State<Sidebar> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _HomeTile(app: app),
           Expanded(
             child: _EmptyHint(
               icon: Icons.folder_outlined,
-              text: 'No sections yet.\nCreate one to get started.',
-              actionLabel: 'New section',
+              text: 'No notebooks yet.\nCreate one to get started.',
+              actionLabel: 'New notebook',
               onAction: app.addSection,
             ),
           ),
@@ -425,10 +461,8 @@ class _SidebarState extends State<Sidebar> {
     }
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
       children: [
-        _HomeTile(app: app),
-        const SizedBox(height: 4),
         for (final g in groups) ...[
           _GroupHeader(app: app, group: g),
           _Reveal(
@@ -470,13 +504,13 @@ class _SidebarState extends State<Sidebar> {
             Expanded(
               child: TextButton.icon(
                 icon: const Icon(Icons.create_new_folder_outlined, size: 16),
-                label: const Text('Section', style: TextStyle(fontSize: 12)),
+                label: const Text('Notebook', style: TextStyle(fontSize: 12)),
                 onPressed: app.addSection,
               ),
             ),
             IconButton(
               icon: const Icon(Icons.topic_outlined, size: 16),
-              tooltip: 'New section group',
+              tooltip: 'New group',
               onPressed: app.addSectionGroup,
             ),
             IconButton(
@@ -587,7 +621,7 @@ class _GroupHeaderState extends State<_GroupHeader> {
                             if (mounted) setState(() => _renaming = false);
                           },
                         )
-                      : Text(target ? 'move section here' : group.title,
+                      : Text(target ? 'move notebook here' : group.title,
                           overflow: TextOverflow.ellipsis, style: labelStyle),
                 ),
               ],
@@ -732,7 +766,7 @@ class _NavRail extends StatelessWidget {
           ),
           _RailButton(
             icon: Icons.folder_outlined,
-            tooltip: 'Notebooks',
+            tooltip: 'Projects',
             onTap: () => showNotebookManager(context, app),
           ),
           const _RailDivider(),
@@ -1125,7 +1159,7 @@ class _NotebookHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 12, 8, 8),
       child: Tooltip(
-        message: 'Notebooks — switch, rename, duplicate, import',
+        message: 'Projects — switch, rename, duplicate, import',
         waitDuration: const Duration(milliseconds: 600),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -1154,12 +1188,6 @@ class _NotebookHeader extends StatelessWidget {
                   ),
                 ),
                 const Icon(Icons.unfold_more, size: 16),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_double_arrow_left, size: 16),
-                  tooltip: 'Collapse the navigator  (Ctrl+)',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: app.toggleNavCollapsed,
-                ),
               ],
             ),
           ),
@@ -2047,8 +2075,8 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
         // section far more often than a page — and for an imported deck it is
         // the whole deck. Vector export made the output worth sending.
         _nodeItem('sectionpdf', Icons.picture_as_pdf_outlined,
-            'Export section as PDF…'),
-        _nodeItem('printsection', Icons.print_outlined, 'Print section…'),
+            'Export notebook as PDF…'),
+        _nodeItem('printsection', Icons.print_outlined, 'Print notebook…'),
         if (app.study.examDate(node.id) case final exam?) ...[
           _nodeItem('exam', Icons.flag_outlined,
               _examMenuLabel(context, app, node.id, exam)),
@@ -2172,7 +2200,7 @@ Future<void> showNodeMenu(BuildContext context, AppState app, TreeNode node,
       final choice = await showOnoteDialog<String>(
         context: context,
         builder: (ctx) => SimpleDialog(
-          title: const Text('Move section to…'),
+          title: const Text('Move notebook to…'),
           children: [
             SimpleDialogOption(
                 onPressed: () => Navigator.pop(ctx, ''),

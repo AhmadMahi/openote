@@ -218,10 +218,10 @@ class _CommandBarState extends State<CommandBar> {
                           ToolbarSubmenuItem(
                             icon: Icons.folder_zip_outlined,
                             label:
-                                'Save the whole notebook as folders and files…',
+                                'Save the whole project as folders and files…',
                             onPressed: () => _exportWithProgress(
                                 context,
-                                'Saving the notebook…',
+                                'Saving the project…',
                                 (report) => materializeNotebook(app,
                                     onProgress: (done, total) =>
                                         report('Page $done of $total…'))),
@@ -532,14 +532,14 @@ class _CommandBarState extends State<CommandBar> {
           leadingIcon: const Icon(Icons.folder_zip_outlined, size: 18),
           onPressed: () => _exportWithProgress(
               context,
-              'Saving the notebook…',
+              'Saving the project…',
               (report) => materializeNotebook(app,
                   onProgress: (done, total) =>
                       report('Page $done of $total…'))),
           // Say what lands on disk. "Materialize" is this codebase's own
           // architecture vocabulary (`sync/materializer.dart`) and appears
           // in no other user-visible string in the app.
-          child: const Text('Save the whole notebook as folders and files…'),
+          child: const Text('Save the whole project as folders and files…'),
         ),
         if (_canPushToRepo) ...[
           const Divider(height: 6),
