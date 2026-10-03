@@ -283,12 +283,21 @@ class CanvasController extends ChangeNotifier {
   /// as well — on a 1470px window an A4 sheet at 100% leaves a third of the
   /// screen as desk, and stopping at 100% would silently do nothing.
   void fillWidth(double contentWidth) {
-    if (viewport == Size.zero || contentWidth <= 0) {
+    if (contentWidth <= 0) {
       centerPage();
       return;
     }
+    // Latch the intent even when the viewport has not been measured yet (the
+    // page is often opened a frame before its LayoutBuilder reports a size).
+    // The `viewport` setter re-applies the fit the moment a real width
+    // arrives, so "fit new pages to width" takes effect on open instead of
+    // silently centring and leaving the page un-fitted.
     fitLocked = true;
     _fitTargetWidth = contentWidth;
+    if (viewport == Size.zero) {
+      centerPage();
+      return;
+    }
     _applyFillWidth(contentWidth);
     notifyListeners();
   }

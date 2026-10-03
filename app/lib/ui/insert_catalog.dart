@@ -425,7 +425,7 @@ final List<InsertGroup> kInsertGroups = [
       label: 'Presentation',
       tooltip: 'Page through a PDF deck, slide by slide (export a PPT to PDF)',
       opensPicker: true,
-      size: Size(520, 320),
+      size: Size(360, 260),
       run: insertPresentationFromPickedFile,
     ),
     InsertItem(
@@ -605,7 +605,8 @@ Future<void> insertPresentationFromPickedFile(
   final hash = app.addBlob(bytes, 'application/pdf');
   final title =
       file.name.replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '').trim();
-  const w = 520.0;
+  // Lands as a small card (resize or go full-screen from there), not a slab.
+  const w = 360.0;
   const barH = 44.0;
   const pad = 24.0;
   final h = (w - pad) * aspect + pad + barH;

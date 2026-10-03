@@ -58,6 +58,133 @@ class _BucketDialog extends StatelessWidget {
 
   String _basename(String path) => path.split(RegExp(r'[/\\]')).last;
 
+  String _ext(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot >= 0 ? name.substring(dot + 1).toUpperCase() : '';
+  }
+
+  /// A clear tap-to-add area. Large (a friendly empty state) when the bucket
+  /// is empty, compact (a slim button) once it has files.
+  Widget _addZone(BuildContext context, OnoteSurfaces s,
+      {required bool large}) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      borderRadius: OnoteRadius.lgAll,
+      onTap: () => _add(context),
+      child: Container(
+        width: double.infinity,
+        padding:
+            EdgeInsets.symmetric(vertical: large ? 26 : 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.05),
+          borderRadius: OnoteRadius.lgAll,
+          border: Border.all(
+              color: accent.withValues(alpha: 0.35),
+              width: 1,
+              strokeAlign: BorderSide.strokeAlignInside),
+        ),
+        child: large
+            ? Column(
+                children: [
+                  Icon(Icons.cloud_upload_outlined, size: 30, color: accent),
+                  const SizedBox(height: 10),
+                  Text('Add files to share with this page',
+                      style: OnoteType.ui.copyWith(
+                          color: s.textPrimary, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text('Slides, PDFs, notebooks — click to choose',
+                      style: OnoteType.small.copyWith(color: s.textSecondary)),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add, size: 18, color: accent),
+                  const SizedBox(width: 8),
+                  Text('Add more files',
+                      style: OnoteType.ui.copyWith(
+                          color: accent, fontWeight: FontWeight.w600)),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _fileCard(BuildContext context, OnoteSurfaces s, String p) {
+    final ext = _ext(p);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: s.textPrimary.withValues(alpha: 0.03),
+        borderRadius: OnoteRadius.lgAll,
+        border: Border.all(color: s.border.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: s.textSecondary.withValues(alpha: 0.10),
+              borderRadius: OnoteRadius.mdAll,
+            ),
+            child: Icon(_iconFor(p), size: 18, color: s.textSecondary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(_basename(p),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: s.textPrimary)),
+                  ),
+                  if (ext.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: s.textSecondary.withValues(alpha: 0.12),
+                        borderRadius: OnoteRadius.smAll,
+                      ),
+                      child: Text(ext,
+                          style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                              color: s.textSecondary)),
+                    ),
+                  ],
+                ]),
+                const SizedBox(height: 1),
+                Text(p,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: s.textSecondary)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: 'Remove',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => app.removeBucketPath(p),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.surfaces;
@@ -90,53 +217,21 @@ class _BucketDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 if (files.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: Text('No files yet.',
-                          style: TextStyle(color: s.textSecondary)),
-                    ),
-                  )
-                else
+                  _addZone(context, s, large: true)
+                else ...[
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 300),
+                    constraints: const BoxConstraints(maxHeight: 290),
                     child: ListView.builder(
                       shrinkWrap: true,
+                      padding: EdgeInsets.zero,
                       itemCount: files.length,
-                      itemBuilder: (context, i) {
-                        final p = files[i];
-                        return ListTile(
-                          dense: true,
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 4),
-                          leading: Icon(_iconFor(p), size: 20),
-                          title: Text(_basename(p),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13)),
-                          subtitle: Text(p,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 11)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close, size: 16),
-                            tooltip: 'Remove',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => app.removeBucketPath(p),
-                          ),
-                        );
-                      },
+                      itemBuilder: (context, i) =>
+                          _fileCard(context, s, files[i]),
                     ),
                   ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => _add(context),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add files…'),
-                  ),
-                ),
+                  const SizedBox(height: 10),
+                  _addZone(context, s, large: false),
+                ],
               ],
             ),
           ),

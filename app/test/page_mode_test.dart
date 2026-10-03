@@ -103,8 +103,7 @@ void main() {
       expect(PageProps().bgSpacing, PageProps.defaultBgSpacing);
       expect(PageProps().toJson().containsKey('bgSpacing'), isFalse,
           reason: 'the default says nothing');
-      expect(
-          PageProps.fromJson({'background': 'ruled'}).bgSpacing,
+      expect(PageProps.fromJson({'background': 'ruled'}).bgSpacing,
           PageProps.defaultBgSpacing,
           reason: 'a page from any older build rules exactly as it always did');
 
@@ -167,8 +166,7 @@ void main() {
       // had to draw at the bottom of page 1 to earn the room to draw at the
       // bottom of page 1.
       expect(app.sheetCount, 1);
-      expect(app.pageSize().height,
-          paper.height * (1 + AppState.spareSheets));
+      expect(app.pageSize().height, paper.height * (1 + AppState.spareSheets));
 
       // Content past the bottom of sheet one earns a second sheet, whole —
       // and the spare paper follows it down.
@@ -182,8 +180,7 @@ void main() {
             content: {'text': 'overflow'})
       ];
       expect(app.sheetCount, 2, reason: 'the document is two pages');
-      expect(app.pageSize().height,
-          paper.height * (2 + AppState.spareSheets));
+      expect(app.pageSize().height, paper.height * (2 + AppState.spareSheets));
     });
 
     test('canvas mode is untouched by any of it', () {
@@ -218,18 +215,33 @@ void main() {
       // guess. The boxes are still theirs to move.
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       app.blocks = [
-        Block(type: BlockType.text, x: 100, y: 200, w: 300, content: {'text': 'a'}),
-        Block(type: BlockType.text, x: 500, y: 400, w: 300, content: {'text': 'b'}),
+        Block(
+            type: BlockType.text,
+            x: 100,
+            y: 200,
+            w: 300,
+            content: {'text': 'a'}),
+        Block(
+            type: BlockType.text,
+            x: 500,
+            y: 400,
+            w: 300,
+            content: {'text': 'b'}),
       ];
       app.setPageLayout('paged');
-      expect(app.blocks, hasLength(2), reason: 'nothing added, nothing removed');
+      expect(app.blocks, hasLength(2),
+          reason: 'nothing added, nothing removed');
       expect(app.blocks.map((b) => b.content['text']), ['a', 'b']);
     });
 
     test('boxes are pulled inside the paper', () {
       if (!haveSqlite) return markTestSkipped('sqlite unavailable');
       final wide = Block(
-          type: BlockType.text, x: 2000, y: 300, w: 3000, content: {'text': 'x'});
+          type: BlockType.text,
+          x: 2000,
+          y: 300,
+          w: 3000,
+          content: {'text': 'x'});
       app.blocks = [wide];
       app.setPageLayout('paged');
 
@@ -281,7 +293,27 @@ void main() {
       expect(app.pageProps.isPaged, isTrue);
       expect(app.pageProps.paperSize, 'Legal');
       expect(app.pageProps.landscape, isTrue);
-      expect(app.sheetBody(), isNotNull, reason: 'and it has its body box');
+      // It inherits the paged SHAPE but opens plain — no auto "big box" to
+      // click away and delete. A body box is only added on a deliberate
+      // switch to paged mode (see the "one big box" test above).
+      expect(app.sheetBody(), isNull, reason: 'the new page opens plain');
+    });
+
+    test("a new notebook's first page gets the default page settings",
+        () async {
+      // The seed page is created in the repository, which cannot see these
+      // defaults — so it used to ignore A4 / the chosen background until fixed
+      // by hand. createNotebook now applies them to the seed page.
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      app.setDefaultPageSize('A4');
+      app.setDefaultBackground('grid');
+      await app.createNotebook('Deck');
+      expect(app.pageProps.isPaged, isTrue, reason: 'seed page is A4, paged');
+      expect(app.pageProps.paperSize, 'A4');
+      expect(app.pageProps.background, 'grid');
+      // ...and still plain: no auto body box on the seed page.
+      expect(app.sheetBody(), isNull);
+      app.cancelPendingSave();
     });
 
     test('a new page after a CANVAS page stays canvas', () async {

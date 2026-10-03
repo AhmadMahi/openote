@@ -180,53 +180,63 @@ class _SlideStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // An already-rendered slide is drawn straight from the synchronous cache,
+    // with NO FutureBuilder. The inline block rebuilds many times a second
+    // (selection, drag handles, notifies), and a FutureBuilder re-subscribes
+    // whenever the future identity changes — which `PdfPages.pageImage` does
+    // once a page is cached — flashing a spinner over the slide every rebuild.
+    // Reading the cache directly keeps the picture perfectly steady; the
+    // FutureBuilder is only used for the one render before it is cached, where
+    // the in-flight future is shared (stable) so it does not thrash either.
+    final cached = PdfPages.cached(hash, page);
     return Container(
       color: dark ? const Color(0xFF15171B) : const Color(0xFFEDEEF1),
       padding: const EdgeInsets.all(12),
       child: Center(
-        child: FutureBuilder<Uint8List?>(
-          // A stable key per page so flipping slides doesn't flash the old one.
-          key: ValueKey('$hash#$page'),
-          future: PdfPages.pageImage(app, hash, page),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              );
-            }
-            final bytes = snap.data;
-            if (bytes == null) {
-              return Text(
-                app.blob(hash) == null
-                    ? "This deck isn't on this computer yet."
-                    : "That slide couldn't be shown.",
-                style: const TextStyle(
-                    fontSize: 12.5, color: OnoteColors.graphite400),
-              );
-            }
-            return ClipRRect(
-              borderRadius: OnoteRadius.mdAll,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: OnoteRadius.mdAll,
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3)),
-                  ],
-                ),
-                child: Image.memory(bytes,
-                    fit: BoxFit.contain, gaplessPlayback: true),
+        child: cached != null
+            ? _slide(cached)
+            : FutureBuilder<Uint8List?>(
+                key: ValueKey('$hash#$page'),
+                future: PdfPages.pageImage(app, hash, page),
+                builder: (context, snap) {
+                  final bytes = snap.data;
+                  if (bytes != null) return _slide(bytes);
+                  if (snap.connectionState == ConnectionState.done) {
+                    return Text(
+                      app.blob(hash) == null
+                          ? "This deck isn't on this computer yet."
+                          : "That slide couldn't be shown.",
+                      style: const TextStyle(
+                          fontSize: 12.5, color: OnoteColors.graphite400),
+                    );
+                  }
+                  return const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                },
               ),
-            );
-          },
-        ),
       ),
     );
   }
+
+  Widget _slide(Uint8List bytes) => ClipRRect(
+        borderRadius: OnoteRadius.mdAll,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: OnoteRadius.mdAll,
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3)),
+            ],
+          ),
+          child:
+              Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true),
+        ),
+      );
 }
 
 /// Run the deck full-window: one slide at a time, arrow keys, Esc to leave.

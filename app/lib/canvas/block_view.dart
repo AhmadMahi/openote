@@ -481,6 +481,33 @@ class _BlockViewState extends State<BlockView> {
     final oldW = b.w;
     final oldH = b.h ?? app.renderSizes[b.id]?.height;
 
+    // Images keep their real aspect ratio on resize, so the frame always hugs
+    // the picture — no empty letterbox/pillarbox band gets left behind the way
+    // a single-axis resize used to leave it. The natural size was recorded on
+    // load (ImageBlockView); fall back to free resize until it is known.
+    final natW = (b.content['naturalW'] as num?)?.toDouble();
+    final natH = (b.content['naturalH'] as num?)?.toDouble();
+    if (b.type == BlockType.image &&
+        natW != null &&
+        natH != null &&
+        natW > 0 &&
+        natH > 0) {
+      final ar = natH / natW; // height per unit width
+      if (height && !width) {
+        // Bottom edge drives height; width follows.
+        final base = oldH ?? b.w * ar;
+        final nh = (base + d.delta.dy / scale).clamp(40.0, 4000.0);
+        b.w = (nh / ar).clamp(80.0, 4000.0);
+        b.h = b.w * ar;
+      } else {
+        // Right edge or corner drives width; height follows.
+        b.w = (b.w + d.delta.dx / scale).clamp(80.0, 4000.0);
+        b.h = b.w * ar;
+      }
+      app.updateBlock(b);
+      return;
+    }
+
     if (width) {
       // Manual resize locks the width (text boxes stop auto-growing).
       if (b.type == BlockType.text) b.content['autoWidth'] = false;

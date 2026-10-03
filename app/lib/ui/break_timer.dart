@@ -8,6 +8,7 @@ import '../ai/ai_provider.dart';
 import '../export/markdown_export.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
+import 'glass.dart';
 import 'onote_dialog.dart';
 
 /// A teaching break: pick how long, and whether to show a message, then the
@@ -331,6 +332,13 @@ class _BreakScreenState extends State<_BreakScreen> {
       color: dark ? const Color(0xFF0E1116) : const Color(0xFFF6F7FB),
       child: Stack(
         children: [
+          // A calm ambient wash instead of a flat slab, so the break screen
+          // feels like a pause rather than a blank dialog.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _BreakArtPainter(dark: dark)),
+            ),
+          ),
           Positioned(
             top: 14,
             right: 16,
@@ -341,77 +349,111 @@ class _BreakScreenState extends State<_BreakScreen> {
             ),
           ),
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_done ? "Break's over" : 'On a break',
-                    style: TextStyle(
-                        fontSize: 15,
-                        letterSpacing: 1.5,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.primary)),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: 220,
-                  height: 220,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        height: 220,
-                        child: CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 6,
-                          backgroundColor:
-                              scheme.primary.withValues(alpha: 0.12),
-                          valueColor: AlwaysStoppedAnimation(
-                              _done ? const Color(0xFF2E9E5B) : scheme.primary),
-                        ),
-                      ),
-                      Text(_done ? '00:00' : _clock,
-                          style: TextStyle(
-                              fontSize: 52,
-                              fontWeight: FontWeight.w700,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
-                              color: dark ? Colors.white : Colors.black87)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 26),
-                SizedBox(
-                  width: 420,
-                  child: _loadingMessage
-                      ? const Center(
-                          child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2)))
-                      : Text(
-                          _done
-                              ? 'Welcome back — ready when you are.'
-                              : (_message ?? ''),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 16,
-                              height: 1.4,
-                              color: dark ? Colors.white70 : Colors.black54)),
-                ),
-                if (_done) ...[
-                  const SizedBox(height: 26),
-                  FilledButton.icon(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                    label: const Text('Resume the session'),
-                  ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 52, vertical: 44),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: dark ? 0.06 : 0.60),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                    color: (dark ? Colors.white : Colors.black)
+                        .withValues(alpha: dark ? 0.10 : 0.05)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: dark ? 0.32 : 0.08),
+                      blurRadius: 34,
+                      offset: const Offset(0, 12)),
                 ],
-              ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_done ? "Break's over" : 'On a break',
+                      style: TextStyle(
+                          fontSize: 15,
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.primary)),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: 220,
+                    height: 220,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 220,
+                          height: 220,
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 6,
+                            backgroundColor:
+                                scheme.primary.withValues(alpha: 0.12),
+                            valueColor: AlwaysStoppedAnimation(_done
+                                ? const Color(0xFF2E9E5B)
+                                : scheme.primary),
+                          ),
+                        ),
+                        Text(_done ? '00:00' : _clock,
+                            style: TextStyle(
+                                fontSize: 52,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                                color: dark ? Colors.white : Colors.black87)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 26),
+                  SizedBox(
+                    width: 420,
+                    child: _loadingMessage
+                        ? const Center(
+                            child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)))
+                        : Text(
+                            _done
+                                ? 'Welcome back — ready when you are.'
+                                : (_message ?? ''),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 16,
+                                height: 1.4,
+                                color: dark ? Colors.white70 : Colors.black54)),
+                  ),
+                  if (_done) ...[
+                    const SizedBox(height: 26),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                      label: const Text('Resume the session'),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
+}
+
+/// The calm ambient wash behind the break screen — the app's own gradient art,
+/// so the full-screen countdown reads as a designed pause, not a blank slab.
+class _BreakArtPainter extends CustomPainter {
+  _BreakArtPainter({required this.dark});
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintAmbient(canvas, Offset.zero & size,
+        dark: dark, strength: dark ? 1.0 : 0.85, variant: 'ambient-dusk');
+  }
+
+  @override
+  bool shouldRepaint(covariant _BreakArtPainter old) => old.dark != dark;
 }

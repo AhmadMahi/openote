@@ -394,8 +394,21 @@ class _PageCanvasState extends State<PageCanvas>
 
   // ── Ink capture (page-space, Ink Data Spec §1) ──────────────────────────
 
+  /// While a text block is being edited, the first pointer-down anywhere on
+  /// the canvas — in ANY tool — just finishes that edit: it commits, blurs and
+  /// deselects, and the gesture does nothing else (no stroke, no shape, no
+  /// space). The next gesture acts normally for the active tool. This is what
+  /// makes "paste, then click away" drop you out cleanly no matter which tool
+  /// is up, matching the Select/Text tools, which already commit on click-away.
+  bool _exitEditOnCanvasDown() {
+    if (app.editingBlockId == null) return false;
+    app.select(null);
+    return true;
+  }
+
   void _inkDown(PointerDownEvent e) {
     app.claimedPointers.remove(e.pointer); // keep the claim set tidy
+    if (_exitEditOnCanvasDown()) return;
     _lastInkScreenPos = e.localPosition;
     // A placed shape is waiting to be moved or dropped: this pointer drives
     // it, not a new stroke. A drag repositions it; a tap (below) drops it.
@@ -828,6 +841,7 @@ class _PageCanvasState extends State<PageCanvas>
   // ── Lasso-select ink (INK-7) ────────────────────────────────────────────
 
   void _lassoDown(PointerDownEvent e) {
+    if (_exitEditOnCanvasDown()) return;
     app.claimedPointers.remove(e.pointer);
     setState(() =>
         _lasso = [_clampToPagePoint(controller.screenToPage(e.localPosition))]);
@@ -1633,6 +1647,7 @@ class _PageCanvasState extends State<PageCanvas>
         behavior: HitTestBehavior.opaque,
         onPointerDown: (e) {
           if (app.claimedPointers.remove(e.pointer)) return;
+          if (_exitEditOnCanvasDown()) return;
           controller.stopGlide();
           final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
           setState(() {
@@ -1669,6 +1684,7 @@ class _PageCanvasState extends State<PageCanvas>
         behavior: HitTestBehavior.opaque,
         onPointerDown: (e) {
           if (app.claimedPointers.remove(e.pointer)) return;
+          if (_exitEditOnCanvasDown()) return;
           setState(() {
             _spaceAtY = controller.screenToPage(e.localPosition).dy;
             _spaceDy = 0;

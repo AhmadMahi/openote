@@ -253,8 +253,26 @@ class ShapeSnap {
         t: [for (var i = 0; i < pts.length; i++) i * 4],
       );
 
-  static Stroke _line(Stroke s, Offset2 a, Offset2 b) =>
-      _shaped(s, [for (var i = 0; i <= 16; i++) _lerp(a, b, i / 16)]);
+  static Stroke _line(Stroke s, Offset2 a, Offset2 b) {
+    final end = _snapAngle(a, b);
+    return _shaped(s, [for (var i = 0; i <= 16; i++) _lerp(a, end, i / 16)]);
+  }
+
+  /// Nudge a straightened line that is already within a few degrees of level,
+  /// vertical or 45° onto that exact angle (pivoting on the start, keeping its
+  /// length), so a snapped line reads as deliberate rather than slightly off.
+  /// A line clearly drawn at, say, 30° is left at 30°.
+  static Offset2 _snapAngle(Offset2 a, Offset2 b) {
+    final dx = b.x - a.x, dy = b.y - a.y;
+    final len = math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return b;
+    final ang = math.atan2(dy, dx);
+    const step = math.pi / 4; // 45° increments
+    final nearest = (ang / step).round() * step;
+    if ((ang - nearest).abs() > 0.14) return b; // ~8° tolerance
+    return Offset2(
+        a.x + len * math.cos(nearest), a.y + len * math.sin(nearest));
+  }
 
   static Offset2 _lerp(Offset2 a, Offset2 b, double t) =>
       Offset2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);

@@ -7093,6 +7093,14 @@ class AppState extends ChangeNotifier
     await flushSave();
     final ref = await _repo.createNotebook(title);
     await selectNotebook(ref.id);
+    // The seed page is created deep in the repository, which cannot see the
+    // user's default-page choices, so it always came out plain canvas — which
+    // is why a brand-new notebook ignored "A4" / the chosen background until
+    // the page was fixed by hand. Apply the defaults here, once the seed page
+    // is the current one. No body box is added (that is item for paged mode's
+    // explicit toggle), so the first page stays plain.
+    _applyNewPageDefaults();
+    notifyListeners();
     // Central backup, if on: a new notebook gets its folder in the one repo
     // automatically, so "everything gets uploaded there" without a click.
     if (central.enabled) unawaited(central.syncAll());
@@ -8778,13 +8786,17 @@ class AppState extends ChangeNotifier
   /// big box." So a page with nothing on it gets that one box, and a page with
   /// existing boxes keeps them — reflowing somebody's freeform layout into a
   /// column is a destructive guess, and the boxes are still theirs to move.
-  void setPageLayout(String layout, {String? paper, bool? landscape}) {
+  void setPageLayout(String layout,
+      {String? paper, bool? landscape, bool body = true}) {
     pushUndo();
     pageProps.layout = layout;
     if (paper != null) pageProps.paperSize = paper;
     if (landscape != null) pageProps.landscape = landscape;
     if (pageProps.isPaged) {
-      _ensureSheetBody();
+      // The empty "one big box" is created only on a deliberate switch to
+      // paged mode (the toolbar toggle). New pages that merely inherit a paged
+      // shape pass body:false so they open plain — no text box to delete.
+      if (body) _ensureSheetBody();
       // Every box is pulled inside the sheet: one left outside the paper is
       // content the user cannot see and will not find.
       for (final b in blocks) {
@@ -9366,8 +9378,9 @@ class AppState extends ChangeNotifier
     // over the default page size because it is the more specific wish.
     _applyNewPageDefaults(layoutToo: inherit == null);
     if (inherit != null) {
+      // Inherit the paged shape, but open plain — no auto body box.
       setPageLayout('paged',
-          paper: inherit.paper, landscape: inherit.landscape);
+          paper: inherit.paper, landscape: inherit.landscape, body: false);
     }
     pendingTitleEdit = n.id; // cursor lands in the title (OneNote behaviour)
     notifyListeners();

@@ -228,5 +228,38 @@ void main() {
           reason: 'one tap = one box: Text reverts to Select');
       app.cancelPendingSave();
     });
+
+    testWidgets('Pen mode: clicking out of an edited block exits it, no stroke',
+        (t) async {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      final b = app.addBlock(Block(
+          type: BlockType.text,
+          x: 200,
+          y: 300,
+          w: 200,
+          h: 60,
+          content: {'text': 'edit me', 'autoWidth': false}));
+      // Tool first: setTool(non-select) clears the selection, so arming the pen
+      // and THEN entering the edit mirrors how it happens in use (pen is up,
+      // then you tap into/paste a block).
+      app.setTool(Tool.pen);
+      app.select(b.id, edit: true);
+      await pump(t);
+      expect(app.editingBlockId, b.id);
+
+      final before = app.blocks.length;
+      final empty = app.canvas.pageToScreen(const Offset(600, 120));
+      final g = await t.startGesture(empty, kind: PointerDeviceKind.mouse);
+      await g.up();
+      await t.pump();
+
+      // The click out committed and left the edit — even though the pen is up.
+      expect(app.editingBlockId, isNull,
+          reason: 'clicking out in pen mode commits and exits the edit');
+      expect(app.selectedIds, isEmpty);
+      // ...and it did NOT also start an ink stroke (no new ink block).
+      expect(app.blocks.length, before, reason: 'the exit click does not draw');
+      app.cancelPendingSave();
+    });
   });
 }
