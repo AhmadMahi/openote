@@ -85,7 +85,12 @@ enum Tool {
   /// A rectangle, drawn by dragging one corner to the opposite one. Like the
   /// arrow it draws in the pen's colour and weight — the tool only changes
   /// what shape the drag makes.
-  rectangle
+  rectangle,
+
+  /// Numbering: each click drops the next number (1, 2, 3…) as a small stamp,
+  /// so a diagram can be labelled in order. The look and the counter live in
+  /// state ([numberStyle], [numberColorHex], [numberSize], [numberNext]).
+  number
 }
 
 /// One open page in the editor's tab strip. Identified by its notebook and
@@ -4546,6 +4551,69 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  // ── Numbering tool ────────────────────────────────────────────────────
+  //
+  // Each click drops the next number as a small stamp. The counter steps up
+  // per stamp; Reset sends it back to 1 so a new list starts fresh. The look
+  // (circle / box / plain, colour, size) is shared by every stamp placed
+  // next, and persists as a preference so the tool feels the same next time.
+
+  /// The number the next click will stamp.
+  int numberNext = 1;
+
+  /// 'circle' (default), 'box' or 'plain'.
+  String numberStyle = 'circle';
+
+  /// The stamp colour, 0xAARRGGBB. Red by default.
+  int numberColorHex = 0xFFE5484D;
+
+  /// The stamp's diameter in page units.
+  double numberSize = 40;
+
+  void setNumberStyle(String v) {
+    numberStyle = v;
+    _repo.setSetting('numberStyle', v);
+    notifyListeners();
+  }
+
+  void setNumberColorHex(int v) {
+    numberColorHex = v;
+    _repo.setSetting('numberColor', v);
+    notifyListeners();
+  }
+
+  void setNumberSize(double v) {
+    numberSize = v.clamp(20.0, 120.0);
+    _repo.setSetting('numberSize', numberSize);
+    notifyListeners();
+  }
+
+  /// Start the sequence over at 1.
+  void resetNumbering() {
+    numberNext = 1;
+    notifyListeners();
+  }
+
+  /// Drop the next number as a stamp centred on ([cx], [cy]) in page units,
+  /// then step the counter.
+  void addNumberAt(double cx, double cy) {
+    final d = numberSize;
+    final b = Block(
+      type: BlockType.number,
+      x: cx - d / 2,
+      y: cy - d / 2,
+      w: d,
+      content: {
+        'n': numberNext,
+        'style': numberStyle,
+        'color': numberColorHex,
+      },
+    )..h = d;
+    addBlock(b);
+    numberNext++;
+    notifyListeners();
+  }
+
   // ── The ink palette (INK-9) ──────────────────────────────────────────
   //
   // The swatch row used to read `OnoteColors.penColors` directly, in three
@@ -6839,6 +6907,12 @@ class AppState extends ChangeNotifier
     if (pp is bool) penProximitySwitch = pp;
     final as_ = _repo.getSetting('autoShape');
     if (as_ is bool) autoShape = as_;
+    final nStyle = _repo.getSetting('numberStyle');
+    if (nStyle is String) numberStyle = nStyle;
+    final nColor = _repo.getSetting('numberColor');
+    if (nColor is int) numberColorHex = nColor;
+    final nSize = _repo.getSetting('numberSize');
+    if (nSize is num) numberSize = nSize.toDouble().clamp(20.0, 120.0);
     final psz = _repo.getSetting('penSize');
     if (psz is num) {
       _penSize = psz.toDouble().clamp(minPenSize, maxPenSize);

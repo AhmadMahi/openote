@@ -1011,6 +1011,8 @@ class _CommandBarState extends State<CommandBar> {
           'Arrow  (A) — drag; the head lands where you let go'),
       toolButton(Tool.rectangle, Icons.crop_square,
           'Rectangle  (R) — drag one corner to the opposite one'),
+      toolButton(Tool.number, Icons.looks_one_outlined,
+          'Numbering  (N) — click to drop 1, 2, 3… in order'),
       toolButton(
           Tool.space,
           Icons.unfold_more,
@@ -1036,6 +1038,81 @@ class _CommandBarState extends State<CommandBar> {
         ),
       ),
       const _Div(),
+      // Numbering options — style, colour, size, and the counter with a reset.
+      if (app.tool == Tool.number) ...[
+        for (final style in const [
+          ('circle', Icons.circle_outlined, 'Number in a circle'),
+          ('box', Icons.crop_square, 'Number in a box'),
+          ('plain', Icons.looks_one_outlined, 'Plain number'),
+        ])
+          IconButton(
+            icon: Icon(style.$2, size: 18),
+            tooltip: style.$3,
+            visualDensity: VisualDensity.compact,
+            isSelected: app.numberStyle == style.$1,
+            style: IconButton.styleFrom(
+              backgroundColor: app.numberStyle == style.$1
+                  ? scheme.primary.withValues(alpha: .14)
+                  : null,
+              foregroundColor:
+                  app.numberStyle == style.$1 ? scheme.primary : null,
+            ),
+            onPressed: () => app.setNumberStyle(style.$1),
+          ),
+        const SizedBox(width: 6),
+        for (final hex in const [
+          0xFFE5484D,
+          0xFF2E9E5B,
+          0xFF2563EB,
+          0xFF18181B
+        ])
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: InkWell(
+              onTap: () => app.setNumberColorHex(hex),
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: Color(hex),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: app.numberColorHex == hex
+                          ? scheme.primary
+                          : Colors.transparent,
+                      width: 2),
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(width: 6),
+        IconButton(
+          icon: const Icon(Icons.remove, size: 18),
+          tooltip: 'Smaller',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => app.setNumberSize(app.numberSize - 8),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add, size: 18),
+          tooltip: 'Bigger',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => app.setNumberSize(app.numberSize + 8),
+        ),
+        const SizedBox(width: 6),
+        TextButton.icon(
+          onPressed: app.resetNumbering,
+          icon: const Icon(Icons.restart_alt, size: 16),
+          label: const Text('Reset', style: TextStyle(fontSize: 12)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Text('Next: ${app.numberNext}',
+              style: TextStyle(
+                  fontSize: 12, color: context.surfaces.textSecondary)),
+        ),
+        const _Div(),
+      ],
       if (inkActive) ...[
         for (final (i, c) in colors.indexed)
           _ColorWell(

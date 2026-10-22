@@ -367,6 +367,11 @@ enum BlockType {
   // `rawType` safety: an older build shows "Unsupported block: presentation"
   // and round-trips it untouched.
   presentation,
+  // A numbering stamp: a single digit (from a counter the user steps through
+  // by clicking), drawn plain or inside a circle or box. Same `rawType`
+  // safety: an older build shows "Unsupported block: number" and round-trips
+  // it untouched. content = {n, style:'circle'|'box'|'plain', color:0xAARRGGBB}.
+  number,
   unknown
 }
 

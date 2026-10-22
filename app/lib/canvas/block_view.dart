@@ -12,6 +12,7 @@ import '../editor/flashcard_block_view.dart';
 import '../editor/graph_block_view.dart';
 import '../editor/substitute_block_view.dart';
 import '../editor/image_block_view.dart';
+import '../editor/number_block_view.dart';
 import '../editor/math_block_view.dart';
 import '../editor/table_block_view.dart';
 import '../editor/text_block_view.dart';
@@ -433,6 +434,7 @@ class _BlockViewState extends State<BlockView> {
         'Presentation: ${b.content['name'] ?? 'slides'}',
       BlockType.graph => 'Graph of ${b.content['latex'] ?? 'an equation'}',
       BlockType.substitute => 'Evaluate ${b.content['latex'] ?? 'an equation'}',
+      BlockType.number => 'Number ${b.content['n'] ?? ''}',
       _ => '${b.type.name} block',
     };
     return t.trim().isEmpty ? '${b.type.name} block' : t;
@@ -480,6 +482,18 @@ class _BlockViewState extends State<BlockView> {
     final scale = widget.controller.scale;
     final oldW = b.w;
     final oldH = b.h ?? app.renderSizes[b.id]?.height;
+
+    // A number stamp stays square, so the circle never becomes an oval.
+    if (b.type == BlockType.number) {
+      final side = (height && !width)
+          ? ((oldH ?? b.w) + d.delta.dy / scale)
+          : (b.w + d.delta.dx / scale);
+      final s = side.clamp(20.0, 400.0);
+      b.w = s;
+      b.h = s;
+      app.updateBlock(b);
+      return;
+    }
 
     // Images keep their real aspect ratio on resize, so the frame always hugs
     // the picture — no empty letterbox/pillarbox band gets left behind the way
@@ -619,6 +633,7 @@ class _BlockViewState extends State<BlockView> {
       BlockType.presentation => PresentationBlockView(block: b, app: app),
       BlockType.graph => GraphBlockView(block: b, app: app),
       BlockType.substitute => SubstituteBlockView(block: b, app: app),
+      BlockType.number => NumberBlockView(block: b, app: app),
       _ => Padding(
           padding: const EdgeInsets.all(8),
           child: Text('Unsupported block: ${b.type.name}',

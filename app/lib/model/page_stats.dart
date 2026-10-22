@@ -184,6 +184,8 @@ List<String> _sourceOf(Block b) {
     case BlockType.mindmap:
     // A presentation is an imported PDF, not words written on the page.
     case BlockType.presentation:
+    // A numbering stamp is a single marker digit, not page prose.
+    case BlockType.number:
     case BlockType.unknown:
       return const [];
   }

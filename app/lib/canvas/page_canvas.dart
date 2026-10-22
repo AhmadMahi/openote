@@ -300,6 +300,10 @@ class _PageCanvasState extends State<PageCanvas>
   }
 
   bool get _lassoTool => app.tool == Tool.lasso;
+  bool get _numberTool => app.tool == Tool.number;
+
+  /// Where a numbering tap went down, so a tap (not a drag) places a number.
+  Offset? _numberDownPt;
 
   /// Decoded strokes per ink block, tagged with the `updatedAt` they were
   /// decoded at: strokes are decoded once per edit, not on every frame
@@ -1721,6 +1725,32 @@ class _PageCanvasState extends State<PageCanvas>
         },
         onPointerMove: _lassoMove,
         onPointerUp: _lassoUp,
+        child: canvas,
+      );
+    } else if (_numberTool) {
+      // Numbering: a tap drops the next number where you click. A drag is
+      // ignored (it is almost always a pan), and a tap over a block first
+      // commits any open text edit like every other tool.
+      canvas = Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          if (app.claimedPointers.remove(e.pointer)) return;
+          if (_exitEditOnCanvasDown()) {
+            _numberDownPt = null;
+            return;
+          }
+          _numberDownPt = e.localPosition;
+        },
+        onPointerUp: (e) {
+          final down = _numberDownPt;
+          _numberDownPt = null;
+          if (down == null) return;
+          if ((e.localPosition - down).distance > 8)
+            return; // a drag, not a tap
+          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          app.addNumberAt(p.dx, p.dy);
+        },
+        onPointerCancel: (_) => _numberDownPt = null,
         child: canvas,
       );
     } else if (_inkTool) {
