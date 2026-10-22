@@ -28,6 +28,7 @@ import 'save_problem_dialog.dart';
 import 'shortcut_overlay.dart';
 import 'focus_palette.dart';
 import 'sidebar.dart';
+import 'shapes_palette.dart';
 import 'sticky_note.dart';
 import 'selection_format_bar.dart';
 import 'tab_strip.dart';
@@ -1621,6 +1622,16 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                                 // since there is no chrome).
                                 if (!app.navHome && !app.navNotebook)
                                   StickyNote(
+                                    app: app,
+                                    topInset: app.focusMode ? 0.0 : chromeTop,
+                                  ),
+                                // The floating shapes palette, same rules as the
+                                // sticky agenda: over the page, clamped below the
+                                // chrome, never part of a page.
+                                if (!app.navHome &&
+                                    !app.navNotebook &&
+                                    app.shapesOpen)
+                                  ShapesPalette(
                                     app: app,
                                     topInset: app.focusMode ? 0.0 : chromeTop,
                                   ),

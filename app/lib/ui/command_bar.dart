@@ -1037,6 +1037,26 @@ class _CommandBarState extends State<CommandBar> {
           onPressed: () => app.setAutoShape(!app.autoShape),
         ),
       ),
+      // Shapes palette: a floating bar of shapes and teaching marks. The button
+      // opens it and arms the Shapes tool; drag on the page to place a shape.
+      Tooltip(
+        message: 'Shapes — a palette of shapes and teaching marks '
+            '(check, cross, circle…).\nPick one, then drag on the page.',
+        child: IconButton(
+          icon: const Icon(Icons.interests_outlined, size: 18),
+          isSelected: app.shapesOpen || app.tool == Tool.shape,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: (app.shapesOpen || app.tool == Tool.shape)
+                ? scheme.primary.withValues(alpha: .14)
+                : null,
+            foregroundColor: (app.shapesOpen || app.tool == Tool.shape)
+                ? scheme.primary
+                : null,
+          ),
+          onPressed: () => app.toggleShapesOpen(),
+        ),
+      ),
       const _Div(),
       // Numbering options — style, colour, size, and the counter with a reset.
       if (app.tool == Tool.number) ...[

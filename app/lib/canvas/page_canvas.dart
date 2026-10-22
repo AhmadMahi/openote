@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import '../ink/arrow.dart';
 import '../ink/rectangle.dart';
 import '../ink/shape_snap.dart';
+import '../ink/shapes.dart';
 import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/onote_theme.dart';
@@ -182,6 +183,7 @@ class _PageCanvasState extends State<PageCanvas>
   /// The two-corner drag tools (arrow and rectangle) share the same gesture:
   /// press one point, drag to another, and the shape is decided by the pair.
   bool get _twoCornerTool => _arrowTool || _rectTool;
+  bool get _shapeTool => app.tool == Tool.shape;
 
   /// Where a two-corner (arrow or rectangle) drag began, in page space.
   Offset2? _arrowFrom;
@@ -700,6 +702,10 @@ class _PageCanvasState extends State<PageCanvas>
   /// pen's colour and weight. Shared by the commit below and the drag preview
   /// so what you drag is exactly what you get.
   List<Stroke> _twoCornerStrokes(Offset2 from, Offset2 to, String colorHex) {
+    if (_shapeTool) {
+      return shapeStrokes(app.shapeKind,
+          from: from, to: to, colorHex: colorHex, size: app.penSize);
+    }
     return _rectTool
         ? rectangleStrokes(
             from: from, to: to, colorHex: colorHex, size: app.penSize)
@@ -711,7 +717,9 @@ class _PageCanvasState extends State<PageCanvas>
   /// colour and weight.
   void _commitShape(Offset2 from, Offset2 to) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    var color = app.inkColor;
+    // A palette shape draws in its own colour; arrow and rectangle draw in the
+    // pen's.
+    var color = _shapeTool ? Color(app.shapeColorHex) : app.inkColor;
     if (dark && color == OnoteColors.graphite900) color = OnoteColors.moon0;
     final strokes = _twoCornerStrokes(from, to, onoteHexOf(color));
     // Too short to have a shape — an arrow with no direction, a box with no
@@ -1575,9 +1583,12 @@ class _PageCanvasState extends State<PageCanvas>
                           painter: _ShapePreviewPainter(
                             controller: controller,
                             tool: app.tool,
+                            shapeKind: app.shapeKind,
                             from: _arrowFrom!,
                             to: _arrowTo!,
-                            color: _penCursorColor(dark),
+                            color: app.tool == Tool.shape
+                                ? Color(app.shapeColorHex)
+                                : _penCursorColor(dark),
                             size: app.penSize,
                           ),
                         ),
@@ -1642,7 +1653,7 @@ class _PageCanvasState extends State<PageCanvas>
       );
     });
 
-    if (_twoCornerTool) {
+    if (_twoCornerTool || _shapeTool) {
       // Arrow and rectangle are each a drag with two corners and nothing in
       // between: the shape is decided by where you start and where you stop,
       // so there is no path to record and no reason to route it through the
@@ -1988,7 +1999,10 @@ class _PageCanvasState extends State<PageCanvas>
             // Crosshair: an arrow or rectangle is placed by two exact points,
             // so the cursor's job is to say "this exact point", which is what
             // a reticle is for.
-            Tool.arrow || Tool.rectangle => SystemMouseCursors.precise,
+            Tool.arrow ||
+            Tool.rectangle ||
+            Tool.shape =>
+              SystemMouseCursors.precise,
             _ => MouseCursor.defer,
           },
           // Leaving the canvas is the one thing the Listener above cannot see,
@@ -2904,6 +2918,7 @@ class _ShapePreviewPainter extends CustomPainter {
   _ShapePreviewPainter({
     required this.controller,
     required this.tool,
+    required this.shapeKind,
     required this.from,
     required this.to,
     required this.color,
@@ -2912,6 +2927,7 @@ class _ShapePreviewPainter extends CustomPainter {
 
   final CanvasController controller;
   final Tool tool;
+  final String shapeKind;
   final Offset2 from;
   final Offset2 to;
   final Color color;
@@ -2919,13 +2935,21 @@ class _ShapePreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size _) {
-    final strokes = tool == Tool.rectangle
-        ? rectangleStrokes(from: from, to: to, colorHex: '#000000', size: size)
-        : arrowStrokes(from: from, to: to, colorHex: '#000000', size: size);
+    final strokes = tool == Tool.shape
+        ? shapeStrokes(shapeKind,
+            from: from, to: to, colorHex: '#000000', size: size)
+        : tool == Tool.rectangle
+            ? rectangleStrokes(
+                from: from, to: to, colorHex: '#000000', size: size)
+            : arrowStrokes(from: from, to: to, colorHex: '#000000', size: size);
     if (strokes.isEmpty) return;
     // A rectangle previews with square corners (miter, closed loop) so it
     // matches the sharp stroke it commits to; the arrow keeps round joins.
-    final rect = tool == Tool.rectangle;
+    // Closed shapes from the palette join the same way.
+    final rect = tool == Tool.rectangle ||
+        (tool == Tool.shape &&
+            const {'rectangle', 'circle', 'triangle', 'star'}
+                .contains(shapeKind));
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -2950,6 +2974,7 @@ class _ShapePreviewPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _ShapePreviewPainter old) =>
       old.tool != tool ||
+      old.shapeKind != shapeKind ||
       old.from.x != from.x ||
       old.from.y != from.y ||
       old.to.x != to.x ||

@@ -90,7 +90,12 @@ enum Tool {
   /// Numbering: each click drops the next number (1, 2, 3…) as a small stamp,
   /// so a diagram can be labelled in order. The look and the counter live in
   /// state ([numberStyle], [numberColorHex], [numberSize], [numberNext]).
-  number
+  number,
+
+  /// Shapes: drag out the shape armed in the floating palette ([shapeKind]) in
+  /// [shapeColorHex]. It commits as pen ink, so it erases, lassoes and
+  /// recolours like a hand-drawn shape.
+  shape
 }
 
 /// One open page in the editor's tab strip. Identified by its notebook and
@@ -4594,6 +4599,43 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  // ── Shapes palette ────────────────────────────────────────────────────
+  //
+  // A floating bar (like Sticky notes) of shapes and teaching marks. Picking
+  // one arms it and switches to the Shapes tool; a drag on the page places it.
+
+  /// Whether the floating shapes palette is open.
+  bool shapesOpen = false;
+
+  /// The shape a drag will place: a kind from `shapeKinds` in `lib/ink/shapes`.
+  String shapeKind = 'check';
+
+  /// The colour palette shapes are drawn in, 0xAARRGGBB.
+  int shapeColorHex = 0xFF2E9E5B;
+
+  void toggleShapesOpen() {
+    shapesOpen = !shapesOpen;
+    if (shapesOpen) tool = Tool.shape;
+    notifyListeners();
+  }
+
+  /// Pick a shape from the palette: arm it, optionally set its colour, and
+  /// switch to the Shapes tool so the next drag places it.
+  void armShape(String kind, {int? colorHex}) {
+    shapeKind = kind;
+    if (colorHex != null) shapeColorHex = colorHex;
+    tool = Tool.shape;
+    _repo.setSetting('shapeKind', kind);
+    _repo.setSetting('shapeColor', shapeColorHex);
+    notifyListeners();
+  }
+
+  void setShapeColorHex(int v) {
+    shapeColorHex = v;
+    _repo.setSetting('shapeColor', v);
+    notifyListeners();
+  }
+
   /// Drop the next number as a stamp centred on ([cx], [cy]) in page units,
   /// then step the counter.
   void addNumberAt(double cx, double cy) {
@@ -6913,6 +6955,10 @@ class AppState extends ChangeNotifier
     if (nColor is int) numberColorHex = nColor;
     final nSize = _repo.getSetting('numberSize');
     if (nSize is num) numberSize = nSize.toDouble().clamp(20.0, 120.0);
+    final sKind = _repo.getSetting('shapeKind');
+    if (sKind is String) shapeKind = sKind;
+    final sColor = _repo.getSetting('shapeColor');
+    if (sColor is int) shapeColorHex = sColor;
     final psz = _repo.getSetting('penSize');
     if (psz is num) {
       _penSize = psz.toDouble().clamp(minPenSize, maxPenSize);
