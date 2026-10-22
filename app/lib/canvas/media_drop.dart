@@ -350,6 +350,15 @@ Block insertPastedText(AppState app, String text, Offset at) {
   // Text pastes into a NEW text block rather than the focused editor:
   // this path only runs when the canvas has focus, and a block is what
   // the canvas can hold.
+  // A paste that reads as a question or an exclamation wears a matching
+  // textbook-style callout, so it is guessable at a glance. Purely a display
+  // hint on top of the pasted-card look.
+  final trimmed = text.trimRight();
+  final variant = trimmed.endsWith('?')
+      ? 'question'
+      : trimmed.endsWith('!')
+          ? 'note'
+          : null;
   final b = app.addBlock(Block(
     type: BlockType.text,
     x: at.dx,
@@ -358,7 +367,11 @@ Block insertPastedText(AppState app, String text, Offset at) {
     // Marked as pasted so BlockView can give it the "pasted card" look when
     // that preference is on. Purely a display hint — it changes nothing about
     // the text itself, and toggling the preference restyles it in place.
-    content: {'text': text, 'pasted': true},
+    content: {
+      'text': text,
+      'pasted': true,
+      if (variant != null) 'variant': variant,
+    },
   ));
   app.select(b.id, edit: true);
   return b;

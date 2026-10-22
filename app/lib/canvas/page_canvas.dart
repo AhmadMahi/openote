@@ -765,6 +765,31 @@ class _PageCanvasState extends State<PageCanvas>
     _refitInkBounds(target);
     app.updateBlock(target);
     setState(() {});
+    // draw.io-style label: a rectangle or arrow drops a caret at its centre so
+    // you can name it straight away. Type and the label stays; draw something
+    // else without typing and the empty label clears itself. Not for the
+    // click-stamped palette shapes, where it would interrupt rapid stamping.
+    if (!_shapeTool) _dropCenterLabel(from, to);
+  }
+
+  /// A centred, empty, editable text label over the shape just drawn. It is an
+  /// ordinary text block — drag or re-edit it by clicking the text — and, being
+  /// empty, it removes itself on blur if nothing is typed.
+  void _dropCenterLabel(Offset2 from, Offset2 to) {
+    final cx = (from.x + to.x) / 2, cy = (from.y + to.y) / 2;
+    final w = (to.x - from.x).abs().clamp(90.0, 400.0).toDouble();
+    final b = app.addBlock(
+      Block(
+        type: BlockType.text,
+        x: cx - w / 2,
+        y: cy - 16,
+        w: w,
+        content: {'text': '', 'autoWidth': false, 'align': 'center'},
+      ),
+      recordUndo: false,
+    );
+    app.pendingEmptyBlockId = b.id;
+    app.select(b.id, edit: true);
   }
 
   /// True area-erase (INK-6, Ink Spec §2): remove points within the eraser

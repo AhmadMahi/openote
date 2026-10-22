@@ -688,6 +688,20 @@ class _BlockViewState extends State<BlockView> {
     final cardSurface = dark ? OnoteColors.night50 : OnoteColors.paper0;
     final faintBorder = dark ? OnoteColors.night300 : OnoteColors.paper300;
 
+    // A pasted question or exclamation wears a matching textbook-style callout:
+    // a coloured outline and a faint tint, so it reads as a question (blue) or
+    // a note (amber) at a glance.
+    final variant = pasted ? b.content['variant'] as String? : null;
+    final Color? variantAccent = variant == 'question'
+        ? (dark ? const Color(0xFF7AA2FF) : const Color(0xFF2563EB))
+        : variant == 'note'
+            ? (dark ? const Color(0xFFFFC66B) : const Color(0xFFD97706))
+            : null;
+    final cardFill = variantAccent != null
+        ? Color.alphaBlend(
+            variantAccent.withValues(alpha: dark ? 0.16 : 0.08), cardSurface)
+        : cardSurface;
+
     final body = MouseRegion(
       onEnter: (_) => setState(() => _hoverBody = true),
       onExit: (_) => setState(() => _hoverBody = false),
@@ -727,7 +741,7 @@ class _BlockViewState extends State<BlockView> {
                       // reads; a pasted block with the card OFF stays fully
                       // transparent even when selected, so no white slab shows.
                       (pastedCard
-                          ? cardSurface
+                          ? cardFill
                           : pasted
                               ? Colors.transparent
                               // **Hover does not fill.** The owner: *"Hovering
@@ -758,12 +772,14 @@ class _BlockViewState extends State<BlockView> {
                         : selected
                             ? primaryColor
                             : _hover
-                                ? faintBorder
+                                ? (variantAccent ?? faintBorder)
                                 // A card keeps a faint edge even at rest so it
-                                // still reads as a card when nothing is selected.
-                                : pastedCard
-                                    ? faintBorder.withValues(alpha: .6)
-                                    : Colors.transparent,
+                                // still reads as a card when nothing is selected;
+                                // a question or note keeps its coloured outline.
+                                : variantAccent ??
+                                    (pastedCard
+                                        ? faintBorder.withValues(alpha: .6)
+                                        : Colors.transparent),
                   ),
                 )
               // OneNote-style: no visible box at all until the first

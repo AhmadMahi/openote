@@ -28,6 +28,7 @@ const shapeKinds = <String>[
   'double_arrow',
   'plus',
   'minus',
+  'cloud',
 ];
 
 List<Stroke> shapeStrokes(
@@ -69,6 +70,8 @@ List<Stroke> shapeStrokes(
       return _plusStrokes(from, to, colorHex, size);
     case 'minus':
       return _minusStrokes(from, to, colorHex, size);
+    case 'cloud':
+      return _cloudStrokes(from, to, colorHex, size);
     default:
       return const [];
   }
@@ -251,4 +254,24 @@ List<Stroke> _minusStrokes(Offset2 from, Offset2 to, String hex, double size) {
   return [
     _poly(_seg(Offset2(q.l + ix, q.cy), Offset2(q.r - ix, q.cy)), hex, size)
   ];
+}
+
+/// A thought cloud: a lumpy closed curve, an ellipse whose radius is modulated
+/// by a sine so it bulges into soft bumps the way a cartoon cloud does.
+List<Stroke> _cloudStrokes(Offset2 from, Offset2 to, String hex, double size) {
+  if (_tooSmall(from, to)) return const [];
+  final q = _rect(from, to);
+  final rx = q.w / 2, ry = q.h / 2;
+  const steps = 96, bumps = 8;
+  const amp = 0.13;
+  final pts = <Offset2>[
+    for (var i = 0; i <= steps; i++)
+      () {
+        final a = i / steps * 2 * math.pi;
+        final m = 1 + amp * math.sin(bumps * a - math.pi / 2);
+        return Offset2(
+            q.cx + rx * m * math.cos(a), q.cy + ry * m * math.sin(a));
+      }()
+  ];
+  return [_poly(pts, hex, size)];
 }

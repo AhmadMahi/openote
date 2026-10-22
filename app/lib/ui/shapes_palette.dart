@@ -62,6 +62,12 @@ class _ShapesPaletteState extends State<ShapesPalette> {
     ),
     (kind: 'plus', icon: Icons.add, tip: 'Plus', color: null),
     (kind: 'minus', icon: Icons.remove, tip: 'Minus', color: null),
+    (
+      kind: 'cloud',
+      icon: Icons.cloud_outlined,
+      tip: 'Thought cloud',
+      color: null
+    ),
   ];
 
   @override
