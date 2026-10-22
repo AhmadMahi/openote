@@ -4613,6 +4613,16 @@ class AppState extends ChangeNotifier
   /// The colour palette shapes are drawn in, 0xAARRGGBB.
   int shapeColorHex = 0xFF2E9E5B;
 
+  /// One universal size for every stamped shape, in page units. A click drops
+  /// the armed shape at this size — no drag, so a check stays a proper check.
+  double shapeSize = 48;
+
+  void setShapeSize(double v) {
+    shapeSize = v.clamp(24.0, 160.0);
+    _repo.setSetting('shapeSize', shapeSize);
+    notifyListeners();
+  }
+
   void toggleShapesOpen() {
     shapesOpen = !shapesOpen;
     if (shapesOpen) tool = Tool.shape;
@@ -6959,6 +6969,8 @@ class AppState extends ChangeNotifier
     if (sKind is String) shapeKind = sKind;
     final sColor = _repo.getSetting('shapeColor');
     if (sColor is int) shapeColorHex = sColor;
+    final sSize = _repo.getSetting('shapeSize');
+    if (sSize is num) shapeSize = sSize.toDouble().clamp(24.0, 160.0);
     final psz = _repo.getSetting('penSize');
     if (psz is num) {
       _penSize = psz.toDouble().clamp(minPenSize, maxPenSize);

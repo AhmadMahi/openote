@@ -685,6 +685,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // is visible the moment they pick the pen up again.
       if (app.matchesCycleKey(k.keyLabel)) {
         app.cycleInkColor(shift ? -1 : 1);
+        // The same key recolours the numbering and shapes tools from the one
+        // palette, so colour is changed the same way everywhere.
+        final c = onoteColorFromHex(app.inkPalette[app.penColor]);
+        if (c != null) {
+          if (app.tool == Tool.number) app.setNumberColorHex(c.toARGB32());
+          if (app.tool == Tool.shape) app.setShapeColorHex(c.toARGB32());
+        }
         if (app.hasInkSelection) {
           app.recolorSelectedInk(app.inkPalette[app.penColor]);
         }

@@ -91,5 +91,15 @@ void main() {
       expect(app.shapeKind, 'circle');
       expect(app.shapeColorHex, 0xFF2E9E5B);
     });
+
+    test('one universal size, clamped', () {
+      if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+      app.setShapeSize(72);
+      expect(app.shapeSize, 72);
+      app.setShapeSize(5); // below the floor
+      expect(app.shapeSize, 24);
+      app.setShapeSize(999); // above the ceiling
+      expect(app.shapeSize, 160);
+    });
   });
 }

@@ -307,6 +307,9 @@ class _PageCanvasState extends State<PageCanvas>
   /// Where a numbering tap went down, so a tap (not a drag) places a number.
   Offset? _numberDownPt;
 
+  /// Where a shapes-tool tap went down, so a tap (not a drag) stamps a shape.
+  Offset? _shapeDownPt;
+
   /// Decoded strokes per ink block, tagged with the `updatedAt` they were
   /// decoded at: strokes are decoded once per edit, not on every frame
   /// (§7a.6 — no hot-path JSON decoding).
@@ -703,8 +706,11 @@ class _PageCanvasState extends State<PageCanvas>
   /// so what you drag is exactly what you get.
   List<Stroke> _twoCornerStrokes(Offset2 from, Offset2 to, String colorHex) {
     if (_shapeTool) {
+      // A weight that scales with the stamp so a small shape is not hairline
+      // and a big one is not clumsy.
+      final w = (app.shapeSize * 0.09).clamp(2.5, 7.0);
       return shapeStrokes(app.shapeKind,
-          from: from, to: to, colorHex: colorHex, size: app.penSize);
+          from: from, to: to, colorHex: colorHex, size: w);
     }
     return _rectTool
         ? rectangleStrokes(
@@ -715,6 +721,28 @@ class _PageCanvasState extends State<PageCanvas>
 
   /// Put a two-corner shape (arrow or rectangle) on the page, in the pen's
   /// colour and weight.
+  /// Stamp the armed shape at its universal size, centred on ([cx], [cy]).
+  /// Lines and double-arrows lie flat; a single arrow points up-right; every
+  /// other shape sits in a square box so it keeps its proper proportions.
+  void _stampShapeAt(double cx, double cy) {
+    final h = app.shapeSize / 2;
+    final Offset2 from, to;
+    switch (app.shapeKind) {
+      case 'line':
+      case 'minus':
+      case 'double_arrow':
+        from = Offset2(cx - h, cy);
+        to = Offset2(cx + h, cy);
+      case 'arrow':
+        from = Offset2(cx - h, cy + h);
+        to = Offset2(cx + h, cy - h);
+      default:
+        from = Offset2(cx - h, cy - h);
+        to = Offset2(cx + h, cy + h);
+    }
+    _commitShape(from, to);
+  }
+
   void _commitShape(Offset2 from, Offset2 to) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     // A palette shape draws in its own colour; arrow and rectangle draw in the
@@ -1653,7 +1681,7 @@ class _PageCanvasState extends State<PageCanvas>
       );
     });
 
-    if (_twoCornerTool || _shapeTool) {
+    if (_twoCornerTool) {
       // Arrow and rectangle are each a drag with two corners and nothing in
       // between: the shape is decided by where you start and where you stop,
       // so there is no path to record and no reason to route it through the
@@ -1762,6 +1790,31 @@ class _PageCanvasState extends State<PageCanvas>
           app.addNumberAt(p.dx, p.dy);
         },
         onPointerCancel: (_) => _numberDownPt = null,
+        child: canvas,
+      );
+    } else if (_shapeTool) {
+      // Shapes: a tap stamps the armed shape at its universal size, centred on
+      // the click — no drag, so a check stays a proper check. A drag is
+      // ignored (a pan), and a tap first commits any open text edit.
+      canvas = Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          if (app.claimedPointers.remove(e.pointer)) return;
+          if (_exitEditOnCanvasDown()) {
+            _shapeDownPt = null;
+            return;
+          }
+          _shapeDownPt = e.localPosition;
+        },
+        onPointerUp: (e) {
+          final down = _shapeDownPt;
+          _shapeDownPt = null;
+          if (down == null) return;
+          if ((e.localPosition - down).distance > 8) return;
+          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          _stampShapeAt(p.dx, p.dy);
+        },
+        onPointerCancel: (_) => _shapeDownPt = null,
         child: canvas,
       );
     } else if (_inkTool) {

@@ -19,9 +19,15 @@ const shapeKinds = <String>[
   'circle',
   'rectangle',
   'triangle',
+  'diamond',
+  'pentagon',
+  'hexagon',
+  'star',
   'line',
   'arrow',
-  'star',
+  'double_arrow',
+  'plus',
+  'minus',
 ];
 
 List<Stroke> shapeStrokes(
@@ -49,6 +55,20 @@ List<Stroke> shapeStrokes(
       return _checkStrokes(from, to, colorHex, size);
     case 'cross':
       return _crossStrokes(from, to, colorHex, size);
+    case 'diamond':
+      return _polygonStrokes(from, to, colorHex, size, sides: 4, rotation: 0);
+    case 'pentagon':
+      return _polygonStrokes(from, to, colorHex, size,
+          sides: 5, rotation: -math.pi / 2);
+    case 'hexagon':
+      return _polygonStrokes(from, to, colorHex, size,
+          sides: 6, rotation: -math.pi / 2);
+    case 'double_arrow':
+      return _doubleArrowStrokes(from, to, colorHex, size);
+    case 'plus':
+      return _plusStrokes(from, to, colorHex, size);
+    case 'minus':
+      return _minusStrokes(from, to, colorHex, size);
     default:
       return const [];
   }
@@ -184,5 +204,51 @@ List<Stroke> _crossStrokes(Offset2 from, Offset2 to, String hex, double size) {
         hex, size),
     _poly(_seg(Offset2(q.r - a, q.t + bInset), Offset2(q.l + a, q.b - bInset)),
         hex, size),
+  ];
+}
+
+List<Stroke> _polygonStrokes(Offset2 from, Offset2 to, String hex, double size,
+    {required int sides, required double rotation}) {
+  if (_tooSmall(from, to)) return const [];
+  final q = _rect(from, to);
+  final r = math.min(q.w, q.h) / 2;
+  final verts = <Offset2>[
+    for (var i = 0; i < sides; i++)
+      () {
+        final ang = rotation + i * 2 * math.pi / sides;
+        return Offset2(q.cx + r * math.cos(ang), q.cy + r * math.sin(ang));
+      }()
+  ];
+  return [_poly(_chain(verts, close: true), hex, size)];
+}
+
+List<Stroke> _doubleArrowStrokes(
+    Offset2 from, Offset2 to, String hex, double size) {
+  if (math.sqrt(math.pow(to.x - from.x, 2) + math.pow(to.y - from.y, 2)) < 2) {
+    return const [];
+  }
+  final head = arrowStrokes(from: from, to: to, colorHex: hex, size: size);
+  final tail = arrowStrokes(from: to, to: from, colorHex: hex, size: size);
+  if (head.length < 3 || tail.length < 3) return head;
+  // One shaft, a head at each end.
+  return [head[0], head[1], head[2], tail[1], tail[2]];
+}
+
+List<Stroke> _plusStrokes(Offset2 from, Offset2 to, String hex, double size) {
+  if (_tooSmall(from, to)) return const [];
+  final q = _rect(from, to);
+  final ix = q.w * 0.10, iy = q.h * 0.10;
+  return [
+    _poly(_seg(Offset2(q.l + ix, q.cy), Offset2(q.r - ix, q.cy)), hex, size),
+    _poly(_seg(Offset2(q.cx, q.t + iy), Offset2(q.cx, q.b - iy)), hex, size),
+  ];
+}
+
+List<Stroke> _minusStrokes(Offset2 from, Offset2 to, String hex, double size) {
+  if (_tooSmall(from, to)) return const [];
+  final q = _rect(from, to);
+  final ix = q.w * 0.10;
+  return [
+    _poly(_seg(Offset2(q.l + ix, q.cy), Offset2(q.r - ix, q.cy)), hex, size)
   ];
 }

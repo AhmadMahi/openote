@@ -1080,33 +1080,6 @@ class _CommandBarState extends State<CommandBar> {
             onPressed: () => app.setNumberStyle(style.$1),
           ),
         const SizedBox(width: 6),
-        for (final hex in const [
-          0xFFE5484D,
-          0xFF2E9E5B,
-          0xFF2563EB,
-          0xFF18181B
-        ])
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: InkWell(
-              onTap: () => app.setNumberColorHex(hex),
-              customBorder: const CircleBorder(),
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: Color(hex),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: app.numberColorHex == hex
-                          ? scheme.primary
-                          : Colors.transparent,
-                      width: 2),
-                ),
-              ),
-            ),
-          ),
-        const SizedBox(width: 6),
         IconButton(
           icon: const Icon(Icons.remove, size: 18),
           tooltip: 'Smaller',
@@ -1130,6 +1103,18 @@ class _CommandBarState extends State<CommandBar> {
           child: Text('Next: ${app.numberNext}',
               style: TextStyle(
                   fontSize: 12, color: context.surfaces.textSecondary)),
+        ),
+        Tooltip(
+          message: 'Press K to change the colour',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                  color: Color(app.numberColorHex), shape: BoxShape.circle),
+            ),
+          ),
         ),
         const _Div(),
       ],

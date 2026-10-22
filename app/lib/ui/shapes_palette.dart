@@ -4,10 +4,11 @@ import '../state/app_state.dart';
 import '../theme/tokens.dart';
 
 /// The floating shapes palette: a small draggable bar of shapes and teaching
-/// marks, like the Sticky-notes panel. Pick a shape (check, cross, circle,
-/// rectangle, triangle, line, arrow, star) and it arms the Shapes tool; a drag
-/// on the page then places it. A colour row sets the next shape's colour; the
-/// check and cross come pre-set to green and red.
+/// marks, like the Sticky-notes panel. Pick a shape and it arms the Shapes
+/// tool; a click on the page then stamps it at the chosen size, keeping its
+/// proper proportions. One size applies to every shape; colour is changed with
+/// the K key (the same key the pen uses), and the check and cross come pre-set
+/// to green and red.
 class ShapesPalette extends StatefulWidget {
   const ShapesPalette({super.key, required this.app, required this.topInset});
   final AppState app;
@@ -32,17 +33,35 @@ class _ShapesPaletteState extends State<ShapesPalette> {
       tip: 'Triangle',
       color: null
     ),
+    (
+      kind: 'diamond',
+      icon: Icons.diamond_outlined,
+      tip: 'Diamond',
+      color: null
+    ),
+    (
+      kind: 'pentagon',
+      icon: Icons.pentagon_outlined,
+      tip: 'Pentagon',
+      color: null
+    ),
+    (
+      kind: 'hexagon',
+      icon: Icons.hexagon_outlined,
+      tip: 'Hexagon',
+      color: null
+    ),
+    (kind: 'star', icon: Icons.star_outline, tip: 'Star', color: null),
     (kind: 'line', icon: Icons.horizontal_rule, tip: 'Line', color: null),
     (kind: 'arrow', icon: Icons.north_east, tip: 'Arrow', color: null),
-    (kind: 'star', icon: Icons.star_outline, tip: 'Star', color: null),
-  ];
-
-  static const _colors = <int>[
-    0xFF2E9E5B, // green
-    0xFFE5484D, // red
-    0xFF2563EB, // blue
-    0xFFF59E0B, // amber
-    0xFF18181B, // near-black
+    (
+      kind: 'double_arrow',
+      icon: Icons.sync_alt,
+      tip: 'Double arrow',
+      color: null
+    ),
+    (kind: 'plus', icon: Icons.add, tip: 'Plus', color: null),
+    (kind: 'minus', icon: Icons.remove, tip: 'Minus', color: null),
   ];
 
   @override
@@ -132,31 +151,53 @@ class _ShapesPaletteState extends State<ShapesPalette> {
                   ],
                 ),
               ),
+              const Divider(height: 1),
+              // One universal size for every shape, and a reminder that K sets
+              // the colour (the same key the pen uses).
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 2, 10, 10),
+                padding: const EdgeInsets.fromLTRB(10, 4, 8, 8),
                 child: Row(
                   children: [
-                    for (final hex in _colors)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 7),
-                        child: InkWell(
-                          onTap: () => app.setShapeColorHex(hex),
-                          customBorder: const CircleBorder(),
-                          child: Container(
-                            width: 18,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: Color(hex),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: app.shapeColorHex == hex
-                                      ? scheme.primary
-                                      : Colors.transparent,
-                                  width: 2),
-                            ),
-                          ),
-                        ),
+                    Text('Size',
+                        style:
+                            TextStyle(fontSize: 11.5, color: s.textSecondary)),
+                    const Spacer(),
+                    _SizeButton(
+                      icon: Icons.remove,
+                      onTap: () => app.setShapeSize(app.shapeSize - 8),
+                      surfaces: s,
+                    ),
+                    SizedBox(
+                      width: 34,
+                      child: Text('${app.shapeSize.round()}',
+                          textAlign: TextAlign.center,
+                          style:
+                              TextStyle(fontSize: 11.5, color: s.textPrimary)),
+                    ),
+                    _SizeButton(
+                      icon: Icons.add,
+                      onTap: () => app.setShapeSize(app.shapeSize + 8),
+                      surfaces: s,
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Color(app.shapeColorHex),
+                        shape: BoxShape.circle,
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text('Press K to change colour',
+                        style:
+                            TextStyle(fontSize: 10.5, color: s.textSecondary)),
                   ],
                 ),
               ),
@@ -206,6 +247,32 @@ class _ShapeCell extends StatelessWidget {
           child: Icon(icon,
               size: 18, color: selected ? accent : surfaces.textPrimary),
         ),
+      ),
+    );
+  }
+}
+
+class _SizeButton extends StatelessWidget {
+  const _SizeButton(
+      {required this.icon, required this.onTap, required this.surfaces});
+  final IconData icon;
+  final VoidCallback onTap;
+  final OnoteSurfaces surfaces;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: OnoteRadius.smAll,
+      child: Container(
+        width: 26,
+        height: 24,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: OnoteRadius.smAll,
+          border: Border.all(color: surfaces.border.withValues(alpha: 0.6)),
+        ),
+        child: Icon(icon, size: 15, color: surfaces.textSecondary),
       ),
     );
   }
