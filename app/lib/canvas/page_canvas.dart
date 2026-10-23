@@ -769,22 +769,34 @@ class _PageCanvasState extends State<PageCanvas>
     // you can name it straight away. Type and the label stays; draw something
     // else without typing and the empty label clears itself. Not for the
     // click-stamped palette shapes, where it would interrupt rapid stamping.
-    if (!_shapeTool) _dropCenterLabel(from, to);
+    if (!_shapeTool) _dropCenterLabel(from, to, isArrow: _arrowTool);
   }
 
   /// A centred, empty, editable text label over the shape just drawn. It is an
   /// ordinary text block — drag or re-edit it by clicking the text — and, being
   /// empty, it removes itself on blur if nothing is typed.
-  void _dropCenterLabel(Offset2 from, Offset2 to) {
+  ///
+  /// The label auto-sizes to its text (so a short one reads as centred), its
+  /// font scales with the shape, and an arrow's label carries an opaque fill so
+  /// the arrow line is hidden behind the text rather than striking through it.
+  void _dropCenterLabel(Offset2 from, Offset2 to, {required bool isArrow}) {
     final cx = (from.x + to.x) / 2, cy = (from.y + to.y) / 2;
-    final w = (to.x - from.x).abs().clamp(90.0, 400.0).toDouble();
+    final bw = (to.x - from.x).abs(), bh = (to.y - from.y).abs();
+    final len = math.sqrt(bw * bw + bh * bh);
+    final fontSize = isArrow
+        ? (len * 0.13).clamp(10.0, 20.0).toDouble()
+        : (math.min(bw, bh) * 0.24).clamp(11.0, 30.0).toDouble();
     final b = app.addBlock(
       Block(
         type: BlockType.text,
-        x: cx - w / 2,
-        y: cy - 16,
-        w: w,
-        content: {'text': '', 'autoWidth': false, 'align': 'center'},
+        x: cx - 24,
+        y: cy - fontSize * 0.9,
+        w: 48,
+        content: {
+          'text': '',
+          'fontSize': fontSize,
+          if (isArrow) 'labelMask': true,
+        },
       ),
       recordUndo: false,
     );

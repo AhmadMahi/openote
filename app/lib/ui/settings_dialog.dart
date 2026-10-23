@@ -495,6 +495,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         // pasted-in. Off keeps them plain (and shows no white slab).
         _row('Show pasted content as a card',
             _toggle(app.pasteAsCard, app.setPasteAsCard)),
+        _row('Pasted questions and notes as speech bubbles',
+            _toggle(app.calloutBubbles, app.setCalloutBubbles)),
         _rowStacked(
           'Sticky note agenda',
           SegmentedButton<bool>(

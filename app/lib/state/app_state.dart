@@ -6900,6 +6900,8 @@ class AppState extends ChangeNotifier
     if (dpb is bool) defaultPdfBackground = dpb;
     final pac = _repo.getSetting('pasteAsCard');
     if (pac is bool) pasteAsCard = pac;
+    final cb = _repo.getSetting('calloutBubbles');
+    if (cb is bool) calloutBubbles = cb;
     final nsw = _repo.getSetting('navSectionsW');
     if (nsw is num) navSectionsW = nsw.toDouble().clamp(96, 220);
     final npw = _repo.getSetting('navPagesW');
@@ -10550,6 +10552,16 @@ class AppState extends ChangeNotifier
   void setPasteAsCard(bool v) {
     pasteAsCard = v;
     _repo.setSetting('pasteAsCard', v);
+    notifyListeners();
+  }
+
+  /// Pasted text ending in `?` or `!` wears a speech-bubble callout (a tail and
+  /// a coloured outline). Off keeps such a paste as a plain card.
+  bool calloutBubbles = true;
+
+  void setCalloutBubbles(bool v) {
+    calloutBubbles = v;
+    _repo.setSetting('calloutBubbles', v);
     notifyListeners();
   }
 

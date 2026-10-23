@@ -688,10 +688,11 @@ class _BlockViewState extends State<BlockView> {
     final cardSurface = dark ? OnoteColors.night50 : OnoteColors.paper0;
     final faintBorder = dark ? OnoteColors.night300 : OnoteColors.paper300;
 
-    // A pasted question or exclamation wears a matching textbook-style callout:
-    // a coloured outline and a faint tint, so it reads as a question (blue) or
-    // a note (amber) at a glance.
-    final variant = pasted ? b.content['variant'] as String? : null;
+    // A pasted question or exclamation wears a speech-bubble callout: a tail, a
+    // coloured outline and a faint tint, so it reads as a question (blue) or a
+    // note (amber) at a glance. Turned off in Settings, it stays a plain card.
+    final variant =
+        (pasted && app.calloutBubbles) ? b.content['variant'] as String? : null;
     final Color? variantAccent = variant == 'question'
         ? (dark ? const Color(0xFF7AA2FF) : const Color(0xFF2563EB))
         : variant == 'note'
@@ -701,6 +702,10 @@ class _BlockViewState extends State<BlockView> {
         ? Color.alphaBlend(
             variantAccent.withValues(alpha: dark ? 0.16 : 0.08), cardSurface)
         : cardSurface;
+
+    // A shape's centre label (on an arrow) carries an opaque fill so the arrow
+    // line is hidden behind the text instead of striking through it.
+    final labelMask = b.content['labelMask'] == true;
 
     final body = MouseRegion(
       onEnter: (_) => setState(() => _hoverBody = true),
@@ -735,7 +740,8 @@ class _BlockViewState extends State<BlockView> {
                   // one end of the link is chosen, which is what
                   // `graphLinkHighlight` answers. Derived on every build, never
                   // stored: this must not dirty the page or survive the click.
-                  color: app.graphLinkHighlight(b)?.withValues(alpha: 0.14) ??
+                  color: (labelMask ? cardSurface : null) ??
+                      app.graphLinkHighlight(b)?.withValues(alpha: 0.14) ??
                       onoteColorFromHex(b.content['bg'] as String?) ??
                       // A pasted card always carries the surface so its shadow
                       // reads; a pasted block with the card OFF stays fully
@@ -790,6 +796,27 @@ class _BlockViewState extends State<BlockView> {
       ),
     );
 
+    // A speech-bubble callout: the rounded card is the bubble, and a small tail
+    // at the bottom-left makes it read as a message. Drawn in an overflowing
+    // Stack so the tail sits just below the card without changing its size.
+    final laidBody = variantAccent != null
+        ? Stack(
+            clipBehavior: Clip.none,
+            children: [
+              body,
+              Positioned(
+                left: 22,
+                bottom: -9,
+                child: CustomPaint(
+                  size: const Size(22, 11),
+                  painter:
+                      _BubbleTailPainter(fill: cardFill, border: variantAccent),
+                ),
+              ),
+            ],
+          )
+        : body;
+
     // Touch has no hover, so the bar cannot be the only way to move a block.
     // Long-press-then-drag is the platform convention there — and it is scoped
     // to touch and stylus so a slow mouse click can never move a text box by
@@ -802,7 +829,7 @@ class _BlockViewState extends State<BlockView> {
       onLongPressStart: editing || _locked ? null : _longPressStart,
       onLongPressMoveUpdate: editing || _locked ? null : _longPressMove,
       onLongPressEnd: editing || _locked ? null : _longPressEnd,
-      child: body,
+      child: laidBody,
     );
 
     return Positioned(
@@ -997,4 +1024,47 @@ class _MeasureSizeState extends State<_MeasureSize> {
     });
     return widget.child;
   }
+}
+
+/// The little tail that turns a callout card into a speech bubble. Drawn into
+/// an overflowing Stack just below the card's bottom-left: a down-pointing
+/// triangle filled to match the bubble, with its two slanted sides outlined in
+/// the accent and its base left open so it merges into the card above.
+class _BubbleTailPainter extends CustomPainter {
+  _BubbleTailPainter({required this.fill, required this.border});
+  final Color fill;
+  final Color border;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    // Base sits a couple of px up into the card so its bottom edge is covered.
+    final body = Path()
+      ..moveTo(0, -2)
+      ..lineTo(w, -2)
+      ..lineTo(w * 0.28, h)
+      ..close();
+    canvas.drawPath(
+        body,
+        Paint()
+          ..color = fill
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true);
+    canvas.drawPath(
+      Path()
+        ..moveTo(w, -2)
+        ..lineTo(w * 0.28, h)
+        ..lineTo(0, -2),
+      Paint()
+        ..color = border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _BubbleTailPainter old) =>
+      old.fill != fill || old.border != border;
 }
