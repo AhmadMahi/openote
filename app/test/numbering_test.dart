@@ -55,6 +55,25 @@ void main() {
     expect(stamps.first.w, stamps.first.h);
   });
 
+  test('a dragged number takes the given size (square), a tap the default', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.addNumberAt(0, 0); // tap: default numberSize
+    final tap = app.blocks.firstWhere((b) => b.type == BlockType.number);
+    expect(tap.w, app.numberSize);
+    expect(tap.w, tap.h);
+
+    app.addNumberAt(200, 200, size: 90); // drag-sized
+    final dragged = app.blocks.lastWhere((b) => b.type == BlockType.number);
+    expect(dragged.w, 90);
+    expect(dragged.w, dragged.h);
+    app.cancelPendingSave();
+  });
+
+  test('the eraser defaults to whole-stroke', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    expect(app.eraserMode, EraserMode.stroke);
+  });
+
   test('Reset starts the sequence over at 1', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.addNumberAt(10, 10);

@@ -14,7 +14,7 @@ import '../export/print_page.dart';
 import '../export/repo_push.dart';
 import '../editor/list_editing.dart';
 import '../markdown/md_syntax.dart';
-import '../model/models.dart' show PaperSize;
+import '../model/models.dart' show PaperSize, BlockType;
 import '../model/tags.dart';
 import '../state/app_state.dart';
 import '../study/study_stats.dart';
@@ -1059,6 +1059,40 @@ class _CommandBarState extends State<CommandBar> {
       ),
       const _Div(),
       // Numbering options — style, colour, size, and the counter with a reset.
+      // Text tool: its size bar, so the size is set before (or while) writing
+      // and the choice sticks for the next box.
+      if (app.tool == Tool.text) ...[
+        Text('Text size',
+            style:
+                TextStyle(fontSize: 12, color: context.surfaces.textSecondary)),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.remove, size: 18),
+          tooltip: 'Smaller',
+          visualDensity: VisualDensity.compact,
+          onPressed: () {
+            app.setTextSize(app.textSize - 2);
+            _applyTextSizeToEditing(app);
+          },
+        ),
+        SizedBox(
+          width: 30,
+          child: Text('${app.textSize.round()}',
+              textAlign: TextAlign.center,
+              style:
+                  TextStyle(fontSize: 12, color: context.surfaces.textPrimary)),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add, size: 18),
+          tooltip: 'Bigger',
+          visualDensity: VisualDensity.compact,
+          onPressed: () {
+            app.setTextSize(app.textSize + 2);
+            _applyTextSizeToEditing(app);
+          },
+        ),
+        const _Div(),
+      ],
       if (app.tool == Tool.number) ...[
         for (final style in const [
           ('circle', Icons.circle_outlined, 'Number in a circle'),
@@ -2369,4 +2403,18 @@ class _PopoverLayout extends SingleChildLayoutDelegate {
   @override
   bool shouldRelayout(covariant _PopoverLayout old) =>
       old.anchor != anchor || old.maxWidth != maxWidth;
+}
+
+/// Apply the current text size to the text box being edited, if any, so the
+/// size bar resizes the live box as well as setting the default for new ones.
+void _applyTextSizeToEditing(AppState app) {
+  final id = app.editingBlockId;
+  if (id == null) return;
+  final blk = app.blocks
+      .where((b) => b.id == id && b.type == BlockType.text)
+      .firstOrNull;
+  if (blk != null) {
+    blk.content['fontSize'] = app.textSize;
+    app.updateBlock(blk);
+  }
 }

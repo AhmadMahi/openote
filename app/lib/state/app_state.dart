@@ -4648,8 +4648,8 @@ class AppState extends ChangeNotifier
 
   /// Drop the next number as a stamp centred on ([cx], [cy]) in page units,
   /// then step the counter.
-  void addNumberAt(double cx, double cy) {
-    final d = numberSize;
+  void addNumberAt(double cx, double cy, {double? size}) {
+    final d = (size ?? numberSize).clamp(20.0, 400.0).toDouble();
     final b = Block(
       type: BlockType.number,
       x: cx - d / 2,
@@ -5645,10 +5645,13 @@ class AppState extends ChangeNotifier
 
   /// Eraser behaviour (INK-6). Session-scoped like tool/penSize — a mode, not
   /// a preference.
-  EraserMode eraserMode = EraserMode.area;
+  // Whole-stroke erase is the default and the more useful one (one swipe clears
+  // a scratched-out word); the last choice is remembered across restarts.
+  EraserMode eraserMode = EraserMode.stroke;
 
   void setEraserMode(EraserMode m) {
     eraserMode = m;
+    _repo.setSetting('eraserMode', m.name);
     notifyListeners();
   }
 
@@ -6902,6 +6905,15 @@ class AppState extends ChangeNotifier
     if (pac is bool) pasteAsCard = pac;
     final cb = _repo.getSetting('calloutBubbles');
     if (cb is bool) calloutBubbles = cb;
+    final sal = _repo.getSetting('shapeAutoLabel');
+    if (sal is bool) shapeAutoLabel = sal;
+    final ts = _repo.getSetting('textSize');
+    if (ts is num) textSize = ts.toDouble().clamp(9.0, 96.0);
+    final em = _repo.getSetting('eraserMode');
+    if (em is String) {
+      eraserMode = EraserMode.values
+          .firstWhere((e) => e.name == em, orElse: () => EraserMode.stroke);
+    }
     final nsw = _repo.getSetting('navSectionsW');
     if (nsw is num) navSectionsW = nsw.toDouble().clamp(96, 220);
     final npw = _repo.getSetting('navPagesW');
@@ -10562,6 +10574,26 @@ class AppState extends ChangeNotifier
   void setCalloutBubbles(bool v) {
     calloutBubbles = v;
     _repo.setSetting('calloutBubbles', v);
+    notifyListeners();
+  }
+
+  /// Drop an editable label at a shape's centre as you draw it (draw.io style).
+  /// Off by default: label a shape afterwards with the Text tool instead.
+  bool shapeAutoLabel = false;
+
+  void setShapeAutoLabel(bool v) {
+    shapeAutoLabel = v;
+    _repo.setSetting('shapeAutoLabel', v);
+    notifyListeners();
+  }
+
+  /// The font size new text boxes start at, set from the Text tool's bar and
+  /// remembered across restarts.
+  double textSize = 15;
+
+  void setTextSize(double v) {
+    textSize = v.clamp(9.0, 96.0);
+    _repo.setSetting('textSize', textSize);
     notifyListeners();
   }
 

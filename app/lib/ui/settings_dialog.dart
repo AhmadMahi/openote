@@ -497,6 +497,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             _toggle(app.pasteAsCard, app.setPasteAsCard)),
         _row('Pasted questions and notes as speech bubbles',
             _toggle(app.calloutBubbles, app.setCalloutBubbles)),
+        _row('Label shapes as you draw them',
+            _toggle(app.shapeAutoLabel, app.setShapeAutoLabel)),
         _rowStacked(
           'Sticky note agenda',
           SegmentedButton<bool>(

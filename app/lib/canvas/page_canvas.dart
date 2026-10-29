@@ -304,11 +304,9 @@ class _PageCanvasState extends State<PageCanvas>
   bool get _lassoTool => app.tool == Tool.lasso;
   bool get _numberTool => app.tool == Tool.number;
 
-  /// Where a numbering tap went down, so a tap (not a drag) places a number.
+  /// Where a numbering drag went down: a drag sizes the number, a tap uses the
+  /// default size.
   Offset? _numberDownPt;
-
-  /// Where a shapes-tool tap went down, so a tap (not a drag) stamps a shape.
-  Offset? _shapeDownPt;
 
   /// Decoded strokes per ink block, tagged with the `updatedAt` they were
   /// decoded at: strokes are decoded once per edit, not on every frame
@@ -769,7 +767,9 @@ class _PageCanvasState extends State<PageCanvas>
     // you can name it straight away. Type and the label stays; draw something
     // else without typing and the empty label clears itself. Not for the
     // click-stamped palette shapes, where it would interrupt rapid stamping.
-    if (!_shapeTool) _dropCenterLabel(from, to, isArrow: _arrowTool);
+    // Only when the "label shapes as you draw" preference is on (off by
+    // default): otherwise label a shape afterwards with the Text tool.
+    if (app.shapeAutoLabel) _dropCenterLabel(from, to, isArrow: _arrowTool);
   }
 
   /// A centred, empty, editable text label over the shape just drawn. It is an
@@ -1203,7 +1203,8 @@ class _PageCanvasState extends State<PageCanvas>
       x: pos.dx,
       y: pos.dy,
       w: 320,
-      content: {'text': ''},
+      // New text starts at the size chosen on the Text tool's bar (persisted).
+      content: {'text': '', if (app.textSize != 15) 'fontSize': app.textSize},
     ));
     // OneNote-style pending caret (owner): no chrome, and arrow keys
     // navigate the page, until the first keystroke. Set BEFORE select()
@@ -1718,11 +1719,12 @@ class _PageCanvasState extends State<PageCanvas>
       );
     });
 
-    if (_twoCornerTool) {
-      // Arrow and rectangle are each a drag with two corners and nothing in
-      // between: the shape is decided by where you start and where you stop,
-      // so there is no path to record and no reason to route it through the
-      // ink handlers.
+    if (_twoCornerTool || _shapeTool) {
+      // Arrow, rectangle and the palette shapes are each a drag with two
+      // corners and nothing in between: the shape is decided by where you start
+      // and where you stop, so there is no path to record and no reason to
+      // route it through the ink handlers. A tiny drag with the Shapes tool
+      // counts as a tap and stamps the shape at its default size.
       canvas = Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: (e) {
@@ -1747,6 +1749,12 @@ class _PageCanvasState extends State<PageCanvas>
             _arrowTo = null;
           });
           if (from == null || to == null) return;
+          if (_shapeTool &&
+              (to.x - from.x).abs() < 6 &&
+              (to.y - from.y).abs() < 6) {
+            _stampShapeAt((from.x + to.x) / 2, (from.y + to.y) / 2);
+            return;
+          }
           _commitShape(from, to);
         },
         onPointerCancel: (_) => setState(() {
@@ -1804,9 +1812,8 @@ class _PageCanvasState extends State<PageCanvas>
         child: canvas,
       );
     } else if (_numberTool) {
-      // Numbering: a tap drops the next number where you click. A drag is
-      // ignored (it is almost always a pan), and a tap over a block first
-      // commits any open text edit like every other tool.
+      // Numbering: drag to size the next number (like arrow and rectangle), or
+      // tap to drop it at the default size. A tap first commits any open edit.
       canvas = Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: (e) {
@@ -1821,37 +1828,17 @@ class _PageCanvasState extends State<PageCanvas>
           final down = _numberDownPt;
           _numberDownPt = null;
           if (down == null) return;
-          if ((e.localPosition - down).distance > 8)
-            return; // a drag, not a tap
-          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
-          app.addNumberAt(p.dx, p.dy);
+          final a = _clampToPagePoint(controller.screenToPage(down));
+          final b = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          final dx = (b.dx - a.dx).abs(), dy = (b.dy - a.dy).abs();
+          if (dx < 6 && dy < 6) {
+            app.addNumberAt(a.dx, a.dy); // a tap: default size
+          } else {
+            app.addNumberAt((a.dx + b.dx) / 2, (a.dy + b.dy) / 2,
+                size: math.max(dx, dy));
+          }
         },
         onPointerCancel: (_) => _numberDownPt = null,
-        child: canvas,
-      );
-    } else if (_shapeTool) {
-      // Shapes: a tap stamps the armed shape at its universal size, centred on
-      // the click — no drag, so a check stays a proper check. A drag is
-      // ignored (a pan), and a tap first commits any open text edit.
-      canvas = Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: (e) {
-          if (app.claimedPointers.remove(e.pointer)) return;
-          if (_exitEditOnCanvasDown()) {
-            _shapeDownPt = null;
-            return;
-          }
-          _shapeDownPt = e.localPosition;
-        },
-        onPointerUp: (e) {
-          final down = _shapeDownPt;
-          _shapeDownPt = null;
-          if (down == null) return;
-          if ((e.localPosition - down).distance > 8) return;
-          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
-          _stampShapeAt(p.dx, p.dy);
-        },
-        onPointerCancel: (_) => _shapeDownPt = null,
         child: canvas,
       );
     } else if (_inkTool) {
