@@ -4599,6 +4599,27 @@ class AppState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// The count remembered when numbering was reset with a second N press, so the
+  /// next N can put it back. Null when there is nothing stashed to restore.
+  int? _numberStash;
+
+  /// Pressing N while already in the numbering tool toggles the running count:
+  /// first press stashes the current count and starts fresh at 1; the next press
+  /// puts the stashed count back, so you can drop a short side-list and then
+  /// carry on from where you were. Placing a number in the reset state adopts
+  /// that new sequence (see [addNumberAt]), so the next N stashes the new count
+  /// instead of the old one.
+  void toggleNumberingReset() {
+    if (_numberStash == null) {
+      _numberStash = numberNext;
+      numberNext = 1;
+    } else {
+      numberNext = _numberStash!;
+      _numberStash = null;
+    }
+    notifyListeners();
+  }
+
   // ── Shapes palette ────────────────────────────────────────────────────
   //
   // A floating bar (like Sticky notes) of shapes and teaching marks. Picking
@@ -4663,6 +4684,9 @@ class AppState extends ChangeNotifier
     )..h = d;
     addBlock(b);
     numberNext++;
+    // Placing a number commits the current run as the live one: a stashed count
+    // from a reset is no longer what N should restore to.
+    _numberStash = null;
     notifyListeners();
   }
 

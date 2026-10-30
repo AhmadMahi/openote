@@ -672,9 +672,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (k == LogicalKeyboardKey.keyR) return _tool(Tool.rectangle);
       if (k == LogicalKeyboardKey.keyN) {
         // N enters numbering and CONTINUES the count; pressing N again while
-        // already numbering resets the count to 1 for a fresh sequence.
+        // already numbering toggles between a fresh start at 1 and the count you
+        // were on, so you can drop a short side-list and then carry on.
         if (app.tool == Tool.number) {
-          app.resetNumbering();
+          app.toggleNumberingReset();
         } else {
           app.setTool(Tool.number);
         }

@@ -7,13 +7,14 @@ import '../model/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
 
-/// A small floating format bar that appears over the page when you select text
-/// in a text block, so bold / italic / underline / highlight / heading are one
-/// tap away instead of a trip to the Format menu.
+/// A small floating format bar that appears over the page while you are editing
+/// a text block, so font size and bold / italic / underline / highlight /
+/// heading are one tap away right next to the text instead of a trip to the
+/// Format menu or the toolbar.
 ///
 /// Like the sticky note it is ALWAYS a `Positioned.fill` child of the editor
 /// Stack (a non-positioned child would collapse the Stack); it renders nothing
-/// until there is a live selection. It reads the active editor's controller
+/// unless a text block is being edited. It reads the active editor's controller
 /// directly, because the caret-watch in [AppState] only notifies when the set
 /// of marks changes, not on every selection move.
 class SelectionFormatBar extends StatelessWidget {
@@ -21,7 +22,7 @@ class SelectionFormatBar extends StatelessWidget {
   final AppState app;
 
   static const double _barHeight = 38;
-  static const double _estWidth = 224;
+  static const double _estWidth = 320;
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +39,12 @@ class SelectionFormatBar extends StatelessWidget {
           return AnimatedBuilder(
             animation: ed.controller,
             builder: (context, _) {
+              // Shown whenever a text block is being edited (even with just a
+              // caret and no selection): the style buttons apply to the
+              // selection when there is one, and arm the style for what you
+              // type next when there is not.
               final sel = ed.controller.selection;
-              if (!sel.isValid || sel.isCollapsed) {
+              if (!sel.isValid) {
                 return const SizedBox.shrink();
               }
               return LayoutBuilder(
@@ -60,7 +65,7 @@ class SelectionFormatBar extends StatelessWidget {
                     Positioned(
                       left: left,
                       top: top,
-                      child: _Bar(app: app),
+                      child: _Bar(app: app, block: b),
                     ),
                   ]);
                 },
@@ -74,8 +79,24 @@ class SelectionFormatBar extends StatelessWidget {
 }
 
 class _Bar extends StatelessWidget {
-  const _Bar({required this.app});
+  const _Bar({required this.app, required this.block});
   final AppState app;
+  final Block block;
+
+  /// The size the stamp currently renders at: the block's own override if it has
+  /// one, else the tool default.
+  double get _size {
+    final fs = block.content['fontSize'];
+    return fs is num ? fs.toDouble() : app.textSize;
+  }
+
+  /// Apply a new size to the block being edited AND make it the default for new
+  /// text, so the size you pick here sticks.
+  void _setSize(double v) {
+    app.setTextSize(v); // persists + becomes the default for new text
+    block.content['fontSize'] = app.textSize;
+    app.updateBlock(block);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +126,21 @@ class _Bar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _btn(Icons.remove, 'Smaller text', () => _setSize(_size - 2)),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 22),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${_size.round()}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+                _btn(Icons.add, 'Bigger text', () => _setSize(_size + 2)),
+                _sep(s),
                 _btn(Icons.format_bold, 'Bold  (Ctrl+B)',
                     () => app.wrapSelection('**')),
                 _btn(Icons.format_italic, 'Italic  (Ctrl+I)',

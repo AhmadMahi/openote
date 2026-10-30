@@ -308,6 +308,12 @@ class _PageCanvasState extends State<PageCanvas>
   /// default size.
   Offset? _numberDownPt;
 
+  /// Live drag preview for the numbering tool, in page units (mirrors the
+  /// arrow/rectangle `_arrowFrom`/`_arrowTo` preview). Non-null only while a
+  /// numbering drag is in progress, so the size is visible before release.
+  Offset2? _numberFrom;
+  Offset2? _numberTo;
+
   /// Decoded strokes per ink block, tagged with the `updatedAt` they were
   /// decoded at: strokes are decoded once per edit, not on every frame
   /// (§7a.6 — no hot-path JSON decoding).
@@ -1089,7 +1095,10 @@ class _PageCanvasState extends State<PageCanvas>
     }
 
     final pagePt = controller.screenToPage(e.localPosition);
-    final inkHit = _hitInk(pagePt);
+    // In the Text tool a click always places a text box, even over a drawn
+    // shape, so you can label on top of an arrow or write inside a rectangle.
+    // Only Select grabs the ink under the pointer.
+    final inkHit = app.tool == Tool.text ? null : _hitInk(pagePt);
     if (inkHit != null) {
       if (!app.selectedIds.contains(inkHit)) {
         app.select(inkHit, additive: HardwareKeyboard.instance.isShiftPressed);
@@ -1660,6 +1669,24 @@ class _PageCanvasState extends State<PageCanvas>
                         ),
                       ),
                     ),
+                  // The number being dragged, so its size (a square) is visible
+                  // before it is dropped. A tap previews the default size.
+                  if (_numberFrom != null && _numberTo != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _NumberPreviewPainter(
+                            controller: controller,
+                            from: _numberFrom!,
+                            to: _numberTo!,
+                            n: app.numberNext,
+                            style: app.numberStyle,
+                            defaultSize: app.numberSize,
+                            color: Color(app.numberColorHex),
+                          ),
+                        ),
+                      ),
+                    ),
                   // A placed auto-shape, waiting to be moved or dropped: a soft
                   // outline round it says it is still live — drag to move, tap
                   // to place.
@@ -1823,10 +1850,24 @@ class _PageCanvasState extends State<PageCanvas>
             return;
           }
           _numberDownPt = e.localPosition;
+          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          setState(() {
+            _numberFrom = Offset2(p.dx, p.dy);
+            _numberTo = _numberFrom;
+          });
+        },
+        onPointerMove: (e) {
+          if (_numberFrom == null) return;
+          final p = _clampToPagePoint(controller.screenToPage(e.localPosition));
+          setState(() => _numberTo = Offset2(p.dx, p.dy));
         },
         onPointerUp: (e) {
           final down = _numberDownPt;
           _numberDownPt = null;
+          setState(() {
+            _numberFrom = null;
+            _numberTo = null;
+          });
           if (down == null) return;
           final a = _clampToPagePoint(controller.screenToPage(down));
           final b = _clampToPagePoint(controller.screenToPage(e.localPosition));
@@ -1834,11 +1875,19 @@ class _PageCanvasState extends State<PageCanvas>
           if (dx < 6 && dy < 6) {
             app.addNumberAt(a.dx, a.dy); // a tap: default size
           } else {
+            // A diagonal pull: width and height match (a square), so the number
+            // only grows or shrinks, never stretches.
             app.addNumberAt((a.dx + b.dx) / 2, (a.dy + b.dy) / 2,
                 size: math.max(dx, dy));
           }
         },
-        onPointerCancel: (_) => _numberDownPt = null,
+        onPointerCancel: (_) {
+          _numberDownPt = null;
+          setState(() {
+            _numberFrom = null;
+            _numberTo = null;
+          });
+        },
         child: canvas,
       );
     } else if (_inkTool) {
@@ -3058,6 +3107,87 @@ class _ShapePreviewPainter extends CustomPainter {
       old.to.y != to.y ||
       old.color != color ||
       old.size != size ||
+      old.controller.scale != controller.scale ||
+      old.controller.offset != controller.offset;
+}
+
+/// The live preview of a numbering drag: a square stamp (circle, box or plain,
+/// matching the current style) with the next number, shown at the dragged size
+/// before release. A barely-there drag previews the default size, so a tap
+/// still shows where the number will land. Mirrors `_NumberPainter` in
+/// `editor/number_block_view.dart`.
+class _NumberPreviewPainter extends CustomPainter {
+  _NumberPreviewPainter({
+    required this.controller,
+    required this.from,
+    required this.to,
+    required this.n,
+    required this.style,
+    required this.defaultSize,
+    required this.color,
+  });
+
+  final CanvasController controller;
+  final Offset2 from;
+  final Offset2 to;
+  final int n;
+  final String style;
+  final double defaultSize;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size _) {
+    final dx = (to.x - from.x).abs();
+    final dy = (to.y - from.y).abs();
+    // A diagonal pull: the side is the larger of the two, so the stamp is always
+    // square. Below the tap threshold it previews the default size.
+    final sidePage = (dx < 6 && dy < 6) ? defaultSize : math.max(dx, dy);
+    final center = controller
+        .pageToScreen(Offset((from.x + to.x) / 2, (from.y + to.y) / 2));
+    final side = sidePage * controller.scale;
+    if (side <= 0) return;
+    final rect = Rect.fromCenter(center: center, width: side, height: side);
+    final strokeW = (side * 0.08).clamp(2.0, 6.0);
+    final outline = Paint()
+      ..color = color.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeW
+      ..isAntiAlias = true;
+    final r = rect.deflate(strokeW / 2 + 1);
+    if (style == 'circle') {
+      canvas.drawOval(r, outline);
+    } else if (style == 'box') {
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(r, Radius.circular(side * 0.18)), outline);
+    }
+    final digitFrac = style == 'plain' ? 0.82 : 0.52;
+    final tp = TextPainter(
+      text: TextSpan(
+        text: '$n',
+        style: TextStyle(
+          color: color.withValues(alpha: 0.9),
+          fontWeight: FontWeight.w700,
+          fontSize: side * digitFrac,
+          height: 1.0,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    )..layout();
+    tp.paint(
+        canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(covariant _NumberPreviewPainter old) =>
+      old.from.x != from.x ||
+      old.from.y != from.y ||
+      old.to.x != to.x ||
+      old.to.y != to.y ||
+      old.n != n ||
+      old.style != style ||
+      old.defaultSize != defaultSize ||
+      old.color != color ||
       old.controller.scale != controller.scale ||
       old.controller.offset != controller.offset;
 }

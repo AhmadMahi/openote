@@ -87,6 +87,36 @@ void main() {
         1);
   });
 
+  test('N toggles between a fresh start and the count you were on', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.addNumberAt(0, 0);
+    app.addNumberAt(10, 10);
+    app.addNumberAt(20, 20);
+    expect(app.numberNext, 4);
+
+    app.toggleNumberingReset(); // stash 4, start fresh
+    expect(app.numberNext, 1);
+    app.toggleNumberingReset(); // restore
+    expect(app.numberNext, 4);
+    app.cancelPendingSave();
+  });
+
+  test('placing a number in the reset state adopts the new run', () {
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    app.addNumberAt(0, 0);
+    app.addNumberAt(10, 10);
+    app.addNumberAt(20, 20); // numberNext == 4
+
+    app.toggleNumberingReset(); // stash 4, numberNext == 1
+    app.addNumberAt(30, 30); // place '1' → numberNext == 2, stash dropped
+    expect(app.numberNext, 2);
+    app.toggleNumberingReset(); // stashes 2 (not the old 4), resets to 1
+    expect(app.numberNext, 1);
+    app.toggleNumberingReset(); // restores the new run
+    expect(app.numberNext, 2);
+    app.cancelPendingSave();
+  });
+
   test('style, colour and size preferences flow into new stamps', () {
     if (!haveSqlite) return markTestSkipped('sqlite unavailable');
     app.setNumberStyle('box');
