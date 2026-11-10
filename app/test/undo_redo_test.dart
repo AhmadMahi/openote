@@ -28,6 +28,25 @@ AppState _app() {
 Block _text(String s, {double x = 10, double y = 20}) =>
     Block(type: BlockType.text, x: x, y: y, content: {'text': s});
 
+/// An ink block with one point per stroke, positioned so tests can find it
+/// again after a restore rebuilds the block list (identity is lost, x is kept).
+Block _ink(List<List<double>> points, {double x = 0, double y = 0}) => Block(
+      type: BlockType.ink,
+      x: x,
+      y: y,
+      content: {
+        'strokes': [
+          for (final p in points)
+            {
+              'x': [p[0]],
+              'y': [p[1]]
+            }
+        ]
+      },
+    );
+
+Block _byX(AppState app, double x) => app.blocks.firstWhere((b) => b.x == x);
+
 void main() {
   test('undo restores the pre-change block list', () {
     final app = _app()..blocks = [_text('first')];
@@ -105,6 +124,70 @@ void main() {
     app.undo();
     app.redo();
     expect(app.blocks.single.content['text'], 'only');
+  });
+
+  test(
+      'consecutive ink stroke edits undo step by step '
+      '(regression: snapshot fragment cache must not reuse a stale stroke list)',
+      () {
+    final app = _app();
+    final edited = _ink([
+      [1.0, 1.0]
+    ]); // x == 0
+    final untouched = _ink([
+      [9.0, 9.0]
+    ], x: 100);
+    app.blocks = [edited, untouched];
+
+    // Mirror _commitStroke: pushUndo, append a stroke, updateBlock.
+    app.pushUndo();
+    (edited.content['strokes'] as List).add({
+      'x': [2.0],
+      'y': [2.0]
+    });
+    app.updateBlock(edited);
+
+    app.pushUndo();
+    (edited.content['strokes'] as List).add({
+      'x': [3.0],
+      'y': [3.0]
+    });
+    app.updateBlock(edited);
+
+    expect((_byX(app, 0).content['strokes'] as List).length, 3);
+
+    app.undo(); // back to after the first appended stroke
+    expect((_byX(app, 0).content['strokes'] as List).length, 2);
+
+    app.undo(); // back to the original single stroke
+    expect((_byX(app, 0).content['strokes'] as List).length, 1);
+
+    // The block that never changed must be intact after both restores — proof
+    // the cache reused its fragment without corrupting it.
+    final sb = _byX(app, 100).content['strokes'] as List;
+    expect(sb.length, 1);
+    expect(((sb.first as Map)['x'] as List).first, 9.0);
+  });
+
+  test('moving an ink block is undoable (updatedAt-keyed snapshot cache)', () {
+    final app = _app();
+    final a = _ink([
+      [1.0, 1.0]
+    ]);
+    app.blocks = [a];
+    app.select(a.id);
+
+    app.pushUndo();
+    app.moveSelectedBy(50, 60);
+    expect(app.blocks.single.x, 50);
+    expect(((app.blocks.single.content['strokes'] as List).first as Map)['x'],
+        [51.0]);
+
+    app.undo();
+    expect(app.blocks.single.x, 0);
+    // Stroke coordinates move with the block, so they must come back too.
+    expect(((app.blocks.single.content['strokes'] as List).first as Map)['x'],
+        [1.0]);
   });
 
   test('a table edit is undoable (regression: table writes skipped pushUndo)',

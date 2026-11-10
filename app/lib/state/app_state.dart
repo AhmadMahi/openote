@@ -6886,6 +6886,17 @@ class AppState extends ChangeNotifier
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
 
+  /// Per-ink-block undo-snapshot fragment cache. An ink block's JSON is encoded
+  /// once and reused on later snapshots until the block changes, so taking an
+  /// undo snapshot (every stroke, erase, move, ...) no longer re-encodes every
+  /// stroke on a page full of handwriting — which is what made the pen lag more
+  /// the more you had drawn. Keyed by block id, tagged with the `updatedAt` it
+  /// was taken at: an ink block bumps `updatedAt` on every change (the same
+  /// invariant the canvas already relies on to cache decoded strokes), and
+  /// [updateBlock] drops the entry outright, so a stale fragment can never be
+  /// reused. Value is `(updatedAt, encodedJson)`.
+  final Map<String, (int, String)> _inkSnapCache = {};
+
   // ── Document engine (Rust core, optional) ─────────────────────────────
 
   /// Human-readable label for the active engine, shown in the status bar
@@ -7672,6 +7683,7 @@ class AppState extends ChangeNotifier
     select(null);
     _undo.clear();
     _redo.clear();
+    _inkSnapCache.clear();
     renderSizes.clear();
     findMatches = [];
     findQuery = '';
@@ -9949,10 +9961,40 @@ class AppState extends ChangeNotifier
 
   // ── Undo / redo (page-scoped snapshots) ────────────────────────────────
 
-  String _snapshot() => jsonEncode({
-        'page': pageProps.toJson(),
-        'blocks': [for (final b in blocks) b.toJson()],
-      });
+  String _snapshot() {
+    // Builds the SAME JSON string the old one-shot `jsonEncode` produced
+    // (`{"page":…,"blocks":[…]}`), but reuses each ink block's already-encoded
+    // JSON when the block has not changed since the last snapshot. Ink strokes
+    // are the only heavy part of a page, so this turns the per-edit cost from
+    // "encode the whole page's ink" into "encode the one block you just
+    // touched".
+    final buf = StringBuffer('{"page":');
+    buf.write(jsonEncode(pageProps.toJson()));
+    buf.write(',"blocks":[');
+    for (var i = 0; i < blocks.length; i++) {
+      if (i > 0) buf.write(',');
+      final b = blocks[i];
+      if (b.type == BlockType.ink) {
+        final cached = _inkSnapCache[b.id];
+        if (cached != null && cached.$1 == b.updatedAt) {
+          buf.write(cached.$2);
+        } else {
+          final j = jsonEncode(b.toJson());
+          _inkSnapCache[b.id] = (b.updatedAt, j);
+          buf.write(j);
+        }
+      } else {
+        buf.write(jsonEncode(b.toJson()));
+      }
+    }
+    buf.write(']}');
+    // Keep the cache from holding blocks that are no longer on the page.
+    if (_inkSnapCache.length > blocks.length + 32) {
+      final live = {for (final b in blocks) b.id};
+      _inkSnapCache.removeWhere((k, _) => !live.contains(k));
+    }
+    return buf.toString();
+  }
 
   void _restore(String snap) {
     final j = jsonDecode(snap) as Map<String, dynamic>;
@@ -10385,6 +10427,9 @@ class AppState extends ChangeNotifier
 
   void updateBlock(Block b) {
     b.updatedAt = nowMs();
+    // The block's content changed, so its cached undo-snapshot fragment is
+    // stale — drop it so the next snapshot re-encodes it.
+    if (b.type == BlockType.ink) _inkSnapCache.remove(b.id);
     markDirty();
     notifyListeners();
   }
