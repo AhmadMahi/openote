@@ -133,8 +133,22 @@ class InkPainter extends CustomPainter {
       old.wet != wet ||
       old.autoColor != autoColor ||
       old.themeDark != themeDark ||
-      old.strokes.length != strokes.length ||
-      (strokes.isNotEmpty &&
-          (!identical(old.strokes.first, strokes.first) ||
-              !identical(old.strokes.last, strokes.last)));
+      !_sameStrokes(old.strokes, strokes);
+
+  /// Are these the same Stroke objects in the same order?
+  ///
+  /// Every stroke is compared, not just the ends. Checking only the first and
+  /// last was enough while any edit re-decoded its whole block into fresh
+  /// objects; now that an edit keeps the objects it did not touch (so their
+  /// solved outlines survive), a change in the middle of the list — one stroke
+  /// trimmed by the eraser, say — leaves both ends and the length alone. A
+  /// pointer comparison per stroke is nothing next to painting them.
+  static bool _sameStrokes(List<Stroke> a, List<Stroke> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
+  }
 }

@@ -47,6 +47,9 @@ const String kInkKey = 'ink';
 /// has to keep working.
 const String kStrokesKey = 'strokes';
 
+/// The persisted content an ink block had at one revision (`updatedAt`).
+typedef InkPersisted = ({int rev, Map<String, dynamic> content});
+
 abstract final class InkStorage {
   /// Does this block's content hold ink in the persisted (blob-ref) form?
   static bool isRefForm(Map<String, dynamic> content) =>
@@ -138,8 +141,14 @@ abstract final class InkStorage {
     // create a hash every empty block shared, which is harmless but pointless.
     if (strokes.isEmpty) {
       final out = Map<String, dynamic>.of(content)..remove(kStrokesKey);
-      out[kInkKey] = {'v': 1, 'base': '', 'add': const [], 'gone': '', 'n': 0,
-        'o': const [0.0, 0.0]};
+      out[kInkKey] = {
+        'v': 1,
+        'base': '',
+        'add': const [],
+        'gone': '',
+        'n': 0,
+        'o': const [0.0, 0.0]
+      };
       return out;
     }
 
@@ -155,8 +164,7 @@ abstract final class InkStorage {
     if (!ox.isFinite) ox = 0;
     if (!oy.isFinite) oy = 0;
 
-    final hash =
-        putBlob(InkCodec.encode(strokes, originX: ox, originY: oy));
+    final hash = putBlob(InkCodec.encode(strokes, originX: ox, originY: oy));
     final out = Map<String, dynamic>.of(content)..remove(kStrokesKey);
     out[kInkKey] = {
       'v': 1,
@@ -200,7 +208,8 @@ abstract final class InkStorage {
             originX: ox,
             originY: oy,
             // Ids derive from the blob so they are stable across decodes.
-            idPrefix: base.length > 20 ? base.substring(base.length - 12) : base));
+            idPrefix:
+                base.length > 20 ? base.substring(base.length - 12) : base));
       } catch (_) {
         return content;
       }
@@ -255,8 +264,27 @@ abstract final class InkStorage {
 
   /// Persist every ink block of [blocks]. Returns fresh [Block]s; the input is
   /// not mutated, because the caller's list is the live editor state.
+  ///
+  /// **[known] and [fresh] make a save cost what changed, not what exists.**
+  ///
+  /// Ink drawn since the page was opened stays in the working (inline) form in
+  /// the editor for the whole session — only the copy handed to the disk is
+  /// converted. So every autosave used to parse, encode and hash every stroke
+  /// drawn that session all over again: 113 ms for 3,200 strokes, on the UI
+  /// thread, 700 ms after each pause in writing — which is exactly when the pen
+  /// comes back down.
+  ///
+  /// [known] holds, per block id, the persisted content a block had at a given
+  /// `updatedAt`; a block still at that revision reuses it. [fresh] receives
+  /// what this call had to encode, for the caller to adopt into [known] ONLY
+  /// once the save has actually landed — a hash is only safe to reuse while the
+  /// saved page still refers to it.
   static List<Block> persistAll(
-      List<Block> blocks, String Function(Uint8List) putBlob) {
+    List<Block> blocks,
+    String Function(Uint8List) putBlob, {
+    Map<String, InkPersisted>? known,
+    Map<String, InkPersisted>? fresh,
+  }) {
     var touched = false;
     final out = <Block>[];
     for (final b in blocks) {
@@ -264,7 +292,21 @@ abstract final class InkStorage {
         out.add(b);
         continue;
       }
-      final next = toPersisted(b.content, putBlob);
+      final Map<String, dynamic> next;
+      final hit = known?[b.id];
+      if (hit != null && hit.rev == b.updatedAt && !isRefForm(b.content)) {
+        // A copy, descriptor included: what is handed out must not be able to
+        // change what is remembered.
+        next = Map<String, dynamic>.of(hit.content);
+        final ink = next[kInkKey];
+        if (ink is Map) next[kInkKey] = Map<String, dynamic>.of(ink.cast());
+      } else {
+        final wasInline = !isRefForm(b.content);
+        next = toPersisted(b.content, putBlob);
+        if (fresh != null && wasInline && isRefForm(next)) {
+          fresh[b.id] = (rev: b.updatedAt, content: next);
+        }
+      }
       if (next == b.content) {
         out.add(b);
         continue;

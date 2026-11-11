@@ -655,4 +655,76 @@ void main() {
       expect(InkStorage.toWorking(out, (_) => null)['strokes'], isEmpty);
     });
   });
+
+  // ── Saving costs what changed ────────────────────────────────────────────
+
+  test('ink that has not changed since its last save is not encoded again',
+      () {
+    final b = inkBlock(handwriting());
+    var puts = 0;
+    String put(Uint8List bytes) => 'sha256:${puts++}';
+
+    final known = <String, InkPersisted>{};
+    final fresh = <String, InkPersisted>{};
+    final first =
+        InkStorage.persistAll([b], put, known: known, fresh: fresh).single;
+    expect(puts, 1);
+    expect(fresh.keys, ['ink-1']);
+    known.addAll(fresh); // what the editor does once the save has landed
+
+    final second = InkStorage.persistAll([b], put, known: known).single;
+    expect(puts, 1, reason: 'same revision: the saved form is reused');
+    expect(second.content, first.content);
+    expect(second.content.containsKey('strokes'), isFalse);
+    // What is handed out is a copy: a caller cannot corrupt what is remembered.
+    (second.content['ink'] as Map)['base'] = 'tampered';
+    expect((known['ink-1']!.content['ink'] as Map)['base'], isNot('tampered'));
+
+    // The block changes (every ink edit bumps updatedAt): encode again.
+    (b.content['strokes'] as List).add(handwriting(count: 1, seed: 9)[0].toJson());
+    b.updatedAt += 1;
+    final third = InkStorage.persistAll([b], put, known: known).single;
+    expect(puts, 2);
+    expect((third.content['ink'] as Map)['n'], 61);
+  });
+
+  test('what is on disk follows edits, undo and redo across autosaves',
+      () async {
+    // The saved-form cache must never hand a save an older stroke list. Undo
+    // is the dangerous case: it brings an OLD revision number back.
+    if (!haveSqlite) return markTestSkipped('sqlite unavailable');
+    int onDisk() =>
+        (repo.readPage(app.notebookId!, pageId).blocks.single.content['strokes']
+                as List)
+            .length;
+
+    app.blocks = [inkBlock(handwriting())];
+    app.markDirty();
+    await app.flushSave();
+    expect(onDisk(), 60);
+
+    // One more stroke, the way the canvas commits it.
+    app.pushUndo();
+    final b = app.blocks.single;
+    (b.content['strokes'] as List)
+        .add(handwriting(count: 1, seed: 9)[0].toJson());
+    app.updateBlock(b);
+    await app.flushSave();
+    expect(onDisk(), 61);
+
+    // An autosave with nothing changed (the cached path) changes nothing.
+    final blobs = repo.blobIndex(app.notebookId!).length;
+    app.markDirty();
+    await app.flushSave();
+    expect(onDisk(), 61);
+    expect(repo.blobIndex(app.notebookId!).length, blobs);
+
+    app.undo();
+    await app.flushSave();
+    expect(onDisk(), 60, reason: 'undo must reach the disk');
+
+    app.redo();
+    await app.flushSave();
+    expect(onDisk(), 61, reason: 'and so must redo');
+  });
 }

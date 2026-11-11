@@ -337,6 +337,21 @@ class _PageCanvasState extends State<PageCanvas>
     return decoded;
   }
 
+  // ── Block widgets reused across pan frames ───────────────────────────
+  //
+  // Scrolling changes only the page transform, but the canvas rebuilds inside
+  // an AnimatedBuilder on every pan frame, and handing Flutter a NEW BlockView
+  // per block each frame made it rebuild every visible block per frame. The
+  // same widget instance is skipped outright, so the list is kept for as long
+  // as nothing but the pan has changed: [_buildGen] steps on every real
+  // rebuild (app state, setState), and zoom or a change in which blocks are
+  // visible makes a fresh list.
+  int _buildGen = 0;
+  int _blockViewsGen = -1;
+  double _blockViewsScale = 0;
+  List<Block> _blockViewsFor = const [];
+  List<Widget> _blockViews = const [];
+
   /// The page's paper picture, decoded once per hash — see [_syncPaperImage].
   ui.Image? _paperImage;
   String? _paperImageHash;
@@ -699,9 +714,56 @@ class _PageCanvasState extends State<PageCanvas>
     target ??= app.addBlock(
         Block(type: BlockType.ink, x: 0, y: 0, content: {'strokes': []}),
         recordUndo: false);
-    (target.content['strokes'] as List).add(stroke.toJson());
-    _refitInkBounds(target);
+    final list = target.content['strokes'] as List;
+    // The decoded strokes this block already has on screen, if the cache is
+    // current — read BEFORE the block changes, because the change bumps
+    // `updatedAt` and that is what the cache is checked against.
+    final prior = _strokeCache[target.id];
+    final priorStrokes = list.isEmpty
+        ? const <Stroke>[]
+        : (prior != null &&
+                prior.rev == target.updatedAt &&
+                prior.strokes.length == list.length)
+            ? prior.strokes
+            : null;
+    final wasEmpty = list.isEmpty;
+    list.add(stroke.toJson());
+    // **One stroke was added, so one stroke's worth of work is done.**
+    //
+    // This used to re-parse every stroke in the block for its bounds, and the
+    // `updatedAt` bump then made the canvas decode them all a second time into
+    // fresh objects — which threw away every solved outline (they are cached on
+    // the Stroke object), so the next paint re-solved the whole block. A block
+    // takes up to 512 strokes while you keep writing, so each pen lift cost
+    // more than the last: measured at ~66 ms on a 400-stroke block, which is
+    // the hitch you feel mid-sentence.
+    final bb = stroke.bounds();
+    if (wasEmpty) {
+      target
+        ..x = bb.minX
+        ..y = bb.minY
+        ..w = bb.maxX - bb.minX
+        ..h = bb.maxY - bb.minY;
+    } else if (priorStrokes != null) {
+      final right = math.max(target.x + target.w, bb.maxX);
+      final bottom = math.max(target.y + (target.h ?? 0), bb.maxY);
+      target
+        ..x = math.min(target.x, bb.minX)
+        ..y = math.min(target.y, bb.minY);
+      target
+        ..w = right - target.x
+        ..h = bottom - target.y;
+    } else {
+      _refitInkBounds(target);
+    }
     app.updateBlock(target);
+    if (priorStrokes != null) {
+      // Keep the Stroke objects already on screen and add this one, so their
+      // solved outlines survive. Anything that edits strokes in place (a drag,
+      // an erase) bumps `updatedAt` and is decoded afresh as before.
+      _strokeCache[target.id] =
+          (rev: target.updatedAt, strokes: [...priorStrokes, stroke]);
+    }
     setState(() {});
   }
 
@@ -834,6 +896,10 @@ class _PageCanvasState extends State<PageCanvas>
       // Reuse the decoded strokes rather than re-parsing JSON per sample.
       final decoded = _strokesOf(b);
       final out = <Map<String, dynamic>>[];
+      // The decoded twin of [out], kept in step with it: survivors keep the
+      // Stroke object they already have (and with it their solved outline), so
+      // an erase sample costs the strokes it touched, not the whole block.
+      final outDecoded = <Stroke>[];
       var blockChanged = false;
       for (var si = 0; si < strokes.length; si++) {
         final sj = strokes[si] as Map;
@@ -847,6 +913,7 @@ class _PageCanvasState extends State<PageCanvas>
         });
         if (!keep.contains(false)) {
           out.add(sj.cast<String, dynamic>());
+          outDecoded.add(s);
           continue;
         }
         if (wholeStroke) {
@@ -867,7 +934,7 @@ class _PageCanvasState extends State<PageCanvas>
             j++;
           }
           if (j - i >= 2) {
-            out.add(Stroke(
+            final run = Stroke(
               tool: s.tool,
               colorHex: s.colorHex,
               size: s.size,
@@ -882,7 +949,9 @@ class _PageCanvasState extends State<PageCanvas>
               t: s.t.sublist(i, j),
               strokeStart: s.strokeStart,
               sharp: s.sharp,
-            ).toJson());
+            );
+            out.add(run.toJson());
+            outDecoded.add(run);
           }
           i = j;
         }
@@ -890,8 +959,11 @@ class _PageCanvasState extends State<PageCanvas>
       if (blockChanged) {
         changed = true;
         b.content['strokes'] = out;
-        if (out.isNotEmpty) _refitInkBounds(b);
+        if (out.isNotEmpty) _refitInkBoundsFrom(b, outDecoded);
         app.updateBlock(b);
+        // Hand the canvas the strokes it would otherwise re-parse from JSON on
+        // the next frame (the `updatedAt` bump above invalidates its cache).
+        _strokeCache[b.id] = (rev: b.updatedAt, strokes: outDecoded);
       }
     }
     if (changed) {
@@ -902,10 +974,15 @@ class _PageCanvasState extends State<PageCanvas>
     }
   }
 
-  void _refitInkBounds(Block b) {
+  void _refitInkBounds(Block b) => _refitInkBoundsFrom(b, [
+        for (final sj in b.content['strokes'] as List)
+          Stroke.fromJson((sj as Map).cast<String, dynamic>())
+      ]);
+
+  /// Fit [b]'s rect to [strokes], which are its strokes already decoded.
+  void _refitInkBoundsFrom(Block b, List<Stroke> strokes) {
     var mnx = double.infinity, mny = double.infinity, mxx = -1e18, mxy = -1e18;
-    for (final sj in b.content['strokes'] as List) {
-      final s = Stroke.fromJson((sj as Map).cast<String, dynamic>());
+    for (final s in strokes) {
       final bb = s.bounds();
       mnx = math.min(mnx, bb.minX);
       mny = math.min(mny, bb.minY);
@@ -1376,8 +1453,10 @@ class _PageCanvasState extends State<PageCanvas>
         _lastScrollDelta = delta;
         _armGlide();
       }
+      // No setState: the controller notifies, and the canvas listens to it.
+      // A full rebuild here re-measured the page and rebuilt every block on
+      // every wheel notch, on top of the repaint the pan already causes.
       _noteScrollActivity();
-      setState(() {});
     });
   }
 
@@ -1385,6 +1464,7 @@ class _PageCanvasState extends State<PageCanvas>
 
   @override
   Widget build(BuildContext context) {
+    _buildGen++; // a real rebuild: cached block widgets are stale
     final dark = Theme.of(context).brightness == Brightness.dark;
     // A placed auto-shape lives on the pen/highlighter path. If the tool
     // changed out from under it (say to Select), drop it into the page rather
@@ -1449,6 +1529,65 @@ class _PageCanvasState extends State<PageCanvas>
             for (final b in inkBlocks)
               if (app.selectedIds.contains(b.id)) _blockRect(b),
           ];
+          // Painted in z order (review fix: z was stored but insertion order
+          // used to win) — except that the SELECTION outranks z. Hit-testing
+          // follows paint order, so a selected box whose end runs under a
+          // neighbour could not be resized or have its text reached where they
+          // overlap: the neighbour's opaque body swallowed the click. The box
+          // the user chose is the box the mouse should mean, so it paints (and
+          // therefore hit-tests) above everything while selected, and drops
+          // back into place on deselect.
+          final shownBlocks = [
+            ...app.blocks.where((b) =>
+                b.type != BlockType.ink &&
+                (visible.overlaps(_blockRect(b)) ||
+                    app.selectedIds.contains(b.id) ||
+                    app.editingBlockId == b.id))
+          ]..sort((a, b) {
+              int lift(Block x) =>
+                  app.selectedIds.contains(x.id) || app.editingBlockId == x.id
+                      ? 1
+                      : 0;
+              final byLift = lift(a) - lift(b);
+              return byLift != 0 ? byLift : a.z.compareTo(b.z);
+            });
+          // Reuse the block widgets when only the pan moved (see [_buildGen]).
+          // Not while a text box is being edited: its auto-width stops at the
+          // viewport edge, which is the one thing a block reads from the pan.
+          final reuse = _blockViewsGen == _buildGen &&
+              _blockViewsScale == controller.scale &&
+              app.editingBlockId == null &&
+              _blockViewsFor.length == shownBlocks.length &&
+              () {
+                for (var i = 0; i < shownBlocks.length; i++) {
+                  if (!identical(_blockViewsFor[i], shownBlocks[i])) {
+                    return false;
+                  }
+                }
+                return true;
+              }();
+          if (!reuse) {
+            _blockViews = [
+              for (final b in shownBlocks)
+                BlockView(
+                  key: ValueKey('${b.id}#${app.docRevision}'),
+                  block: b,
+                  app: app,
+                  controller: controller,
+                ),
+            ];
+            _blockViewsFor = shownBlocks;
+            _blockViewsScale = controller.scale;
+            _blockViewsGen = _buildGen;
+          }
+          final blockViews = _blockViews;
+          // The stroke being drawn. A pen stroke gets a layer of its own, so a
+          // stylus sample repaints that one stroke instead of every stroke on
+          // screen. A highlighter stays in the main ink layer: it multiplies
+          // with the ink under it, which only works inside the same layer.
+          final wetStroke = _wetForPaint;
+          final wetInDry = wetStroke != null && wetStroke.tool == 'highlighter';
+          final autoInk = dark ? OnoteColors.moon100 : OnoteColors.graphite900;
           return RepaintBoundary(
             key: app.canvasKey,
             child: ClipRect(
@@ -1507,39 +1646,7 @@ class _PageCanvasState extends State<PageCanvas>
                                 ),
                               ),
                             ),
-                            // Painted in z order (review fix: z was stored but
-                            // insertion order used to win) — except that the
-                            // SELECTION outranks z. Hit-testing follows paint
-                            // order, so a selected box whose end runs under a
-                            // neighbour could not be resized or have its text
-                            // reached where they overlap: the neighbour's opaque
-                            // body swallowed the click. The box the user chose is
-                            // the box the mouse should mean, so it paints (and
-                            // therefore hit-tests) above everything while
-                            // selected, and drops back into place on deselect.
-                            for (final b in ([
-                              ...app.blocks.where((b) =>
-                                  b.type != BlockType.ink &&
-                                  (visible.overlaps(_blockRect(b)) ||
-                                      app.selectedIds.contains(b.id) ||
-                                      app.editingBlockId == b.id))
-                            ]..sort((a, b) {
-                                int lift(Block x) =>
-                                    app.selectedIds.contains(x.id) ||
-                                            app.editingBlockId == x.id
-                                        ? 1
-                                        : 0;
-                                final byLift = lift(a) - lift(b);
-                                return byLift != 0
-                                    ? byLift
-                                    : a.z.compareTo(b.z);
-                              })))
-                              BlockView(
-                                key: ValueKey('${b.id}#${app.docRevision}'),
-                                block: b,
-                                app: app,
-                                controller: controller,
-                              ),
+                            ...blockViews,
                             // INK PAINTS OVER THE BLOCKS, and this used to be the
                             // first child of this Stack rather than the last.
                             //
@@ -1565,18 +1672,45 @@ class _PageCanvasState extends State<PageCanvas>
                                 child: RepaintBoundary(
                                   child: CustomPaint(
                                     size: Size.zero,
+                                    // Thousands of paths that change only when
+                                    // a stroke is committed: worth caching.
+                                    isComplex: true,
                                     painter: InkPainter(visibleStrokes,
-                                        wet: _wetForPaint,
+                                        wet: wetInDry ? wetStroke : null,
                                         // Black shown white on a dark page,
                                         // white shown black on a light one.
                                         themeDark: dark,
-                                        // Per-point repaint without widget rebuild.
-                                        repaint: _wetTick,
+                                        // Only a highlighter stroke in progress
+                                        // repaints this layer per sample.
+                                        repaint: wetInDry ? _wetTick : null,
                                         // Theme default for "auto" strokes: dark
                                         // ink on light pages, light ink on dark.
-                                        autoColor: dark
-                                            ? OnoteColors.moon100
-                                            : OnoteColors.graphite900),
+                                        autoColor: autoInk),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // THE STROKE IN PROGRESS, on its own layer.
+                            //
+                            // Wet ink repaints once per stylus sample. In one
+                            // layer with the rest of the ink, every sample
+                            // re-drew every stroke on screen, so the pen got
+                            // heavier the more there was on the page. Here a
+                            // sample repaints one stroke.
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              child: IgnorePointer(
+                                child: RepaintBoundary(
+                                  child: CustomPaint(
+                                    size: Size.zero,
+                                    willChange: true,
+                                    painter: InkPainter(const [],
+                                        wet: wetInDry ? null : wetStroke,
+                                        themeDark: dark,
+                                        // Per-point repaint without widget rebuild.
+                                        repaint: _wetTick,
+                                        autoColor: autoInk),
                                   ),
                                 ),
                               ),
@@ -2068,7 +2202,7 @@ class _PageCanvasState extends State<PageCanvas>
           _lastScrollDelta = e.panDelta;
           _noteScrollActivity();
         }
-        setState(() {});
+        // No setState: pan and zoom both notify the controller (see _onScroll).
       },
       onPointerPanZoomEnd: (e) {
         if (_panZoomClaimedBy == e.pointer) _panZoomClaimedBy = null;

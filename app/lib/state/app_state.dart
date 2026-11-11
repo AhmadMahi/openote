@@ -6897,6 +6897,14 @@ class AppState extends ChangeNotifier
   /// reused. Value is `(updatedAt, encodedJson)`.
   final Map<String, (int, String)> _inkSnapCache = {};
 
+  /// What each ink block drawn this session was last SAVED as, so an autosave
+  /// re-encodes only the ink that changed — see [InkStorage.persistAll]. An
+  /// entry is adopted only after its save lands, dropped when its block
+  /// changes, and the whole map is cleared by undo/redo (a restore brings old
+  /// `updatedAt` values back, and their hashes may no longer be on disk) and
+  /// by a page switch.
+  final Map<String, InkPersisted> _inkPersistCache = {};
+
   // ── Document engine (Rust core, optional) ─────────────────────────────
 
   /// Human-readable label for the active engine, shown in the status bar
@@ -7684,6 +7692,7 @@ class AppState extends ChangeNotifier
     _undo.clear();
     _redo.clear();
     _inkSnapCache.clear();
+    _inkPersistCache.clear();
     renderSizes.clear();
     findMatches = [];
     findQuery = '';
@@ -9997,6 +10006,9 @@ class AppState extends ChangeNotifier
   }
 
   void _restore(String snap) {
+    // Old revisions are about to come back; nothing remembered about what a
+    // revision was saved as can be trusted across that.
+    _inkPersistCache.clear();
     final j = jsonDecode(snap) as Map<String, dynamic>;
     pageProps =
         PageProps.fromJson((j['page'] as Map?)?.cast<String, dynamic>());
@@ -10429,7 +10441,10 @@ class AppState extends ChangeNotifier
     b.updatedAt = nowMs();
     // The block's content changed, so its cached undo-snapshot fragment is
     // stale — drop it so the next snapshot re-encodes it.
-    if (b.type == BlockType.ink) _inkSnapCache.remove(b.id);
+    if (b.type == BlockType.ink) {
+      _inkSnapCache.remove(b.id);
+      _inkPersistCache.remove(b.id);
+    }
     markDirty();
     notifyListeners();
   }
@@ -11012,12 +11027,23 @@ class AppState extends ChangeNotifier
       // container's `blobs` table and emits no `blob.put`, which would leave
       // the log holding refs it cannot resolve. That is invisible locally and
       // total on another device.
+      final freshInk = <String, InkPersisted>{};
       final toSave = InkStorage.persistAll(
-          blocks, (bytes) => importBlob(nb, bytes, inkMimeType));
+          blocks, (bytes) => importBlob(nb, bytes, inkMimeType),
+          known: _inkPersistCache, fresh: freshInk);
       // The engine owns persistence: version snapshot (throttled, SYNC-8) + the
       // mirror write, plus content-hash change-detection on the Rust engine (a
       // save whose hash is unchanged is skipped). See RustEngine/MirrorEngine.
       await engine.savePage(nb, id, toSave, pageProps);
+      // The save landed, so the hashes it wrote are now referenced by the page
+      // on disk and safe to reuse — for blocks that are still at the revision
+      // that was saved, on the page that was saved.
+      if (pageId == id && freshInk.isNotEmpty) {
+        for (final b in blocks) {
+          final f = freshInk[b.id];
+          if (f != null && f.rev == b.updatedAt) _inkPersistCache[b.id] = f;
+        }
+      }
       _dirty = false;
       _pageSaveError = null;
       // Record AFTER the container write succeeds, so the log never claims a
