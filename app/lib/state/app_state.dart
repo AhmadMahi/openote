@@ -4032,9 +4032,12 @@ class AppState extends ChangeNotifier
   /// reference the container knows nothing about.
   Iterable<String> _volatileMediaText(String nb) sync* {
     if (notebookId == nb) {
-      yield _snapshot();
-      yield* _undo;
-      yield* _redo;
+      // Block by block: a reference lives inside one block's JSON, so the
+      // pieces of a step are as good as the whole step joined up.
+      for (final step in [_snapshot(), ..._undo, ..._redo]) {
+        yield step.page;
+        yield* step.blocks;
+      }
     }
     final clip = _blockClipboard;
     if (clip != null) yield clip;
@@ -6893,8 +6896,8 @@ class AppState extends ChangeNotifier
   Timer? _saveDebounce;
   bool _dirty = false;
   bool get hasUnsavedChanges => _dirty;
-  final List<String> _undo = [];
-  final List<String> _redo = [];
+  final List<_UndoSnap> _undo = [];
+  final List<_UndoSnap> _redo = [];
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
 
@@ -9982,51 +9985,48 @@ class AppState extends ChangeNotifier
 
   // ── Undo / redo (page-scoped snapshots) ────────────────────────────────
 
-  String _snapshot() {
-    // Builds the SAME JSON string the old one-shot `jsonEncode` produced
-    // (`{"page":…,"blocks":[…]}`), but reuses each ink block's already-encoded
-    // JSON when the block has not changed since the last snapshot. Ink strokes
-    // are the only heavy part of a page, so this turns the per-edit cost from
-    // "encode the whole page's ink" into "encode the one block you just
-    // touched".
-    final buf = StringBuffer('{"page":');
-    buf.write(jsonEncode(pageProps.toJson()));
-    buf.write(',"blocks":[');
-    for (var i = 0; i < blocks.length; i++) {
-      if (i > 0) buf.write(',');
-      final b = blocks[i];
+  /// One undo step: the page's props and each block's JSON.
+  ///
+  /// Kept as separate strings so consecutive steps SHARE the strings of the
+  /// blocks that did not change — an ink block's JSON comes from
+  /// [_inkSnapCache], the same object step after step. As one joined string
+  /// per step, a hundred steps of a page with a few megabytes of handwriting
+  /// held a hundred copies of it in memory; now a step costs roughly the block
+  /// that changed. Encoding reuses the cache too, so a stroke encodes the one
+  /// block you touched, not the whole page's ink.
+  _UndoSnap _snapshot() {
+    final frags = <String>[];
+    for (final b in blocks) {
       if (b.type == BlockType.ink) {
         final cached = _inkSnapCache[b.id];
         if (cached != null && cached.$1 == b.updatedAt) {
-          buf.write(cached.$2);
-        } else {
-          final j = jsonEncode(b.toJson());
-          _inkSnapCache[b.id] = (b.updatedAt, j);
-          buf.write(j);
+          frags.add(cached.$2);
+          continue;
         }
+        final j = jsonEncode(b.toJson());
+        _inkSnapCache[b.id] = (b.updatedAt, j);
+        frags.add(j);
       } else {
-        buf.write(jsonEncode(b.toJson()));
+        frags.add(jsonEncode(b.toJson()));
       }
     }
-    buf.write(']}');
     // Keep the cache from holding blocks that are no longer on the page.
     if (_inkSnapCache.length > blocks.length + 32) {
       final live = {for (final b in blocks) b.id};
       _inkSnapCache.removeWhere((k, _) => !live.contains(k));
     }
-    return buf.toString();
+    return (page: jsonEncode(pageProps.toJson()), blocks: frags);
   }
 
-  void _restore(String snap) {
+  void _restore(_UndoSnap snap) {
     // Old revisions are about to come back; nothing remembered about what a
     // revision was saved as can be trusted across that.
     _inkPersistCache.clear();
-    final j = jsonDecode(snap) as Map<String, dynamic>;
-    pageProps =
-        PageProps.fromJson((j['page'] as Map?)?.cast<String, dynamic>());
+    pageProps = PageProps.fromJson(
+        (jsonDecode(snap.page) as Map?)?.cast<String, dynamic>());
     blocks = [
-      for (final b in (j['blocks'] as List))
-        Block.fromJson((b as Map).cast<String, dynamic>())
+      for (final f in snap.blocks)
+        Block.fromJson((jsonDecode(f) as Map).cast<String, dynamic>())
     ];
     selectedIds.clear();
     selectedBlockId = null;
@@ -11473,3 +11473,6 @@ class SyncStatus {
     return Icons.cloud_done_outlined;
   }
 }
+
+/// One undo step — see [AppState._snapshot].
+typedef _UndoSnap = ({String page, List<String> blocks});
