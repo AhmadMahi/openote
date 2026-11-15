@@ -457,7 +457,7 @@ void main() {
           reason: 'nothing may land in the workspace either');
       // The sentence the plan drafted, and the jargon bar it has to clear.
       expect(result.message,
-          "This is Openote's working copy, not your notebook. Open the "
+          "This is Slate's working copy, not your notebook. Open the "
           'notebook folder instead.');
       for (final jargon in ['container', 'cache', 'format', 'v2', 'SQLite']) {
         expect(result.message.toLowerCase(), isNot(contains(jargon.toLowerCase())),
