@@ -43,7 +43,9 @@ Future<RestoreResult> restoreNotebooksFrom(
   final tmp = Directory.systemTemp.createTempSync('slate-restore-');
   try {
     onProgress?.call('Downloading the backup…');
-    await GitSync.clone(cloneUrl, tmp.path, token: app.githubTokenForSync);
+    // Only the latest snapshot is restored, so only the latest is fetched.
+    await GitSync.clone(cloneUrl, tmp.path,
+        token: app.githubTokenForSync, depth: 1);
     if (!Directory(p.join(tmp.path, '.git')).existsSync()) {
       return const RestoreResult(
           error: 'Could not download that repository. Check the address and '

@@ -2956,6 +2956,24 @@ class Repository {
   /// Epoch-ms of the notebook's most recent edit (max `updated_at` over its live
   /// nodes), or 0 when it has none or the file is unreadable. Powers the
   /// "Updated 2 minutes ago" line in the notebook manager.
+  /// Each page's write counter (`page_mirror.mirror_rev`), keyed by page id.
+  ///
+  /// Every page change funnels through one write that bumps it — saves,
+  /// imports, sync pulls, restores — so an exporter can tell a page that has
+  /// not changed since it last wrote it without reading or decoding the page.
+  /// Null when it cannot be read: "unknown" must not look like "unchanged".
+  Map<String, int>? pageRevisions(String id) {
+    try {
+      return {
+        for (final r
+            in _db(id).select('SELECT page_id, mirror_rev FROM page_mirror'))
+          r['page_id'] as String: (r['mirror_rev'] as num).toInt(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   int notebookUpdatedAt(String id) {
     try {
       final r = _db(id).select(

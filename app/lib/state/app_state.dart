@@ -522,6 +522,18 @@ class AppState extends ChangeNotifier
 
   PageData readPageOf(String nb, String pageId) => _repo.readPage(nb, pageId);
 
+  /// Each page's write counter in [nb] — see [Repository.pageRevisions].
+  Map<String, int>? pageRevisionsOf(String nb) => _repo.pageRevisions(nb);
+
+  /// When the user last drew, scrolled, clicked or typed, in ms since epoch.
+  ///
+  /// A plain field with no notify: it is written on every pointer event, and
+  /// only read by background work (the central backup) that should wait for a
+  /// pause instead of competing with the pen for the UI thread.
+  int _lastInteractionMs = 0;
+  void noteInteraction() => _lastInteractionMs = nowMs();
+  int get msSinceInteraction => nowMs() - _lastInteractionMs;
+
   List<({String pageId, String snippet})> searchPagesOf(
           String nb, String query) =>
       _repo.searchPageContent(nb, query);
@@ -10877,6 +10889,7 @@ class AppState extends ChangeNotifier
 
   void markDirty() {
     _dirty = true;
+    _lastInteractionMs = nowMs(); // typing counts as being busy, too
     // Cheap counter, not a rebuild: it lets the open page's flashcards be
     // rederived once per edit, so tagging a line produces a card immediately
     // instead of only after you navigate away.

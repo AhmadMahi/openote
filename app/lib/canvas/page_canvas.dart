@@ -206,6 +206,7 @@ class _PageCanvasState extends State<PageCanvas>
   /// the point, and painting a nib under a real pen tip is a second pen
   /// chasing the first one.
   void _trackPenCursor(PointerEvent e) {
+    app.noteInteraction();
     _penCursor.value =
         _inkTool && e.kind == PointerDeviceKind.mouse ? e.localPosition : null;
   }
@@ -1430,6 +1431,7 @@ class _PageCanvasState extends State<PageCanvas>
   void _onScroll(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
     GestureBinding.instance.pointerSignalResolver.register(e, (_) {
+      app.noteInteraction();
       final ctrl = HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
       final shift = HardwareKeyboard.instance.isShiftPressed;
@@ -2192,6 +2194,7 @@ class _PageCanvasState extends State<PageCanvas>
             app.claimedPointers.contains(e.pointer) ? e.pointer : null;
       },
       onPointerPanZoomUpdate: (e) {
+        app.noteInteraction();
         if (_panZoomClaimedBy == e.pointer) return;
         if (e.scale != 1.0) {
           controller.zoomAt(e.localPosition, e.scale / _pzLastScale);

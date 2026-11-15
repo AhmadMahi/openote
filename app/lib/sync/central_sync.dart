@@ -14,12 +14,14 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
 import '../export/md_common.dart' show safeFilename;
-import '../export/open_export.dart' show materializeNotebookInto;
+import '../export/open_export.dart'
+    show MaterializedNotebook, materializeNotebookInto;
 import '../state/app_state.dart';
 import 'git_sync.dart';
 import 'github_api.dart';
@@ -40,7 +42,81 @@ class CentralSync {
 
   Timer? _debounce;
 
+  /// What the last export wrote for each notebook (see [MaterializedNotebook]),
+  /// so a backup costs what changed rather than everything. Kept in a file
+  /// inside the clone's `.git`, which git never tracks, so it is thrown away
+  /// with the clone it describes. Null until first read.
+  Map<String, MaterializedNotebook>? _exported;
+
+  /// True once everything the export wrote has been committed and pushed. A
+  /// cycle that changed nothing on disk then skips git entirely — no pull, no
+  /// `add -A` over the whole tree, no push. False at launch, because it is not
+  /// known then, so the first cycle always runs git once.
+  bool _gitClean = false;
+
   String get _mirrorDir => p.join(_app.workspaceDirPath, 'central-mirror');
+
+  String get _exportedFile =>
+      p.join(_mirrorDir, '.git', 'slate-backup-state.json');
+
+  Future<Map<String, MaterializedNotebook>> _loadExported() async {
+    final known = _exported;
+    if (known != null) return known;
+    final out = <String, MaterializedNotebook>{};
+    try {
+      final f = File(_exportedFile);
+      if (await f.exists()) {
+        final raw = jsonDecode(await f.readAsString());
+        if (raw is Map && raw['v'] == 1 && raw['notebooks'] is Map) {
+          (raw['notebooks'] as Map).forEach((k, v) {
+            if (k is String && v is Map) {
+              out[k] = MaterializedNotebook.fromJson(v.cast<String, dynamic>());
+            }
+          });
+        }
+      }
+    } catch (_) {
+      // Unreadable: start from nothing, which only costs one full export.
+    }
+    return _exported = out;
+  }
+
+  Future<void> _saveExported() async {
+    final known = _exported;
+    if (known == null || !_gitReady) return;
+    try {
+      await File(_exportedFile).writeAsString(jsonEncode({
+        'v': 1,
+        'notebooks': {for (final e in known.entries) e.key: e.value.toJson()},
+      }));
+    } catch (_) {}
+  }
+
+  // ── Staying out of the user's way ────────────────────────────────────────
+
+  /// How long the user must have left the canvas alone before a backup runs.
+  static const _quietMs = 2000;
+
+  /// The most a backup will wait for that pause, so someone who never stops
+  /// still gets backed up.
+  static const _maxQuietWait = Duration(minutes: 10);
+
+  /// Wait until the user has paused drawing, writing and scrolling. The export
+  /// runs on the UI thread, so running it mid-stroke is a dropped frame.
+  Future<void> _waitForQuiet() async {
+    final start = DateTime.now();
+    while (_app.msSinceInteraction < _quietMs &&
+        DateTime.now().difference(start) < _maxQuietWait) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+  /// Between pages of an export: let a frame through, then wait out any burst
+  /// of activity that started while the export was running.
+  Future<void> _breathe() async {
+    await Future<void>.delayed(Duration.zero);
+    await _waitForQuiet();
+  }
 
   bool get _gitReady => Directory(p.join(_mirrorDir, '.git')).existsSync();
 
@@ -131,10 +207,14 @@ class CentralSync {
   /// Clone the central repo into [_mirrorDir] if it is not already a clone.
   Future<void> _prepareMirror() async {
     if (_gitReady) return;
+    _exported = null;
+    _gitClean = false;
     final dir = Directory(_mirrorDir);
     if (dir.existsSync()) dir.deleteSync(recursive: true);
+    // Shallow: the mirror only ever writes the newest snapshot and pushes it.
+    // The history lives on GitHub; a local copy of it is disk nothing reads.
     final r = await GitSync.clone(remote!, _mirrorDir,
-        token: _app.githubTokenForSync);
+        token: _app.githubTokenForSync, depth: 1);
     if (!r.ok) {
       // An empty repo clones to an empty working tree with a .git; some git
       // builds still return non-zero with a warning. Fall back to init when the
@@ -162,9 +242,11 @@ class CentralSync {
   /// Back up every notebook. Used on enable, on create, and periodically.
   Future<String?> syncAll() => _run((mirror) async {
         await _app.flushSave();
+        var changed = false;
         for (final nb in _app.notebooks) {
-          await _materialiseNotebook(nb.id, nb.title);
+          if (await _materialiseNotebook(nb.id, nb.title)) changed = true;
         }
+        return changed;
       }, 'Slate: back up all notebooks');
 
   /// Back up just the open notebook (the debounced path).
@@ -175,7 +257,7 @@ class CentralSync {
     if (nb == null) return Future.value();
     return _run((mirror) async {
       await _app.flushSave();
-      await _materialiseNotebook(nb.id, nb.title);
+      return _materialiseNotebook(nb.id, nb.title);
     }, 'Slate: back up ${nb.title}');
   }
 
@@ -185,52 +267,49 @@ class CentralSync {
       _run((mirror) async {
         final folder = _folders[nbId] ?? safeFilename(title);
         final dir = Directory(p.join(mirror, folder));
-        if (dir.existsSync()) dir.deleteSync(recursive: true);
+        final existed = await dir.exists();
+        if (existed) await dir.delete(recursive: true);
         _folders.remove(nbId);
+        (await _loadExported()).remove(nbId);
+        return existed;
       }, 'Slate: remove $title from backup');
 
-  /// Materialize one notebook into `mirror/<folder>/`, cleaning the folder
-  /// first (so deleted pages disappear) and moving it if the notebook was
-  /// renamed since last time.
+  /// Bring `mirror/<folder>/` up to date with one notebook, moving the folder
+  /// if the notebook was renamed. Returns whether anything on disk changed.
   ///
-  /// Page PDFs are written for the OPEN notebook (the PDF builder reads the open
-  /// page). For a closed notebook we cannot regenerate them, so any PDFs already
-  /// in its folder are preserved across the wipe — so a notebook keeps the PDFs
-  /// from the last time it was open.
-  Future<void> _materialiseNotebook(String nbId, String title) async {
+  /// In place and incremental (see [materializeNotebookInto]): it used to wipe
+  /// the folder and rebuild every page, picture and PDF on each run — and for
+  /// a closed notebook it first read every PDF in the folder into memory, on
+  /// the UI thread, just to write them back afterwards. Now an unchanged
+  /// notebook costs a couple of database reads, and a closed notebook's PDFs
+  /// simply stay where they are.
+  ///
+  /// Page PDFs are written for the OPEN notebook only (the PDF builder reads
+  /// the open notebook); a closed notebook keeps the PDFs from the last time it
+  /// was open.
+  Future<bool> _materialiseNotebook(String nbId, String title) async {
+    final exported = await _loadExported();
     final desired = _uniqueFolder(nbId, title);
     final prev = _folders[nbId];
+    var changed = false;
     if (prev != null && prev != desired) {
       final old = Directory(p.join(_mirrorDir, prev));
-      if (old.existsSync()) old.deleteSync(recursive: true);
-    }
-    final dir = Directory(p.join(_mirrorDir, desired));
-    final isOpen = nbId == _app.notebookId;
-
-    // Preserve existing PDFs for a closed notebook (keyed by path within the
-    // folder), since we cannot rebuild them here.
-    final savedPdfs = <String, List<int>>{};
-    if (dir.existsSync()) {
-      if (!isOpen) {
-        for (final f in dir.listSync(recursive: true).whereType<File>()) {
-          if (f.path.toLowerCase().endsWith('.pdf')) {
-            savedPdfs[p.relative(f.path, from: dir.path)] = f.readAsBytesSync();
-          }
-        }
+      if (await old.exists()) {
+        await old.delete(recursive: true);
+        changed = true;
       }
-      dir.deleteSync(recursive: true);
+      exported.remove(nbId);
     }
-
-    await materializeNotebookInto(_app, nbId, dir.path, withPagePdf: isOpen);
-
-    if (!isOpen) {
-      for (final e in savedPdfs.entries) {
-        final target = File(p.join(dir.path, e.key));
-        target.parent.createSync(recursive: true);
-        target.writeAsBytesSync(e.value);
-      }
+    final mine = exported[nbId] ??= MaterializedNotebook();
+    if (await materializeNotebookInto(
+        _app, nbId, p.join(_mirrorDir, desired),
+        withPagePdf: nbId == _app.notebookId,
+        incremental: mine,
+        breathe: _breathe)) {
+      changed = true;
     }
     _folders[nbId] = desired;
+    return changed;
   }
 
   /// A stable, readable, collision-free folder name for a notebook.
@@ -254,34 +333,51 @@ class CentralSync {
   }
 
   /// Shared wrapper: guard, prepare the mirror, run [body], commit and push.
+  ///
+  /// Quiet by design. It waits for the user to pause before starting, skips
+  /// git when [body] changed nothing and the last push went through, and only
+  /// tells the app to rebuild when the status line actually changes — every
+  /// status change rebuilds the whole window, and a check that finds nothing
+  /// to do every five minutes should not cost two of those.
   Future<String?> _run(
-      Future<void> Function(String mirror) body, String message) async {
+      Future<bool> Function(String mirror) body, String message) async {
     if (!enabled) return null;
     if (!_app.githubConnected) {
-      status = 'Sign in to GitHub to back up.';
-      _app.notifyCentral();
+      _setStatus('Sign in to GitHub to back up.');
       return status;
     }
     if (busy) return null;
     busy = true;
-    status = 'Backing up…';
-    _app.notifyCentral();
     try {
+      await _waitForQuiet();
       await _prepareMirror();
-      await body(_mirrorDir);
+      final changed = await body(_mirrorDir);
       _save();
+      await _saveExported();
+      if (!changed && _gitClean) {
+        _setStatus('Backed up');
+        return null;
+      }
+      _setStatus('Backing up…');
       final git = GitSync(_mirrorDir, token: _app.githubTokenForSync);
       final r = await git.syncOnce(message: message);
-      status =
-          r.ok ? 'Backed up' : 'Backup failed: ${r.message.split('\n').first}';
+      _gitClean = r.ok;
+      _setStatus(
+          r.ok ? 'Backed up' : 'Backup failed: ${r.message.split('\n').first}');
       return r.ok ? null : status;
     } catch (e) {
-      status = 'Backup failed: $e';
+      _gitClean = false;
+      _setStatus('Backup failed: $e');
       return status;
     } finally {
       busy = false;
-      _app.notifyCentral();
     }
+  }
+
+  void _setStatus(String? next) {
+    if (status == next) return;
+    status = next;
+    _app.notifyCentral();
   }
 
   /// Delete the LOCAL copies of every notebook — the GitHub backup keeps them.

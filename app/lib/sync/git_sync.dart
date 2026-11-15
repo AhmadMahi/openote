@@ -341,8 +341,13 @@ media/
   /// [token] authenticates a PRIVATE repository — which is what this feature
   /// creates by default, so it is the normal case rather than the exotic one.
   /// Passed through the environment exactly as [push] and [pull] pass it.
+  ///
+  /// [depth] makes a shallow clone of only the newest commits. The central
+  /// backup and its restore want the latest snapshot of the notes, not every
+  /// backup ever made: a full clone of a repo that has been committed to every
+  /// few minutes for months is gigabytes of history nothing here reads.
   static Future<GitResult> clone(String url, String intoDir,
-      {String? token}) async {
+      {String? token, int? depth}) async {
     final git = await gitExecutable();
     if (git == null) {
       return const GitResult(-1, '', 'git is not installed on this computer');
@@ -357,7 +362,14 @@ media/
     final auth = GitSync(intoDir, token: token);
     try {
       final r = await Process.run(
-              git, [...auth._authArgs, 'clone', url, intoDir],
+              git,
+              [
+                ...auth._authArgs,
+                'clone',
+                if (depth != null) ...['--depth', '$depth'],
+                url,
+                intoDir,
+              ],
               environment: auth._env)
           .timeout(const Duration(minutes: 10));
       return GitResult(r.exitCode, '${r.stdout}'.trim(), '${r.stderr}'.trim());

@@ -61,27 +61,88 @@ Future<String?> materializeNotebook(AppState app,
 /// backup mirror every notebook without disturbing what the user is looking at.
 ///
 /// The caller owns [root]: pass a fresh (or freshly cleaned) directory when a
-/// clean snapshot is wanted.
+/// clean snapshot is wanted — or pass [incremental] to keep [root] up to date
+/// in place.
 ///
 /// [withPagePdf] also writes a `<page>.pdf` beside each page's other files —
 /// the same PDF the Export menu makes. It reads the OPEN page/notebook, so the
 /// caller must only set it when [nbId] is the open notebook (the central backup
 /// does this only for the notebook currently in view).
-Future<void> materializeNotebookInto(AppState app, String nbId, String root,
+///
+/// **[incremental]: cost what changed, not what exists.** The central backup
+/// used to wipe each notebook's folder and rebuild all of it — read and decode
+/// every page, pretty-print every stroke as JSON and again as InkML, render a
+/// PDF of every page of the open notebook, rewrite every picture — every five
+/// minutes for every notebook, on the UI thread. That was the periodic hang.
+/// With [incremental], a page whose write counter
+/// ([AppState.pageRevisionsOf]) and folder are what they were last time keeps
+/// its files untouched; a picture already on disk at the right length is not
+/// read or rewritten; a notebook where nothing moved returns before touching
+/// the disk at all; and what an earlier run wrote that is no longer wanted is
+/// removed instead of wiping the folder first. Untouched files keep their
+/// timestamps, so git does not re-read them either. The state is updated in
+/// place only once the run completes.
+///
+/// [breathe] is awaited before each page that has to be rebuilt and each
+/// picture that has to be read, so a caller can let frames through and wait
+/// for the user to pause.
+///
+/// Returns whether anything on disk changed (always true without
+/// [incremental]).
+Future<bool> materializeNotebookInto(AppState app, String nbId, String root,
     {void Function(int done, int total)? onProgress,
-    bool withPagePdf = false}) async {
+    bool withPagePdf = false,
+    MaterializedNotebook? incremental,
+    Future<void> Function()? breathe}) async {
   final nb = app.notebooks.firstWhere((n) => n.id == nbId);
-  await Directory(root).create(recursive: true);
   final assetsDir = p.join(root, 'assets');
 
   final nbNodes = app.nodesOf(nbId);
   final byId = {for (final n in nbNodes) n.id: n};
+  final pageNodes = nbNodes.where((n) => n.kind == NodeKind.page).toList();
+
+  // Which pages changed, without reading any of them. Null means unknown,
+  // and unknown never counts as unchanged.
+  final revs = incremental == null ? null : app.pageRevisionsOf(nbId);
+  int revOf(String id) => revs?[id] ?? 0;
+  final structure = [
+    nb.title,
+    for (final n in nbNodes)
+      '${n.id}|${n.parentId}|${n.kind.name}|${n.title}|${n.position}|'
+          '${n.color}|${n.level}|${n.createdAt}|${n.updatedAt}',
+  ].join('\n');
+
+  // Nothing about this notebook moved since the last run: no disk at all.
+  if (incremental != null &&
+      revs != null &&
+      incremental.structure == structure &&
+      incremental.pages.length == pageNodes.length &&
+      await Directory(root).exists()) {
+    var same = true;
+    for (final node in pageNodes) {
+      final prev = incremental.pages[node.id];
+      if (prev == null ||
+          prev.rev != revOf(node.id) ||
+          (withPagePdf && !prev.pdf)) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return false;
+  }
+
+  await Directory(root).create(recursive: true);
   final manifestPages = <Map<String, dynamic>>[];
   final usedDirs = <String>{};
   // hash → "hash.ext"; collected across ALL pages then written once (dedup).
   final sharedAssets = <String, String>{};
+  // What this run wrote or deliberately kept; everything else under [root]
+  // is left over from an earlier run (incremental cleanup only).
+  final keepFiles = <String>{};
+  final keptPageDirs = <String>{};
+  final nextPages = <String, MaterializedPage>{};
+  var changed = incremental == null;
 
-  final pageNodes = nbNodes.where((n) => n.kind == NodeKind.page).toList();
   var pagesDone = 0;
   for (final node in pageNodes) {
     onProgress?.call(++pagesDone, pageNodes.length);
@@ -104,8 +165,52 @@ Future<void> materializeNotebookInto(AppState app, String nbId, String root,
     }
     usedDirs.add(candidate.toLowerCase());
     rel = candidate;
+    final relPosix = rel.replaceAll('\\', '/');
 
     final pageDir = p.join(root, 'pages', rel);
+    keptPageDirs.add(pageDir);
+    manifestPages.add({
+      'id': node.id,
+      'title': node.title,
+      'path': 'pages/$relPosix',
+      'level': node.level,
+    });
+
+    // Unchanged since it was last written: its files stay exactly as they are.
+    final prev = incremental?.pages[node.id];
+    final rev = revOf(node.id);
+    if (revs != null &&
+        prev != null &&
+        prev.rev == rev &&
+        prev.rel == relPosix &&
+        await File(p.join(pageDir, 'page.json')).exists()) {
+      sharedAssets.addAll(prev.assets);
+      var keptFiles = prev.files;
+      var hasPdf = prev.pdf;
+      if (withPagePdf && !hasPdf) {
+        // Last written while its notebook was closed: only the PDF is owed.
+        await breathe?.call();
+        final pdfName = await _writePagePdf(app, node, pageDir);
+        if (pdfName != null) {
+          keptFiles = [...keptFiles.where((f) => f != pdfName), pdfName];
+          hasPdf = true;
+          changed = true;
+        }
+      }
+      for (final f in keptFiles) {
+        keepFiles.add(p.join(pageDir, f));
+      }
+      nextPages[node.id] = MaterializedPage(
+          rev: rev,
+          rel: relPosix,
+          files: keptFiles,
+          assets: prev.assets,
+          pdf: hasPdf);
+      continue;
+    }
+
+    await breathe?.call();
+    changed = true;
     await Directory(pageDir).create(recursive: true);
     // Relative path from this page's folder back to the shared assets/ dir,
     // in POSIX form so the Markdown/canvas links are portable.
@@ -114,16 +219,20 @@ Future<void> materializeNotebookInto(AppState app, String nbId, String root,
 
     final data = app.readPageOf(nbId, node.id);
     final blocks = data.blocks;
+    final files = <String>[];
+    final pageAssets = <String, String>{};
 
     // 1) Fidelity mirror.
     await File(p.join(pageDir, 'page.json')).writeAsString(
         const JsonEncoder.withIndent('  ')
             .convert(_mirrorMap(node.id, data.props, blocks)));
+    files.add('page.json');
 
     // 2) Convenience Markdown + collected image assets.
     final md = _pageMarkdown(node.title, blocks, assetPrefix);
     await File(p.join(pageDir, 'page.md')).writeAsString(md.text);
-    sharedAssets.addAll(md.assets);
+    files.add('page.md');
+    pageAssets.addAll(md.assets);
 
     // Also carry the bytes of presentations and imported files, keyed by hash,
     // so a restore can rebuild them (page.json already holds the block that
@@ -133,14 +242,14 @@ Future<void> materializeNotebookInto(AppState app, String nbId, String root,
       if (b.type == BlockType.presentation) {
         final h =
             (b.content['pdf'] as String? ?? '').replaceFirst('sha256:', '');
-        if (h.isNotEmpty) sharedAssets[h] = '$h.pdf';
+        if (h.isNotEmpty) pageAssets[h] = '$h.pdf';
       } else if (b.type == BlockType.file) {
         final h =
             (b.content['blob'] as String? ?? '').replaceFirst('sha256:', '');
         if (h.isNotEmpty) {
           final name = b.content['name'] as String? ?? '';
           final dot = name.lastIndexOf('.');
-          sharedAssets[h] = dot > 0 ? '$h${name.substring(dot)}' : '$h.bin';
+          pageAssets[h] = dot > 0 ? '$h${name.substring(dot)}' : '$h.bin';
         }
       }
     }
@@ -149,70 +258,275 @@ Future<void> materializeNotebookInto(AppState app, String nbId, String root,
     await File(p.join(pageDir, 'canvas.json')).writeAsString(
         const JsonEncoder.withIndent('  ')
             .convert(_jsonCanvas(blocks, assetPrefix)));
+    files.add('canvas.json');
 
     // 4) InkML when there's ink.
     final inkml = _inkML(blocks);
     if (inkml != null) {
       await File(p.join(pageDir, 'page.inkml')).writeAsString(inkml);
+      files.add('page.inkml');
     }
 
     // 5) A PDF of the page — the readable artefact the owner wants in the
     // backup beside the open-format files. Only for the open notebook (the PDF
     // builder reads the open page); a page that cannot render just has none.
+    var pdf = false;
     if (withPagePdf) {
-      try {
-        final pdf = await buildPagePdf(app, node.id, title: node.title);
-        await File(p.join(pageDir, '${safeFilename(node.title)}.pdf'))
-            .writeAsBytes(pdf);
-      } catch (_) {}
+      final name = await _writePagePdf(app, node, pageDir);
+      if (name != null) {
+        files.add(name);
+        pdf = true;
+      }
     }
 
-    manifestPages.add({
-      'id': node.id,
-      'title': node.title,
-      'path': 'pages/${rel.replaceAll('\\', '/')}',
-      'level': node.level,
-    });
+    sharedAssets.addAll(pageAssets);
+    for (final f in files) {
+      keepFiles.add(p.join(pageDir, f));
+    }
+    nextPages[node.id] = MaterializedPage(
+        rev: rev, rel: relPosix, files: files, assets: pageAssets, pdf: pdf);
   }
 
   // Write the shared, content-addressed asset store once.
+  final nextAssets = <String, int>{};
   if (sharedAssets.isNotEmpty) {
     await Directory(assetsDir).create(recursive: true);
     for (final e in sharedAssets.entries) {
-      final bytes = app.blobOf(nbId, e.key);
-      if (bytes != null) {
-        await File(p.join(assetsDir, e.value)).writeAsBytes(bytes);
+      final f = File(p.join(assetsDir, e.value));
+      // Named by its content hash: a file of the right name and length that
+      // this backup wrote is already these bytes, so it is not read again.
+      final known = incremental?.assets[e.value];
+      if (known != null && await f.exists() && await f.length() == known) {
+        nextAssets[e.value] = known;
+        keepFiles.add(f.path);
+        continue;
       }
+      await breathe?.call();
+      final bytes = app.blobOf(nbId, e.key);
+      if (bytes == null) {
+        // The bytes are not on this computer (yet). Keep whatever an earlier
+        // run wrote rather than deleting a picture from the backup that this
+        // run cannot reproduce.
+        if (await f.exists()) keepFiles.add(f.path);
+        continue;
+      }
+      keepFiles.add(f.path);
+      if (incremental != null &&
+          await f.exists() &&
+          await f.length() == bytes.length) {
+        nextAssets[e.value] = bytes.length;
+        continue;
+      }
+      await f.writeAsBytes(bytes);
+      nextAssets[e.value] = bytes.length;
+      changed = true;
     }
   }
 
   // notebook.json: the full structure tree (groups/sections/pages, order,
   // colours, timestamps) — the spec's §8 top-level structure file.
-  await File(p.join(root, 'notebook.json'))
-      .writeAsString(const JsonEncoder.withIndent('  ').convert({
-    'format': 'openote-materialized/1',
-    'notebook': {'id': nb.id, 'title': nb.title},
-    'exportedAt': DateTime.now().toIso8601String(),
-    'nodes': [
-      for (final n in nbNodes)
-        {
-          'id': n.id,
-          'kind': switch (n.kind) {
-            NodeKind.sectionGroup => 'section_group',
-            NodeKind.section => 'section',
-            NodeKind.page => 'page',
-          },
-          'parentId': n.parentId,
-          'title': n.title,
-          'position': n.position,
-          if (n.color != null) 'color': n.color,
-          'level': n.level,
-          'createdAt': n.createdAt,
-          'updatedAt': n.updatedAt,
+  final notebookInfo = {'id': nb.id, 'title': nb.title};
+  final nodesJson = [
+    for (final n in nbNodes)
+      {
+        'id': n.id,
+        'kind': switch (n.kind) {
+          NodeKind.sectionGroup => 'section_group',
+          NodeKind.section => 'section',
+          NodeKind.page => 'page',
+        },
+        'parentId': n.parentId,
+        'title': n.title,
+        'position': n.position,
+        if (n.color != null) 'color': n.color,
+        'level': n.level,
+        'createdAt': n.createdAt,
+        'updatedAt': n.updatedAt,
+      }
+  ];
+  final nbFile = File(p.join(root, 'notebook.json'));
+  keepFiles.add(nbFile.path);
+  var writeNotebookJson = true;
+  if (incremental != null && await nbFile.exists()) {
+    // Rewritten only when the structure changed. `exportedAt` alone changing
+    // used to make every sweep a commit — thousands of them.
+    try {
+      final old = jsonDecode(await nbFile.readAsString());
+      if (old is Map) {
+        old.remove('exportedAt');
+        writeNotebookJson = jsonEncode(old) !=
+            jsonEncode({
+              'format': 'openote-materialized/1',
+              'notebook': notebookInfo,
+              'nodes': nodesJson,
+              'pages': manifestPages,
+            });
+      }
+    } catch (_) {}
+  }
+  if (writeNotebookJson) {
+    await nbFile.writeAsString(const JsonEncoder.withIndent('  ').convert({
+      'format': 'openote-materialized/1',
+      'notebook': notebookInfo,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'nodes': nodesJson,
+      'pages': manifestPages,
+    }));
+    changed = true;
+  }
+
+  if (incremental != null) {
+    if (await _removeStale(root, keepFiles, keptPageDirs,
+        keepOldPdfs: !withPagePdf)) {
+      changed = true;
+    }
+    incremental
+      ..structure = structure
+      ..pages = nextPages
+      ..assets = nextAssets;
+  }
+  return changed;
+}
+
+/// Write [node]'s page as a PDF into [pageDir]. Returns the file name, or null
+/// when the page cannot render (a page that cannot render just has none).
+Future<String?> _writePagePdf(
+    AppState app, TreeNode node, String pageDir) async {
+  try {
+    final pdf = await buildPagePdf(app, node.id, title: node.title);
+    final name = '${safeFilename(node.title)}.pdf';
+    await File(p.join(pageDir, name)).writeAsBytes(pdf);
+    return name;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Delete what an earlier run wrote under [root] that this run did not keep —
+/// pages that were deleted or moved, pictures nothing references any more —
+/// then any folder left empty. A closed notebook's old page PDFs stay when
+/// [keepOldPdfs]: it cannot rebuild them, and a stale PDF beats none.
+Future<bool> _removeStale(String root, Set<String> keep, Set<String> pageDirs,
+    {required bool keepOldPdfs}) async {
+  var removed = false;
+  final dirs = <String>[];
+  await for (final e
+      in Directory(root).list(recursive: true, followLinks: false)) {
+    if (e is Directory) {
+      dirs.add(e.path);
+      continue;
+    }
+    if (keep.contains(e.path)) continue;
+    if (keepOldPdfs &&
+        e.path.toLowerCase().endsWith('.pdf') &&
+        pageDirs.contains(p.dirname(e.path))) {
+      continue;
+    }
+    try {
+      await e.delete();
+      removed = true;
+    } catch (_) {}
+  }
+  // Deepest first, so a parent empties out after its children.
+  dirs.sort((a, b) => b.length.compareTo(a.length));
+  for (final d in dirs) {
+    try {
+      final dir = Directory(d);
+      if (await dir.list().isEmpty) {
+        await dir.delete();
+        removed = true;
+      }
+    } catch (_) {}
+  }
+  return removed;
+}
+
+/// What an incremental [materializeNotebookInto] remembers about one notebook
+/// between runs, so the next run can leave unchanged pages exactly as they are.
+///
+/// Only meaningful for the folder it was produced against: the central backup
+/// keeps it inside its own clone, and it is thrown away with the clone.
+class MaterializedNotebook {
+  MaterializedNotebook();
+
+  /// The notebook's tree (ids, titles, order, timestamps) as last written.
+  String structure = '';
+
+  /// Page id → what was written for it.
+  Map<String, MaterializedPage> pages = {};
+
+  /// Asset file name → its length when written.
+  Map<String, int> assets = {};
+
+  factory MaterializedNotebook.fromJson(Map<String, dynamic> j) {
+    final n = MaterializedNotebook()
+      ..structure = j['structure'] as String? ?? '';
+    final pages = j['pages'];
+    if (pages is Map) {
+      pages.forEach((k, v) {
+        if (k is String && v is Map) {
+          n.pages[k] = MaterializedPage.fromJson(v.cast<String, dynamic>());
         }
-    ],
-    'pages': manifestPages,
-  }));
+      });
+    }
+    final assets = j['assets'];
+    if (assets is Map) {
+      assets.forEach((k, v) {
+        if (k is String && v is num) n.assets[k] = v.toInt();
+      });
+    }
+    return n;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'structure': structure,
+        'pages': {for (final e in pages.entries) e.key: e.value.toJson()},
+        'assets': assets,
+      };
+}
+
+/// One page's share of a [MaterializedNotebook].
+class MaterializedPage {
+  MaterializedPage({
+    required this.rev,
+    required this.rel,
+    required this.files,
+    required this.assets,
+    required this.pdf,
+  });
+
+  /// The page's write counter when its files were written.
+  final int rev;
+
+  /// Its folder under `pages/`, POSIX separators.
+  final String rel;
+
+  /// The file names written in that folder.
+  final List<String> files;
+
+  /// Hash → asset file name, for every picture or file the page references.
+  final Map<String, String> assets;
+
+  /// Whether a PDF was written for this revision.
+  final bool pdf;
+
+  factory MaterializedPage.fromJson(Map<String, dynamic> j) => MaterializedPage(
+        rev: (j['rev'] as num?)?.toInt() ?? -1,
+        rel: j['rel'] as String? ?? '',
+        files: [
+          for (final f in (j['files'] as List? ?? const []))
+            if (f is String) f
+        ],
+        assets: {
+          for (final e in ((j['assets'] as Map?) ?? const {}).entries)
+            if (e.key is String && e.value is String)
+              e.key as String: e.value as String
+        },
+        pdf: j['pdf'] == true,
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'rev': rev, 'rel': rel, 'files': files, 'assets': assets, 'pdf': pdf};
 }
 
 // ── Single-page JSON Canvas (OPEN-6) ──────────────────────────────────────
